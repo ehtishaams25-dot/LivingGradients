@@ -1,0 +1,223 @@
+=============================================================
+AFTER EFFECTS SCRIPTING — LLM GROUND RULES & PREFERENCES
+=============================================================
+Author preference: Ehtishaam / Digivero
+Applies to: ALL After Effects scripts, ScriptUI panels, and CEP extensions
+
+-------------------------------------------------------------
+SECTION 1 — KNOW WHICH TOOL YOU ARE USING
+-------------------------------------------------------------
+
+There are THREE distinct scripting/extension systems in After Effects.
+Never mix their APIs, syntax, or file structures.
+
+1. ExtendScript (.jsx / .jsxbin)
+   - Runs in Adobe's ExtendScript engine (ES3-era JavaScript).
+   - Has access to the AE DOM: app, project, compositions, layers, etc.
+   - UI is built with ScriptUI.
+   - Entry point: a single .jsx file.
+   - NO access to Node.js, no fetch(), no modern JS (no arrow functions
+     in older AE versions, no const/let in ES3 mode — use var to be safe
+     unless targeting AE 2022+).
+
+2. CEP Extension (Common Extensibility Platform)
+   - Panel is an HTML/CSS/JS webpage running in Chromium (CEF).
+   - Can use modern JS, fetch(), npm packages if bundled.
+   - Communicates with AE DOM via CSInterface.evalScript() which
+     executes an ExtendScript string in the AE engine.
+   - Has a mandatory file structure:
+       /CSXS/manifest.xml   ← required, controls docking/size/AE version
+       /index.html          ← the panel UI
+       /js/CSInterface.js   ← Adobe's bridge library (must be included)
+   - Debug mode requires a registry key on Windows or a plist on Mac.
+   - Do NOT use UXP APIs inside a CEP extension.
+
+3. UXP Plugin (Universal Extensibility Platform)
+   - Adobe's future direction. AE support is INCOMPLETE as of 2025.
+   - Do NOT attempt UXP for After Effects unless explicitly asked.
+     Default to CEP for panel/browser work, ExtendScript for scripts.
+
+NEVER generate code that mixes these. If unsure which is needed,
+ask before writing a single line of code.
+
+-------------------------------------------------------------
+SECTION 2 — DOCKING: THE NON-NEGOTIABLE REQUIREMENTS
+-------------------------------------------------------------
+
+ALL panels must satisfy these three constraints. No exceptions.
+
+REQUIREMENT 1: Must be dockable into the AE UI.
+REQUIREMENT 2: Must be responsive when the panel is resized.
+REQUIREMENT 3: Must work correctly when undocked (floating window).
+
+--- For ScriptUI (.jsx) panels: ---
+
+CORRECT window type for a dockable panel:
+  var w = new Window("palette", "Panel Name", undefined, {resizeable: true});
+
+WRONG — never use "dialog" for a dockable tool:
+  var w = new Window("dialog", ...);  // ← blocks AE, not dockable
+
+To make it launchable from Window menu (dockable):
+  The script must be placed in:
+    [AE install]/Scripts/ScriptUI Panels/
+  NOT in /Scripts/ — that folder is for non-panel scripts only.
+
+For resize responsiveness, you MUST:
+  - Use layout managers (w.layout.layout(true)) not hard-coded pixel sizes.
+  - Call w.layout.resize() inside an onResizing / onResize handler:
+      w.onResizing = w.onResize = function() { w.layout.resize(); };
+  - Never hard-code pixel widths/heights for containers that should flex.
+  - Use preferredSize = [-1, -1] on groups that should stretch to fill.
+  - Set alignment and alignChildren on every Group:
+      group.alignment = ["fill", "fill"];
+      group.alignChildren = ["fill", "fill"];
+
+--- For CEP Extensions: ---
+
+Docking is controlled ENTIRELY by manifest.xml, not by JS code.
+The manifest MUST include:
+
+  <Geometry>
+    <Size>
+      <Height>400</Height>
+      <Width>600</Width>
+    </Size>
+    <MinSize>
+      <Height>200</Height>
+      <Width>300</Width>
+    </MinSize>
+  </Geometry>
+
+The panel host must be set to AEFT (After Effects):
+  <Host Name="AEFT" Version="[16.0,99.9]"/>
+
+In index.html, the body and root container must use:
+  html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
+  #root-container { width: 100%; height: 100%; }
+
+For a <webview> that fills the panel:
+  webview { width: 100%; height: 100%; display: block; }
+  Never give a webview fixed pixel dimensions.
+
+To respond to panel resize in JS use ResizeObserver on the
+container, not window.innerWidth polling.
+
+-------------------------------------------------------------
+SECTION 3 — COMMON LLM HALLUCINATIONS TO NEVER DO
+-------------------------------------------------------------
+
+These are mistakes LLMs repeatedly make. Treat each as a hard rule.
+
+1. DO NOT use $.evalScript() — it does not exist.
+   Use CSInterface.evalScript() in CEP, or just call AE DOM directly in JSX.
+
+2. DO NOT use app.project.activeItem without null-checking.
+   Always: if (app.project.activeItem && app.project.activeItem instanceof CompItem) { }
+
+3. DO NOT use fetch() inside ExtendScript — it does not exist.
+   Use Socket for network calls in JSX, or do network calls in the CEP
+   HTML layer and pass results to ExtendScript via evalScript().
+
+4. DO NOT forget semicolons and var declarations in ExtendScript.
+   It is ES3. No let, no const, no template literals in safe/legacy mode.
+
+5. DO NOT place a ScriptUI panel script in /Scripts/ and expect it to dock.
+   It MUST go in /Scripts/ScriptUI Panels/ to appear in the Window menu.
+
+6. DO NOT hard-code panel pixel dimensions and call it "responsive."
+   A panel that does not reflow on resize fails Requirement 2. Always use
+   layout managers or percentage/flex CSS.
+
+7. DO NOT use w.show() at the end of a ScriptUI panel script.
+   For dockable panels, the Window menu handles showing. w.show() in the
+   file causes the panel to open as a floating dialog instead of docking.
+   Pattern to use:
+     if (w instanceof Window) { w.center(); w.show(); }
+     else { w.layout.layout(true); }
+
+8. DO NOT generate a CEP manifest without HostList — AE will ignore it.
+   Every manifest needs <HostList> with at least one <Host Name="AEFT">.
+
+9. DO NOT use app.executeCommand() with hardcoded command IDs without
+   verifying the ID. Command IDs vary between AE versions. Use named
+   methods on the AE DOM where possible.
+
+10. DO NOT generate a CEP extension without CSInterface.js included.
+    It is not a built-in browser API. It must be bundled in the extension.
+    Source: https://github.com/Adobe-CEP/CSInterface
+
+-------------------------------------------------------------
+SECTION 4 — FILE & FOLDER STRUCTURE EXPECTATIONS
+-------------------------------------------------------------
+
+ScriptUI Panel (single file):
+  MyPanel.jsx  →  /Scripts/ScriptUI Panels/MyPanel.jsx
+
+CEP Extension (folder):
+  /MyExtension/
+    /CSXS/manifest.xml
+    /index.html
+    /css/style.css
+    /js/main.js
+    /js/CSInterface.js        ← must be present
+    /jsx/hostscript.jsx       ← ExtendScript that runs in AE engine
+
+Install location (Windows):
+  C:/Program Files (x86)/Common Files/Adobe/CEP/extensions/MyExtension/
+
+Install location (Mac):
+  /Library/Application Support/Adobe/CEP/extensions/MyExtension/
+
+For personal/debug use, enable PlayerDebugMode:
+  Windows: regedit → HKEY_CURRENT_USER/Software/Adobe/CSXS.11 → PlayerDebugMode = 1
+  Mac: defaults write com.adobe.CSXS.11 PlayerDebugMode 1
+  (Replace 11 with your CEP version: AE 2024 = CEP 11)
+
+-------------------------------------------------------------
+SECTION 5 — WEBVIEW SPECIFIC RULES (for browser-in-panel)
+-------------------------------------------------------------
+
+Use <webview> NOT <iframe> for loading external URLs.
+iframes are blocked by X-Frame-Options on most major websites.
+webview creates an isolated Chromium browsing context that is not
+subject to the same X-Frame-Options restrictions.
+
+Correct webview setup:
+  <webview id="browser" src="https://www.google.com"
+    style="width:100%; height:100%; display:block; border:none;">
+  </webview>
+
+Navigation controls (back/forward/reload) are called on the
+webview element directly:
+  document.getElementById('browser').goBack();
+  document.getElementById('browser').reload();
+  document.getElementById('browser').loadURL('https://example.com');
+
+To read the current URL from the webview:
+  webview.addEventListener('did-navigate', function(e) {
+    urlBar.value = e.url;
+  });
+
+Do NOT use webview.contentWindow — it is sandboxed. Use the
+webview IPC events (did-navigate, did-navigate-in-page, etc.)
+
+-------------------------------------------------------------
+SECTION 6 — STYLE & OUTPUT PREFERENCES
+-------------------------------------------------------------
+
+- Always output complete, runnable files. No placeholders like
+  "// add your logic here" unless explicitly asked for a skeleton.
+- If multiple files are needed (CEP), output ALL of them in one response
+  with clear file path headers.
+- Comments should explain WHY, not WHAT. No comment-per-line clutter.
+- ExtendScript: use var, regular functions, string concatenation (no
+  template literals unless AE 2022+ is confirmed as target).
+- CEP JS: modern ES6+ is fine (runs in Chromium, not ExtendScript engine).
+- Do not add a README unless asked.
+- Do not suggest publishing to Adobe Exchange unless asked.
+
+=============================================================
+END OF GROUND RULES
+=============================================================
+
