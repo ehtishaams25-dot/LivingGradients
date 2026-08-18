@@ -1623,8 +1623,38 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
         
         var blur = addFx(trailShape, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Gaussian Blur 2", "Gaussian Blur"]);
         if (blur) {
-            safeSet(blur, "Blur Radius", 1, 40);
+            safeSet(blur, "Blur Radius", 1, 30);
             try { blur.property(4).setValue(true); } catch(e) {}
+        }
+
+        // --- Fluid Simulation Effect ---
+        var fluidAdj = lumaComp.layers.addSolid([1, 1, 1], "Fluid Dispersion", w, h, 1, dur);
+        fluidAdj.adjustmentLayer = true;
+
+        var turb1 = addFx(fluidAdj, ["Turbulent Displace", "ADBE Turbulent Displace"]);
+        if (turb1) {
+            safeSet(turb1, "Amount", 2, 120);
+            safeSet(turb1, "Size", 3, 200); // Large slow swirls
+            safeEx(turb1, "Evolution", 5, "time * " + (speed * 4));
+        }
+
+        var vecBlur = addFx(fluidAdj, ["CC Vector Blur"]);
+        if (vecBlur) {
+            safeSet(vecBlur, "Amount", 2, 50);
+            safeSet(vecBlur, "Ridge Smoothness", 4, 30);
+        }
+
+        var turb2 = addFx(fluidAdj, ["Turbulent Displace", "ADBE Turbulent Displace"]);
+        if (turb2) {
+            safeSet(turb2, "Amount", 2, 60);
+            safeSet(turb2, "Size", 3, 60); // Small fast ripples
+            safeEx(turb2, "Evolution", 5, "time * " + (speed * 8));
+        }
+
+        var softenBlur = addFx(fluidAdj, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Gaussian Blur 2", "Gaussian Blur"]);
+        if (softenBlur) {
+            safeSet(softenBlur, "Blur Radius", 1, 15);
+            try { softenBlur.property(4).setValue(true); } catch(e) {}
         }
     } else {
         var lumaSolid = lumaComp.layers.addSolid([0, 0, 0], "Fluid Gradient", w, h, 1, dur);
