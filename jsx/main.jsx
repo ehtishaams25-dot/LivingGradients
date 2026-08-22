@@ -486,6 +486,110 @@ function getSelectedGradientState() {
     return '';
 }
 
+/* One place that knows which builder makes which type.
+
+   Extracted from generateGradient so batch generation runs the exact same
+   code path as a single build — a second copy of this switch would drift
+   the moment a type was added. Returns nothing; throws on an unknown type
+   so callers can report it per-item. */
+function dispatchBuild(comp, type, c, controls, w, h, dur, customCode, imagePath) {
+    switch (type) {
+        case 'living':
+            buildLiving(comp, c, controls, w, h, dur);
+            break;
+        case 'Silk':
+        case 'Aurora':
+        case 'Prism':
+        case 'Fiber':
+        case 'Veil':
+        case 'Pulse':
+        case 'Comet':
+            buildSilkFlare(comp, c, controls, w, h, dur, type);
+            break;
+        case 'ChromaFlare':
+            buildChromaFlare(comp, c, controls, w, h, dur);
+            break;
+        case 'Metallic':
+            buildMetallic(comp, c, controls, w, h, dur);
+            break;
+        case 'Heatmap':
+            buildHeatmap(comp, c, controls, w, h, dur);
+            break;
+        case 'Halftone':
+            buildHalftone(comp, c, controls, w, h, dur);
+            break;
+        case 'AsciiMatrix':
+            buildAsciiMatrix(comp, c, controls, w, h, dur);
+            break;
+        case 'Fluid':
+            buildFluid(comp, c, controls, w, h, dur);
+            break;
+        case 'Glass':
+            buildGlass(comp, c, controls, w, h, dur);
+            break;
+        case 'ReededGlass':
+            buildReededGlass(comp, c, controls, w, h, dur);
+            break;
+        case 'AnimeWater':
+            buildAnimeWater(comp, c, controls, w, h, dur);
+            break;
+        case 'Sunburst':
+            buildSunburst(comp, c, controls, w, h, dur);
+            break;
+        case 'LiquidWaves':
+            buildLiquidWaves(comp, c, controls, w, h, dur);
+            break;
+        case 'CurvedStripes':
+            buildCurvedStripes(comp, c, controls, w, h, dur);
+            break;
+        case 'CellularMosaic':
+            buildCellularMosaic(comp, c, controls, w, h, dur);
+            break;
+        case 'TrailGradient':
+            buildTrailGradient(comp, c, controls, w, h, dur);
+            break;
+        case 'Wavy':
+            buildWavy(comp, c, controls, w, h, dur);
+            break;
+        case 'SonduckLiquid':
+            buildSonduckLiquid(comp, c, controls, w, h, dur);
+            break;
+        case 'TwirlShapes':
+            buildTwirlShapes(comp, c, controls, w, h, dur);
+            break;
+        case 'LavaLamp':
+            buildLavaLamp(comp, c, controls, w, h, dur);
+            break;
+        case 'StackedSquares':
+            buildStackedSquares(comp, c, controls, w, h, dur);
+            break;
+        case 'PrismaticBurst':
+            buildPrismaticBurst(comp, c, controls, w, h, dur);
+            break;
+        case 'Antigravity':
+            buildAntigravity(comp, c, controls, w, h, dur);
+            break;
+        case 'Waves':
+            buildWaves(comp, c, controls, w, h, dur);
+            break;
+        case 'WebThreads':
+            buildWebThreads(comp, c, controls, w, h, dur);
+            break;
+        case 'OklabSmooth':
+            buildOklabSmooth(comp, c, controls, w, h, dur);
+            break;
+        case 'ai_custom':
+            buildAiCustom(comp, c, w, h, dur, customCode);
+            break;
+        case 'ai_image':
+            buildAiImage(comp, c, w, h, dur, imagePath);
+            break;
+        default:
+            return 'ERROR: Unknown type: ' + type;
+    }
+
+}
+
 function generateGradient(paramsStr) {
     try {
         var p = JSON.parse(paramsStr),
@@ -496,109 +600,18 @@ function generateGradient(paramsStr) {
             dur = comp.duration;
         var c = [];
         for (var i = 0; i < p.colors.length; i++) c.push(vibrify(hexRgb(p.colors[i])));
-        
+
         LG.reset();
 
         p.controls = p.controls || {};
         p.controls.trackingEnabled = p.trackingEnabled;
         p.controls.trackingLayerName = p.trackingLayerName;
-        
+
         app.beginUndoGroup('Living Gradients');
         var beforeCount = comp.numLayers;
-        switch (p.type) {
-            case 'living':
-                buildLiving(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Silk':
-            case 'Aurora':
-            case 'Prism':
-            case 'Fiber':
-            case 'Veil':
-            case 'Pulse':
-            case 'Comet':
-                buildSilkFlare(comp, c, p.controls, w, h, dur, p.type);
-                break;
-            case 'ChromaFlare':
-                buildChromaFlare(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Metallic':
-                buildMetallic(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Heatmap':
-                buildHeatmap(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Halftone':
-                buildHalftone(comp, c, p.controls, w, h, dur);
-                break;
-            case 'AsciiMatrix':
-                buildAsciiMatrix(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Fluid':
-                buildFluid(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Glass':
-                buildGlass(comp, c, p.controls, w, h, dur);
-                break;
-            case 'ReededGlass':
-                buildReededGlass(comp, c, p.controls, w, h, dur);
-                break;
-            case 'AnimeWater':
-                buildAnimeWater(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Sunburst':
-                buildSunburst(comp, c, p.controls, w, h, dur);
-                break;
-            case 'LiquidWaves':
-                buildLiquidWaves(comp, c, p.controls, w, h, dur);
-                break;
-            case 'CurvedStripes':
-                buildCurvedStripes(comp, c, p.controls, w, h, dur);
-                break;
-            case 'CellularMosaic':
-                buildCellularMosaic(comp, c, p.controls, w, h, dur);
-                break;
-            case 'TrailGradient':
-                buildTrailGradient(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Wavy':
-                buildWavy(comp, c, p.controls, w, h, dur);
-                break;
-            case 'SonduckLiquid':
-                buildSonduckLiquid(comp, c, p.controls, w, h, dur);
-                break;
-            case 'TwirlShapes':
-                buildTwirlShapes(comp, c, p.controls, w, h, dur);
-                break;
-            case 'LavaLamp':
-                buildLavaLamp(comp, c, p.controls, w, h, dur);
-                break;
-            case 'StackedSquares':
-                buildStackedSquares(comp, c, p.controls, w, h, dur);
-                break;
-            case 'PrismaticBurst':
-                buildPrismaticBurst(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Antigravity':
-                buildAntigravity(comp, c, p.controls, w, h, dur);
-                break;
-            case 'Waves':
-                buildWaves(comp, c, p.controls, w, h, dur);
-                break;
-            case 'WebThreads':
-                buildWebThreads(comp, c, p.controls, w, h, dur);
-                break;
-            case 'OklabSmooth':
-                buildOklabSmooth(comp, c, p.controls, w, h, dur);
-                break;
-            case 'ai_custom':
-                buildAiCustom(comp, c, w, h, dur, p.customCode);
-                break;
-            case 'ai_image':
-                buildAiImage(comp, c, w, h, dur, p.imagePath);
-                break;
-            default:
-                return 'ERROR: Unknown type: ' + p.type;
-        }
+
+        var unknown = dispatchBuild(comp, p.type, c, p.controls, w, h, dur, p.customCode, p.imagePath);
+        if (unknown) { app.endUndoGroup(); return unknown; }
 
         var afterCount = comp.numLayers;
         var addedLayersCount = afterCount - beforeCount;
@@ -616,6 +629,85 @@ function generateGradient(paramsStr) {
         try {
             app.endUndoGroup();
         } catch (x) { }
+        return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
+    }
+}
+
+/* Batch generation — one composition per selected type.
+
+   The active comp is used only as a template for size, frame rate, pixel
+   aspect and duration; it is never written to. Each type gets its own comp
+   inside a "Living Gradients" folder, so a batch is easy to review and easy
+   to throw away.
+
+   A type that throws takes its own comp down with it and is reported by
+   name. One bad builder must not cost the user the other eleven. */
+function generateBatch(paramsStr) {
+    var folder = null;
+    try {
+        var p   = JSON.parse(paramsStr);
+        var src = app.project.activeItem;
+        if (!src || !(src instanceof CompItem)) return 'ERROR: No active composition to take settings from.';
+        if (!p.items || !p.items.length)        return 'ERROR: No gradients selected.';
+
+        LG.reset();
+        app.beginUndoGroup('Living Gradients — Batch');
+
+        folder = app.project.items.addFolder('Living Gradients');
+
+        var made = [], failed = [], i, j;
+
+        for (i = 0; i < p.items.length; i++) {
+            var item = p.items[i];
+            var comp = null;
+
+            try {
+                comp = app.project.items.addComp(
+                    'LG — ' + (item.label || item.type),
+                    src.width, src.height, src.pixelAspect, src.duration, src.frameRate);
+                comp.parentFolder = folder;
+
+                var c = [];
+                for (j = 0; j < item.colors.length; j++) c.push(vibrify(hexRgb(item.colors[j])));
+
+                var controls = item.controls || {};
+                var unknown = dispatchBuild(comp, item.type, c, controls,
+                                            src.width, src.height, src.duration,
+                                            item.customCode, item.imagePath);
+                if (unknown) throw new Error('unknown type');
+
+                // Grain, glow and BPM are batch-wide, so they come off the
+                // envelope rather than the per-item controls.
+                var polish = {
+                    type:     item.type,
+                    grain:    p.grain,
+                    glow:     p.glow,
+                    bpmSync:  p.bpmSync,
+                    bpmValue: p.bpmValue,
+                    controls: controls
+                };
+                var layer = groupGeneratedLayers(comp, polish, comp.numLayers);
+                applyGlobalPolish(comp, polish, layer);
+
+                made.push(item.type);
+            } catch (itemErr) {
+                failed.push(item.type);
+                LG.warn(item.type + ': ' + itemErr.message);
+                if (comp) { try { comp.remove(); } catch (rmErr) { } }
+            }
+        }
+
+        // Nothing worked — do not leave an empty folder behind.
+        if (!made.length && folder) { try { folder.remove(); } catch (e) { } }
+
+        app.endUndoGroup();
+
+        var msg = 'Created ' + made.length + ' of ' + p.items.length + ' gradients';
+        if (failed.length) msg += ' (failed: ' + failed.join(', ') + ')';
+        return msg + LG.report();
+
+    } catch (e) {
+        try { app.endUndoGroup(); } catch (x) { }
         return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
     }
 }
@@ -910,7 +1002,15 @@ function bakeTrackingNull(comp, sim, opts, mode) {
     return ctrl;
 }
 
-/* Expression fragments that read the control null. All O(1) per frame. */
+/* Expression fragments that read the control null. All O(1) per frame —
+   a single layer lookup, no valueAtTime walk backwards through the comp. */
+function trackBase() {
+    return 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
+           'var energy = n.effect("Energy")("Slider") / 100;\n' +
+           'var radius = n.effect("Radius")("Slider");\n' +
+           'var force  = n.effect("Force")("Slider");\n';
+}
+
 function trackExpr(what) {
     var base = 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n';
     switch (what) {
@@ -964,7 +1064,7 @@ function applyTrackSpring(comp, gradientLayer, ctrl, opts) {
     var blur = LG.add(matte, ["ADBE Box Blur2"], "tracking");
     if (blur) {
         LG.expr(blur, "Blur Radius", 1,
-                trackExpr('energy') + '\n20 + n.effect("Energy")("Slider") * 0.6;', "tracking");
+                trackBase() + '20 + energy * 60;', "tracking");
         safeSet(blur, "Iterations", 2, 3, "tracking");
         safeSet(blur, "Repeat Edge Pixels", 4, true, "tracking");
     }
@@ -987,11 +1087,9 @@ function applyTrackWake(comp, gradientLayer, ctrl, opts) {
     if (turb) {
         safeSet(turb, "Displacement", 1, 1, "tracking");       // Turbulent
         LG.expr(turb, "Amount", 2,
-                trackExpr('energy') +
-                'var f = n.effect("Force")("Slider");\n' +
-                'n.effect("Energy")("Slider") * f * 0.02;', "tracking");
+                trackBase() + 'energy * force * 2;', "tracking");
         LG.expr(turb, "Size", 3,
-                trackExpr('radius') + 'Math.max(4, n.effect("Radius")("Slider") * 0.18);', "tracking");
+                trackBase() + 'Math.max(4, radius * 0.18);', "tracking");
         LG.expr(turb, "Offset (Turbulence)", 4,
                 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
                 'n.transform.position + n.effect("Wake")("Point");', "tracking");
@@ -1006,9 +1104,7 @@ function applyTrackWake(comp, gradientLayer, ctrl, opts) {
         LG.expr(bulge, "Vertical Radius",   2, trackExpr('radius'), "tracking");
         LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
         LG.expr(bulge, "Bulge Height",      4,
-                trackExpr('energy') +
-                'var f = n.effect("Force")("Slider");\n' +
-                '-(0.15 + n.effect("Energy")("Slider") / 100 * 0.85) * f * 0.014;', "tracking");
+                trackBase() + '-(0.15 + energy * 0.85) * force * 0.014;', "tracking");
         safeSet(bulge, "Taper Radius", 5, 0.5, "tracking");
         safeSet(bulge, "Antialiasing", 6, 2, "tracking");
     }
@@ -1026,8 +1122,7 @@ function applyTrackRepel(comp, gradientLayer, ctrl, opts) {
         LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
         // Negative height pushes the imagery outward from the centre.
         LG.expr(bulge, "Bulge Height",      4,
-                'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
-                '-n.effect("Force")("Slider") * 0.02;', "tracking");
+                trackBase() + '-force * 0.02;', "tracking");
         safeSet(bulge, "Taper Radius", 5, 0.6, "tracking");
         safeSet(bulge, "Antialiasing", 6, 2, "tracking");
     }
@@ -1036,10 +1131,9 @@ function applyTrackRepel(comp, gradientLayer, ctrl, opts) {
     var twirl = LG.add(gradientLayer, ["ADBE Twirl"], "tracking");
     if (twirl) {
         LG.expr(twirl, "Angle", 1,
-                trackExpr('energy') +
-                'n.effect("Energy")("Slider") * 0.9;', "tracking");
+                trackBase() + 'energy * 90;', "tracking");
         LG.expr(twirl, "Twirl Radius", 2,
-                trackExpr('radius') + 'n.effect("Radius")("Slider") * 0.12;', "tracking");
+                trackBase() + 'radius * 0.12;', "tracking");
         LG.expr(twirl, "Twirl Center", 3, trackExpr('pos'), "tracking");
     }
     return null;

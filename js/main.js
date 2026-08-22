@@ -147,9 +147,18 @@ function renderLibrary() {
       card.innerHTML = `
         <div class="card-preview ${preset.cssClass}"></div>
         <span class="card-label">${preset.label}</span>
+        <span class="batch-tick">✓</span>
       `;
 
       card.addEventListener('click', function () {
+        // In batch mode a click adds to the set rather than switching the
+        // inspector, so the user can sweep the grid without losing the
+        // selection they have built up.
+        if (batchMode) {
+          this.classList.toggle('batch-selected');
+          updateBatchCount();
+          return;
+        }
         document.querySelectorAll('.gradient-card').forEach(c => c.classList.remove('selected'));
         this.classList.add('selected');
         selectedType = preset.id;
@@ -181,8 +190,108 @@ function renderLibrary() {
   });
 }
 
+/* ── Batch selection ───────────────────────────────────────────────── */
+
+let batchMode = false;
+
+const batchToggle  = document.getElementById('batch-toggle');
+const batchActions = document.getElementById('batch-actions');
+const batchCountEl = document.getElementById('batch-count');
+const batchStatus  = document.getElementById('batch-status');
+
+function selectedBatchCards() {
+  return Array.from(document.querySelectorAll('.gradient-card.batch-selected'));
+}
+
+function updateBatchCount() {
+  const n = selectedBatchCards().length;
+  if (batchCountEl) batchCountEl.textContent = n;
+  const btn = document.getElementById('batch-generate-btn');
+  if (btn) btn.disabled = n === 0;
+}
+
+if (batchToggle) {
+  batchToggle.addEventListener('change', function () {
+    batchMode = this.checked;
+    document.body.classList.toggle('batch-mode', batchMode);
+    if (batchActions) batchActions.classList.toggle('visible', batchMode);
+    if (!batchMode) {
+      selectedBatchCards().forEach(c => c.classList.remove('batch-selected'));
+      if (batchStatus) { batchStatus.textContent = ''; batchStatus.className = 'batch-status'; }
+    }
+    updateBatchCount();
+  });
+}
+
+const batchClearBtn = document.getElementById('batch-clear');
+if (batchClearBtn) {
+  batchClearBtn.addEventListener('click', function () {
+    selectedBatchCards().forEach(c => c.classList.remove('batch-selected'));
+    updateBatchCount();
+  });
+}
+
+const batchGenerateBtn = document.getElementById('batch-generate-btn');
+if (batchGenerateBtn) {
+  batchGenerateBtn.addEventListener('click', function () {
+    const cards = selectedBatchCards();
+    if (!cards.length) return;
+
+    /* Each type carries its own colours and control defaults. Using the
+       library's per-type palette rather than the current pickers is what
+       makes a batch look like a set of finished presets instead of the same
+       four colours applied thirty ways. */
+    const items = cards.map(card => {
+      const preset = GRADIENT_LIBRARY.find(g => g.id === card.dataset.type);
+      const controls = {};
+      (GRADIENT_CONTROLS[card.dataset.type] || []).forEach(c => { controls[c.id] = c.default; });
+      return {
+        type:     card.dataset.type,
+        label:    preset ? preset.label : card.dataset.type,
+        colors:   (preset && preset.defaultColors && preset.defaultColors.length === 4)
+                    ? preset.defaultColors
+                    : state.colors,
+        controls
+      };
+    });
+
+    const payload = {
+      items,
+      grain:    parseFloat(document.getElementById('grain-slider')?.value) || 0,
+      glow:     parseFloat(document.getElementById('glow-slider')?.value) || 0,
+      bpmSync:  document.getElementById('bpm-sync-toggle')?.checked || false,
+      bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120
+    };
+
+    batchGenerateBtn.disabled = true;
+    setStatus(batchStatus, `Building ${items.length} gradients…`, '');
+
+    if (typeof CSInterface === 'undefined') {
+      console.log('BATCH PAYLOAD:', payload);
+      batchGenerateBtn.disabled = false;
+      setStatus(batchStatus, '✓ [Dev mode] Payload logged to console.', 'success');
+      return;
+    }
+
+    new CSInterface().evalScript(`generateBatch(${esArg(payload)})`, function (result) {
+      batchGenerateBtn.disabled = false;
+      if (!result || result === 'EvalScript error.' || result === 'undefined') {
+        setStatus(batchStatus, '✕ Batch failed. Check the JSX.', 'error');
+      } else if (result.indexOf('ERROR') !== -1) {
+        setStatus(batchStatus, '✕ ' + result.replace('ERROR:', '').trim(), 'error');
+      } else if (result.indexOf('warning') !== -1 || result.indexOf('failed:') !== -1) {
+        setStatus(batchStatus, '⚠ ' + result, 'warn');
+        console.warn('[Living Gradients] batch:', result);
+      } else {
+        setStatus(batchStatus, '✓ ' + result, 'success');
+      }
+    });
+  });
+}
+
 // Init library
 renderLibrary();
+updateBatchCount();
 
 // Init controls
 renderControls(selectedType);
@@ -855,9 +964,13 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   }
 });
 
+/* Two status lines share this (the generate footer and the batch toolbar),
+   so remember each element's base class instead of hard-coding one. */
 function setStatus(el, msg, type) {
+  if (!el) return;
+  if (!el.dataset.baseClass) el.dataset.baseClass = el.className.split(' ')[0];
   el.textContent = msg;
-  el.className = 'generate-status ' + type;
+  el.className = el.dataset.baseClass + (type ? ' ' + type : '');
 }
 
 // ── REALTIME: SPEED + DIRECTION ──

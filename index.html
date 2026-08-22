@@ -128,9 +128,22 @@
     <div class="app-body">
       <!-- BROWSER (Grid View) -->
       <main class="view-panel active" id="browser-view">
+        <div class="browse-toolbar">
+          <label class="batch-switch">
+            <input type="checkbox" id="batch-toggle">
+            <span>Batch select</span>
+          </label>
+          <div class="batch-actions" id="batch-actions">
+            <button class="icon-btn action-btn" id="batch-clear" title="Clear selection">Clear</button>
+            <button class="btn-primary btn-batch" id="batch-generate-btn">
+              Generate <span id="batch-count">0</span>
+            </button>
+          </div>
+        </div>
         <div class="gradient-grid" id="gradient-grid">
           <!-- Dynamically generated -->
         </div>
+        <div class="batch-status" id="batch-status"></div>
       </main>
 
       <!-- FLUID SIMULATION -->

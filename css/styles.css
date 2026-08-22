@@ -425,3 +425,76 @@ html, body {
 .track-note strong { color: var(--text-muted); font-weight: 600; }
 
 #rebake-btn { margin-top: 2px; }
+
+
+/* ── Batch selection ──────────────────────────────────────────────── */
+.browse-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-app);
+}
+
+.batch-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.batch-switch input { accent-color: var(--accent); cursor: pointer; }
+.batch-switch:hover { color: var(--text-main); }
+
+.batch-actions { display: none; align-items: center; gap: 8px; }
+.batch-actions.visible { display: flex; }
+.btn-batch { width: auto; padding: 7px 14px; font-size: 12px; }
+
+/* In batch mode the card carries a tick instead of the single-select ring. */
+.gradient-card .batch-tick {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border-strong);
+  background: rgba(0,0,0,0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--bg-app);
+  pointer-events: none;
+}
+body.batch-mode .gradient-card { position: relative; }
+body.batch-mode .gradient-card .batch-tick { display: flex; }
+body.batch-mode .gradient-card.batch-selected .batch-tick {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+body.batch-mode .gradient-card.batch-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.batch-status {
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding: 10px 4px 0;
+  color: var(--text-muted);
+  min-height: 16px;
+}
+.batch-status.success { color: var(--success); }
+.batch-status.error   { color: var(--danger); }
+.batch-status.warn    { color: var(--warning); }
