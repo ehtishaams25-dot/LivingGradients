@@ -334,3 +334,24 @@ function getControlValues(type) {
   });
   return vals;
 }
+
+
+/* ── Config integrity check ────────────────────────────────────────────
+   GRADIENT_CONTROLS carries slider definitions for several types that have
+   no card in GRADIENT_LIBRARY and no builder in jsx/main.jsx. They are kept
+   deliberately as a roadmap, but nothing renders them, so log them once
+   rather than leaving the next reader to work that out from three files. */
+(function reportUnimplementedTypes() {
+  if (typeof GRADIENT_LIBRARY === 'undefined') return;
+
+  const shipped = GRADIENT_LIBRARY.map(g => g.id);
+  const planned = Object.keys(GRADIENT_CONTROLS).filter(k => shipped.indexOf(k) === -1);
+  const missingControls = shipped.filter(id => !GRADIENT_CONTROLS[id]);
+
+  if (planned.length) {
+    console.info('[Living Gradients] Controls defined but not shipped (no card, no builder):', planned.join(', '));
+  }
+  if (missingControls.length) {
+    console.warn('[Living Gradients] Cards with no control definitions — these render an empty inspector:', missingControls.join(', '));
+  }
+})();

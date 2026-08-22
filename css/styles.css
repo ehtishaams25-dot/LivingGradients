@@ -25,6 +25,7 @@
   --accent-glow: rgba(68, 136, 255, 0.2);
   
   --danger: #ff4444;
+  --warning: #ffb340;
   --success: #44ff88;
   
   --radius-sm: 6px;
@@ -265,7 +266,10 @@ html, body {
 .btn-generate:active { transform: translateY(0); }
 .btn-glow { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%); pointer-events: none; }
 .btn-text { position: relative; z-index: 1; }
-.generate-status { text-align: center; font-size: 12px; margin-top: 12px; color: var(--text-muted); height: 18px; }
+.generate-status { text-align: center; font-size: 12px; margin-top: 12px; color: var(--text-muted); min-height: 18px; line-height: 1.45; }
+.generate-status.success { color: var(--success); }
+.generate-status.error   { color: var(--danger); }
+.generate-status.warn    { color: var(--warning); text-align: left; }
 
 /* ── MODALS ── */
 .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; }

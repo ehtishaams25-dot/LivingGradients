@@ -722,6 +722,15 @@ document.getElementById('mood-select').addEventListener('change', function () {
   setTimeout(() => { this.value = ''; }, 100);
 });
 
+/* Serialise an argument for evalScript.
+   JSON.stringify twice: the inner pass encodes the payload, the outer pass
+   produces a correctly quoted and escaped ExtendScript string literal.
+   Hand-escaping quotes broke on any payload containing a newline — which is
+   every AI Generated build, since customCode is arbitrary source. */
+function esArg(value) {
+  return JSON.stringify(JSON.stringify(value));
+}
+
 // ── GENERATE ──
 document.getElementById('generate-btn').addEventListener('click', function () {
   const btn = this;
@@ -752,13 +761,17 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   try {
     if (typeof CSInterface !== 'undefined') {
       const cs = new CSInterface();
-      const paramStr = JSON.stringify(params).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      cs.evalScript(`generateGradient('${paramStr}')`, function (result) {
+      cs.evalScript(`generateGradient(${esArg(params)})`, function (result) {
         btn.disabled = false;
         if (result === 'EvalScript error.' || result === 'undefined') {
           setStatus(statusEl, '✕ Error in After Effects. Check the JSX.', 'error');
         } else if (result && result.indexOf('ERROR') !== -1) {
           setStatus(statusEl, '✕ ' + result.replace('ERROR:', '').trim(), 'error');
+        } else if (result && result.indexOf('warning') !== -1) {
+          // Built, but some effects or properties could not be applied.
+          const [done, detail] = result.split(' | ');
+          setStatus(statusEl, '⚠ ' + done + ' — ' + detail, 'warn');
+          console.warn('[Living Gradients]', detail);
         } else {
           setStatus(statusEl, '✓ ' + (result || 'Gradient created!'), 'success');
         }
@@ -798,8 +811,7 @@ window.triggerRealtimeUpdate = function () {
         trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
         trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
     };
-    const paramStr = JSON.stringify(fullParams).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    cs.evalScript(`updateSilkFlareWave('${paramStr}')`);
+    cs.evalScript(`updateSilkFlareWave(${esArg(fullParams)})`);
   }
 };
 
@@ -813,8 +825,7 @@ function triggerColorUpdate() {
 
   if (typeof CSInterface !== 'undefined') {
     const cs = new CSInterface();
-    const colorStr = JSON.stringify(state.colors).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    cs.evalScript(`updateLiveColors('${colorStr}')`);
+    cs.evalScript(`updateLiveColors(${esArg(state.colors)})`);
   }
 }
 

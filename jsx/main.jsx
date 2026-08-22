@@ -1,3 +1,244 @@
+/* =====================================================================
+   LG CORE — effect resolution + failure reporting
+   ---------------------------------------------------------------------
+   Every effect and property write in this file routes through here.
+
+   Two jobs:
+   1. Resolve effects by LOGICAL name, not by a guessed matchName string.
+      The resolver tries real matchNames first and caches whatever the
+      host actually accepts, so the panel is locale-independent and
+      self-correcting across AE versions.
+   2. Record every failure. Nothing is silently swallowed any more —
+      generateGradient() returns the warnings and the panel shows them.
+   ===================================================================== */
+var LG = (function () {
+
+    var warnings = [];
+    var resolved = {};   // logicalKey -> matchName that worked
+    var reverse  = null; // any known alias (incl. historical typos) -> logicalKey
+
+    /* Candidates are ordered: real matchName first, English display name
+       last. The display name only ever runs on a host where the matchName
+       was rejected, which should now be never. */
+    var FX = {
+        fractalNoise:      ["ADBE Fractal Noise", "Fractal Noise"],
+        turbulentDisplace: ["ADBE Turbulent Displace", "Turbulent Displace"],
+        glow:              ["ADBE Glo2", "Glow"],
+        fastBoxBlur:       ["ADBE Box Blur2", "Fast Box Blur"],
+        gaussianBlur:      ["ADBE Gaussian Blur 2", "Gaussian Blur"],
+        fastBlur:          ["ADBE Fast Blur", "Fast Blur"],
+        waveWarp:          ["ADBE Wave Warp", "Wave Warp"],
+        fourColorGradient: ["ADBE 4ColorGradient", "4-Color Gradient"],
+        motionTile:        ["ADBE Tile", "Motion Tile"],
+        twirl:             ["ADBE Twirl", "Twirl"],
+        tint:              ["ADBE Tint", "Tint"],
+        ramp:              ["ADBE Ramp", "Gradient Ramp"],
+        colorama:          ["APC Colorama", "Colorama"],
+        extract:           ["ADBE Extract", "Extract"],
+        transformFx:       ["ADBE Geometry2", "Transform"],
+        opticsComp:        ["ADBE Optics Compensation", "Optics Compensation"],
+        polarCoords:       ["ADBE Polar Coordinates", "Polar Coordinates"],
+        displacementMap:   ["ADBE Displacement Map", "Displacement Map"],
+        curves:            ["ADBE CurvesCustom", "Curves"],
+        mirror:            ["ADBE Mirror", "Mirror"],
+        mosaic:            ["ADBE Mosaic", "Mosaic"],
+        noise:             ["ADBE Noise", "Noise"],
+        echo:              ["ADBE Echo", "Echo"],
+        directionalBlur:   ["ADBE Motion Blur", "Directional Blur"],
+        simpleChoker:      ["ADBE Simple Choker", "Simple Choker"],
+        fill:              ["ADBE Fill", "Fill"],
+        dropShadow:        ["ADBE Drop Shadow", "Drop Shadow"],
+        warp:              ["ADBE WRPMESH", "Warp"],
+        venetianBlinds:    ["ADBE Venetian Blinds", "Venetian Blinds"],
+        cellPattern:       ["ADBE Cell Pattern", "Cell Pattern"],
+        sliderControl:     ["ADBE Slider Control", "Slider Control"],
+        colorControl:      ["ADBE Color Control", "Color Control"],
+        angleControl:      ["ADBE Angle Control", "Angle Control"],
+        levels:            ["ADBE Easy Levels2", "Levels"],
+        setMatte:          ["ADBE Set Matte3", "Set Matte"],
+        ccRepeTile:        ["CC RepeTile"],
+        ccBubbles:         ["CC Bubbles"],
+        ccToner:           ["CC Toner"],
+        ccVectorBlur:      ["CC Vector Blur"],
+        ccParticleWorld:   ["CC Particle World"],
+        /* Immersive/VR ship with AE but their matchNames carry the Mettle
+           SkyBox lineage. Ordered most-likely-first; the resolver settles it. */
+        vrColorGradient:   ["ADBE SkyBox Color Gradient", "ADBE VR Color Gradient", "VR Color Gradient"],
+        vrRotateSphere:    ["ADBE SkyBox Rotate Sphere", "ADBE VR Rotate Sphere", "VR Rotate Sphere"],
+        vrPlaneToSphere:   ["ADBE SkyBox Plane to Sphere", "ADBE VR Plane to Sphere", "VR Plane to Sphere"]
+    };
+
+    /* Historical typos and dead names found in earlier revisions of this
+       file. Mapping them here means old call sites auto-correct instead of
+       falling through to an English display name. */
+    var ALIASES = {
+        "ADBE FractalNoise":        "fractalNoise",
+        "ADBE TurbulentDisplace":   "turbulentDisplace",
+        "ADBE Glow":                "glow",
+        "ADBE Glow2":               "glow",
+        "Deep Glow":                "glow",
+        "ADBE Fast Box Blur":       "fastBoxBlur",
+        "ADBE Box Blur":            "fastBoxBlur",
+        "ADBE Wave Warp2":          "waveWarp",
+        "ADBE 4-Color Gradient":    "fourColorGradient",
+        "ADBE 4 Color Gradient":    "fourColorGradient",
+        "4 Color Gradient":         "fourColorGradient",
+        "ADBE MotionTile":          "motionTile",
+        "ADBE Colorama":            "colorama",
+        "ADBE Warp":                "warp",
+        "ADBE Directional Blur":    "directionalBlur",
+        "ADBE Transform":           "transformFx",
+        "Ramp":                     "ramp",
+        "ADBE VR Color Gradient":   "vrColorGradient",
+        "Mettle Color Gradient":    "vrColorGradient",
+        "ADBE VR Rotate Sphere":    "vrRotateSphere",
+        "Mettle Rotate Sphere":     "vrRotateSphere",
+        "ADBE VR Plane to Sphere":  "vrPlaneToSphere",
+        "Mettle Plane to Sphere":   "vrPlaneToSphere"
+    };
+
+    function buildReverse() {
+        reverse = {};
+        var key, list, i, a;
+        for (key in FX) {
+            if (!FX.hasOwnProperty(key)) continue;
+            list = FX[key];
+            for (i = 0; i < list.length; i++) reverse[list[i]] = key;
+        }
+        for (a in ALIASES) {
+            if (ALIASES.hasOwnProperty(a)) reverse[a] = ALIASES[a];
+        }
+    }
+
+    function keyFor(name) {
+        if (!reverse) buildReverse();
+        return reverse[name] || null;
+    }
+
+    /* Expand whatever a caller passed into an ordered candidate list.
+       Names that map to a logical key contribute that key's full list;
+       unknown names are kept verbatim so third-party effects still work. */
+    function candidates(names) {
+        if (!reverse) buildReverse();
+        var out = [], seen = {}, i, j, key, list;
+
+        function push(n) {
+            if (n && !seen[n]) { seen[n] = true; out.push(n); }
+        }
+
+        for (i = 0; i < names.length; i++) {
+            key = keyFor(names[i]);
+            if (key) {
+                if (resolved[key]) push(resolved[key]);
+                list = FX[key];
+                for (j = 0; j < list.length; j++) push(list[j]);
+            } else {
+                push(names[i]);
+            }
+        }
+        return out;
+    }
+
+    function record(msg) {
+        for (var i = 0; i < warnings.length; i++) {
+            if (warnings[i] === msg) return;   // dedupe; builders loop
+        }
+        if (warnings.length < 40) warnings.push(msg);
+    }
+
+    return {
+        reset: function () { warnings = []; },
+
+        warn: record,
+
+        count: function () { return warnings.length; },
+
+        report: function () {
+            if (!warnings.length) return "";
+            return " | " + warnings.length + " warning" +
+                   (warnings.length === 1 ? "" : "s") + ": " + warnings.join("; ");
+        },
+
+        /* Apply an effect. `names` may be logical keys, real matchNames, or
+           legacy strings — all are canonicalised. Returns the effect or null,
+           and records a warning if nothing applied. */
+        add: function (layer, names, context) {
+            if (!layer) {
+                record((context || "effect") + ": no layer");
+                return null;
+            }
+            if (typeof names === "string") names = [names];
+            var list = candidates(names), i, e, key;
+
+            for (i = 0; i < list.length; i++) {
+                e = null;
+                try { e = layer.Effects.addProperty(list[i]); } catch (x) { e = null; }
+                if (e) {
+                    key = keyFor(list[i]);
+                    if (key) resolved[key] = list[i];
+                    return e;
+                }
+            }
+            record((context ? context + " — " : "") + "effect unavailable: " + names[0]);
+            return null;
+        },
+
+        /* Set a property by name, falling back to a 1-based index.
+           Index is the reliable path on non-English hosts, so it is tried
+           whenever the name misses. */
+        set: function (fx, name, idx, val, context) {
+            if (!fx) return false;
+            try { fx.property(name).setValue(val); return true; } catch (x) { }
+            if (idx !== null && idx !== undefined) {
+                try { fx.property(idx).setValue(val); return true; } catch (x2) { }
+            }
+            record((context ? context + " — " : "") + "cannot set '" + name + "'");
+            return false;
+        },
+
+        /* Set a property nested inside a property group (Colorama's Input
+           Phase, Cell Pattern's evolution options, etc). */
+        setIn: function (fx, groupName, name, val, context) {
+            if (!fx) return false;
+            try { fx.property(groupName).property(name).setValue(val); return true; } catch (x) { }
+            try { fx.property(name).setValue(val); return true; } catch (x2) { }
+            record((context ? context + " — " : "") + "cannot set '" + groupName + " > " + name + "'");
+            return false;
+        },
+
+        expr: function (fx, name, idx, str, context) {
+            if (!fx) return false;
+            try { fx.property(name).expression = str; return true; } catch (x) { }
+            if (idx !== null && idx !== undefined) {
+                try { fx.property(idx).expression = str; return true; } catch (x2) { }
+            }
+            record((context ? context + " — " : "") + "cannot express '" + name + "'");
+            return false;
+        },
+
+        /* Diagnostic: which logical effects are missing on this host.
+           Returns an array of logical keys. */
+        probe: function () {
+            var missing = [], key, list, i, e, ok;
+            var probeComp = app.project.items.addComp("LG_PROBE", 32, 32, 1, 1, 24);
+            var temp = probeComp.layers.addSolid([0, 0, 0], "LG_PROBE", 32, 32, 1);
+            for (key in FX) {
+                if (!FX.hasOwnProperty(key)) continue;
+                list = FX[key];
+                ok = false;
+                for (i = 0; i < list.length; i++) {
+                    e = null;
+                    try { e = temp.Effects.addProperty(list[i]); } catch (x) { e = null; }
+                    if (e) { resolved[key] = list[i]; e.remove(); ok = true; break; }
+                }
+                if (!ok) missing.push(key);
+            }
+            probeComp.remove();
+            return missing;
+        }
+    };
+})();
+
 function openNativeColorPicker(hexStr) {
     try {
         var comp = app.project.activeItem;
@@ -61,26 +302,22 @@ function openNativeColorPicker(hexStr) {
         return "-1";
     }
 }
+/* Legacy shims. Every historical call site keeps working, but the names
+   are now canonicalised by LG and failures are reported instead of lost. */
 function addFx(layer, names) {
-    for (var i = 0; i < names.length; i++) {
-        try {
-            var e = layer.Effects.addProperty(names[i]);
-            if (e) return e;
-        } catch (x) { }
-    }
-    return null;
+    return LG.add(layer, names);
 }
 
 function sp(fx, name, val) {
-    try {
-        fx.property(name).setValue(val);
-    } catch (x) { }
+    return LG.set(fx, name, null, val);
 }
 
 function ex(prop, str) {
-    try {
-        prop.expression = str;
-    } catch (x) { }
+    if (!prop) { LG.warn("expression target missing"); return false; }
+    try { prop.expression = str; return true; } catch (x) {
+        LG.warn("cannot express '" + (prop.name || "?") + "'");
+        return false;
+    }
 }
 
 function getCompLayers() {
@@ -258,6 +495,8 @@ function generateGradient(paramsStr) {
         var c = [];
         for (var i = 0; i < p.colors.length; i++) c.push(vibrify(hexRgb(p.colors[i])));
         
+        LG.reset();
+
         p.controls = p.controls || {};
         p.controls.trackingEnabled = p.trackingEnabled;
         p.controls.trackingLayerName = p.trackingLayerName;
@@ -362,46 +601,74 @@ function generateGradient(paramsStr) {
         var afterCount = comp.numLayers;
         var addedLayersCount = afterCount - beforeCount;
 
-        applyGlobalPolish(comp, p);
+        var gradientLayer = groupGeneratedLayers(comp, p, addedLayersCount);
+        applyGlobalPolish(comp, p, gradientLayer);
 
         if (p.trackingEnabled && p.trackingLayerName) {
-            applyTrailTracking(comp, p, addedLayersCount);
+            applyTrailTracking(comp, p, gradientLayer);
         }
 
         app.endUndoGroup();
-        return 'Done: ' + comp.name;
+        return 'Done: ' + comp.name + LG.report();
     } catch (e) {
         try {
             app.endUndoGroup();
         } catch (x) { }
-        return 'ERROR: ' + e.message + ' line ' + e.line;
+        return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
     }
 }
 
-function applyGlobalPolish(comp, p) {
-    if (comp.numLayers === 0) return;
-    var layer = comp.layer(1); // The top layer just generated
+/* Collapse the layers this build just added into a single layer, so that
+   anything applied afterwards (grain, glow, tracking) affects the finished
+   gradient rather than whichever element happened to end up on top.
+   Returns that layer. */
+function groupGeneratedLayers(comp, p, addedLayersCount) {
+    if (comp.numLayers === 0) return null;
+    if (!addedLayersCount || addedLayersCount < 1) addedLayersCount = 1;
+    if (addedLayersCount === 1) return comp.layer(1);
+
+    var indices = [], i;
+    for (i = 1; i <= addedLayersCount; i++) indices.push(i);
+
+    var item = null;
+    try {
+        item = comp.layers.precompose(indices, (p.type || 'Living Gradients') + ' Gradient', true);
+    } catch (e) {
+        LG.warn('could not group the generated layers: ' + e.message);
+        return comp.layer(1);
+    }
+
+    // precompose() returns a CompItem; find the layer that represents it.
+    for (i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).source === item) return comp.layer(i);
+    }
+    return comp.layer(1);
+}
+
+function applyGlobalPolish(comp, p, layer) {
+    if (!layer) return;
 
     try {
         layer.comment = 'LIVING_GRADIENT_DATA:' + JSON.stringify(p);
-    } catch(e) {}
+    } catch (e) {
+        LG.warn('could not store settings on the layer comment');
+    }
 
     if (p.grain && p.grain > 0) {
-        var noise = addFx(layer, ['ADBE Noise', 'Noise']);
+        var noise = addFx(layer, ['ADBE Noise']);
         if (noise) {
-            try { noise.property('Amount of Noise').setValue(p.grain); } catch (e) { }
-            try { noise.property('Use Color Noise').setValue(false); } catch (e) { }
+            safeSet(noise, 'Amount of Noise',  1, p.grain);
+            safeSet(noise, 'Use Color Noise',  2, false);
+            safeSet(noise, 'Clipping',         3, true);
         }
     }
 
-
-
     if (p.glow && p.glow > 0) {
-        var glow = addFx(layer, ['ADBE Glow2', 'Glow', 'ADBE Glow']);
+        var glow = addFx(layer, ['ADBE Glo2']);
         if (glow) {
-            try { glow.property('Glow Radius').setValue(p.glow); } catch (e) { }
-            try { glow.property('Glow Intensity').setValue(p.glow / 50); } catch (e) { }
-            try { glow.property('Glow Threshold').setValue(100 - (p.glow * 0.5)); } catch (e) { }
+            safeSet(glow, 'Glow Threshold', 1, 100 - (p.glow * 0.5));
+            safeSet(glow, 'Glow Radius',    2, p.glow);
+            safeSet(glow, 'Glow Intensity', 3, p.glow / 50);
         }
     }
 
@@ -682,7 +949,7 @@ function buildLiving(comp, c, ctrl, w, h, dur) {
     var s = comp.layers.addSolid([1, 1, 1], 'Living Gradient', w, h, 1);
 
     // Motion Tile
-    var tile = addFx(s, ['ADBE MotionTile', 'Motion Tile', 'CC RepeTile']);
+    var tile = addFx(s, ['ADBE Tile']);
     if (tile) {
         try {
             for (var pi = 1; pi <= tile.numProperties; pi++) {
@@ -1052,14 +1319,9 @@ function buildSilkFlare(comp, c, ctrl, w, h, dur, presetName) {
 // ── 3. REALTIME UPDATE ──
 // ChromaFlare uses normal shape fills for color so the CEP color pickers can update it safely.
 function setFxValue(fx, idx, name, val) {
-    if (!fx) return;
-    try {
-        fx.property(idx).setValue(val);
-        return;
-    } catch (e) { }
-    try {
-        fx.property(name).setValue(val);
-    } catch (e2) { }
+    if (!fx) return false;
+    try { fx.property(idx).setValue(val); return true; } catch (e) { }
+    return LG.set(fx, name, null, val);
 }
 
 function findFx(layer, names) {
@@ -1328,7 +1590,7 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
     }
 
     // Motion Tile
-    var tile1 = addFx(s, ['ADBE MotionTile', 'Motion Tile', 'CC RepeTile']);
+    var tile1 = addFx(s, ['ADBE Tile']);
     if (tile1) {
         safeSet(tile1, "Output Width", 1, 300);
         safeSet(tile1, "Output Height", 2, 300);
@@ -1358,7 +1620,7 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
     }
 
     // Motion Tile (Second)
-    var tile2 = addFx(s, ['ADBE MotionTile', 'Motion Tile', 'CC RepeTile']);
+    var tile2 = addFx(s, ['ADBE Tile']);
     if (tile2) {
         safeSet(tile2, "Output Width", 1, 300);
         safeSet(tile2, "Output Height", 2, 300);
@@ -1969,20 +2231,15 @@ function updateLayerColors(layer, c, depth) {
 
 // ── 5. MASSIVE LIBRARY GENERATORS ──
 function safeSet(fx, name, idx, val) {
-    if (!fx) return;
-    try { fx.property(name).setValue(val); return; } catch (e) { }
-    if (idx !== null) { try { fx.property(idx).setValue(val); return; } catch (e) { } }
+    return LG.set(fx, name, idx, val);
 }
 function safeEx(fx, name, idx, expr) {
-    if (!fx) return;
-    try { fx.property(name).expression = expr; return; } catch (e) { }
-    if (idx !== null) { try { fx.property(idx).expression = expr; return; } catch (e) { } }
+    return LG.expr(fx, name, idx, expr);
 }
 function safeSetGroup(fx, groupName, name, idx, val) {
-    if (!fx) return;
-    try { fx.property(groupName).property(name).setValue(val); return; } catch (e) { }
-    try { fx.property(name).setValue(val); return; } catch (e) { }
-    if (idx !== null) { try { fx.property(idx).setValue(val); return; } catch (e) { } }
+    if (!fx) return false;
+    try { fx.property(groupName).property(name).setValue(val); return true; } catch (e) { }
+    return LG.set(fx, name, idx, val);
 }
 
 
@@ -2591,7 +2848,7 @@ function buildWavy(comp, c, ctrl, w, h, dur) {
 
     var s = comp.layers.addSolid([1, 1, 1], 'Wavy Gradient', w, h, 1, dur);
 
-    var tile = addFx(s, ['ADBE MotionTile', 'Motion Tile', 'CC RepeTile']);
+    var tile = addFx(s, ['ADBE Tile']);
     if (tile) {
         safeSet(tile, "Output Width", 1, 300);
         safeSet(tile, "Output Height", 2, 300);
@@ -2788,14 +3045,19 @@ function buildAnimeWater(comp, c, ctrl, w, h, dur) {
     try { l4.opacity.setValue(100); } catch(e) {}
 
     // Add Glows to Layer 4
-    var gl1 = addFx(l4, ["Deep Glow", "ADBE Glow2", "Glow", "ADBE Glow"]);
-    if (gl1 && gl1.matchName.indexOf("Deep Glow") === -1) {
-        safeSet(gl1, "Glow Radius", 2, 50);
+    // Tight core + wide bloom. Stock Glow needs its threshold pulled down or
+    // it barely registers on a mid-grey fractal; the old Deep Glow guard meant
+    // these were never tuned at all when Deep Glow was absent.
+    var gl1 = addFx(l4, ["ADBE Glo2"]);
+    if (gl1) {
+        safeSet(gl1, "Glow Threshold", 1, 45);
+        safeSet(gl1, "Glow Radius",    2, 50);
         safeSet(gl1, "Glow Intensity", 3, 2);
     }
-    var gl2 = addFx(l4, ["Deep Glow", "ADBE Glow2", "Glow", "ADBE Glow"]);
-    if (gl2 && gl2.matchName.indexOf("Deep Glow") === -1) {
-        safeSet(gl2, "Glow Radius", 2, 100);
+    var gl2 = addFx(l4, ["ADBE Glo2"]);
+    if (gl2) {
+        safeSet(gl2, "Glow Threshold", 1, 60);
+        safeSet(gl2, "Glow Radius",    2, 100);
         safeSet(gl2, "Glow Intensity", 3, 1);
     }
 }
@@ -2803,7 +3065,7 @@ function buildAnimeWater(comp, c, ctrl, w, h, dur) {
 // ── METALLIC GRADIENT ──
 function buildMetallic(comp, c, ctrl, w, h, dur) {
     function sProp(fx, n1, v) {
-        try { fx.property(n1).setValue(v); } catch(e) {}
+        return LG.set(fx, n1, null, v, 'Metallic');
     }
 
     var speed = ctrl.speed !== undefined ? ctrl.speed : 10;
@@ -2838,8 +3100,19 @@ function buildMetallic(comp, c, ctrl, w, h, dur) {
         sProp(blur1, 'Blur Radius', 28);
     }
     
-    // 5. Precompose layer
-    var precomp = comp.layers.precompose([s.index], 'shape', true);
+    // 5. Precompose layer.
+    // precompose() hands back a CompItem; the layer that represents it in
+    // this comp has to be looked up separately or every effect below lands
+    // on nothing.
+    var precompItem = comp.layers.precompose([s.index], 'shape', true);
+    var precomp = null;
+    for (var pi = 1; pi <= comp.numLayers; pi++) {
+        if (comp.layer(pi).source === precompItem) { precomp = comp.layer(pi); break; }
+    }
+    if (!precomp) {
+        precomp = comp.layer(1);
+        LG.warn('Metallic: could not identify the precomp layer');
+    }
     
     // 6. VR Rotate Sphere
     var vrs = addFx(precomp, ['VR Rotate Sphere', 'Mettle Rotate Sphere', 'ADBE VR Rotate Sphere']);
@@ -2996,31 +3269,23 @@ function buildCellularMosaic(comp, c, ctrl, w, h, dur) {
 
     var s = comp.layers.addSolid([1, 1, 1], 'Cellular Mosaic', w, h, 1, dur);
 
-    var cell = addFx(s, ['Cell Pattern', 'ADBE Cell Pattern']);
+    var cell = addFx(s, ['ADBE Cell Pattern']);
     if (cell) {
+        // 1-based indices: 1 Cell Pattern, 2 Invert, 3 Contrast, 4 Overflow,
+        // 5 Disperse, 6 Size, 7 Offset, 8 Tiling Options, 9 Evolution.
         safeSet(cell, 'Cell Pattern', 1, patternVal);
-        safeSet(cell, 'Disperse', 4, dispersion / 100);
-        safeSet(cell, 'Size', 5, 200 - cells); // Inverse mapping
-        safeEx(cell, 'Evolution', 8, 'time * ' + speed);
+        safeSet(cell, 'Contrast',     3, 100);
+        safeSet(cell, 'Disperse',     5, dispersion / 100);
+        safeSet(cell, 'Size',         6, 200 - cells); // inverse mapping
+        safeEx(cell,  'Evolution',    9, 'time * ' + speed);
     }
 
-    var colorama = addFx(s, ['Colorama', 'ADBE Colorama']);
-    if (colorama) {
-        // Output Cycle - map 4 colors
-        try {
-            var cycle = colorama.property('Output Cycle').property('Output Cycle');
-            if (cycle) {
-                // Approximate 4 color cycle on colorama is tricky, we can use gradient map equivalent via tint and tritone or just let Colorama map basic hues
-                // For safety we will just use a generic gradient if colorama complex setup fails
-            }
-        } catch(e) {}
-        
-        safeSet(colorama, 'Get Phase From', 1, 1); // Alpha/Luma
-    }
-    
-    // Instead of complex Colorama setting which has a specialized property array, 
-    // let's use a simpler approach: Cell Pattern over a Gradient Map via Displacement and Blending
-    
+    /* Colorama used to be applied here and did nothing: its Get Phase From
+       lives inside the Input Phase group, and its Output Cycle gradient has
+       no scriptable value type. Colour comes from a 4-colour gradient in
+       COLOR blend mode instead — it takes hue and saturation from the
+       gradient and luminance from the cell pattern, which is exactly the
+       mapping Colorama was there to provide. */
     var colorAdj = comp.layers.addSolid([1,1,1], 'Gradient Colors', w, h, 1, dur);
     applyAnimatedGradient(colorAdj, c, w, h, dur);
     try { colorAdj.blendingMode = BlendingMode.COLOR; } catch(e) {}
@@ -3215,7 +3480,7 @@ function buildStackedSquares(comp, c, ctrl, w, h, dur) {
         }
     }
     
-    var mt = addFx(s, ['Motion Tile', 'CC RepeTile', 'ADBE MotionTile']);
+    var mt = addFx(s, ['ADBE Tile']);
     if (mt) {
         safeSet(mt, 'Output Width', 1, 150);
         safeSet(mt, 'Output Height', 2, 150);
@@ -3274,84 +3539,81 @@ function buildStackedSquares(comp, c, ctrl, w, h, dur) {
     }
 }
 function buildTrailGradient(comp, c, ctrl, w, h, dur) {
-    var precomp = app.project.items.addComp("Trail Base", w, h, 1, dur, comp.frameRate);
-    
+    /* Vertical strokes whose gradient scrolls at slightly different speeds,
+       so the bank of them reads as a travelling wave.
+
+       Rebuilt on stock effects only. The previous version preferred Plugin
+       Everything's Thick Stroke and fell back to a Motion Tile path that was
+       broken twice over: it applied CC RepeTile instead of Motion Tile, and
+       set "Start Point"/"End Point" on Gradient Ramp, which owns neither. */
+
     var strokeWidth = ctrl.width !== undefined ? parseFloat(ctrl.width) : 60;
-    var numStrokes = Math.ceil(w / strokeWidth) + 4;
-    var startCycle = ctrl.cycleSpeed !== undefined ? parseFloat(ctrl.cycleSpeed) : 600;
+    if (strokeWidth < 4) strokeWidth = 4;
+    var numStrokes  = Math.ceil(w / strokeWidth) + 4;
+    var startCycle  = ctrl.cycleSpeed !== undefined ? parseFloat(ctrl.cycleSpeed) : 600;
     var cycleOffset = 20;
 
-    var useThickStroke = false;
-    var s_test = precomp.layers.addSolid([1,1,1], "Test", w, h, 1);
-    var ts_test = addFx(s_test, ['PE Thick Stroke', 'PE_ThickStroke', 'Thick Stroke', 'ThickStroke']);
-    if (ts_test) {
-        useThickStroke = true;
-    }
-    s_test.remove();
+    var precomp = app.project.items.addComp("Trail Base", w, h, 1, dur, comp.frameRate);
 
     for (var i = 0; i < numStrokes; i++) {
         var cycleSpeed = startCycle - (i * cycleOffset);
-        var xPos = (i - Math.floor(numStrokes/2)) * strokeWidth + (w/2);
+        var xPos = (i - Math.floor(numStrokes / 2)) * strokeWidth + (w / 2);
 
-        if (useThickStroke) {
-            var s = precomp.layers.addSolid([1,1,1], "Trail " + i, w, h, 1);
-            var newMask = s.Masks.addProperty("Mask");
-            var myShape = new Shape();
-            myShape.vertices = [[w/2, -h*0.2], [w/2, h*1.2]];
-            myShape.closed = false;
-            try { newMask.property("maskShape").setValue(myShape); } catch(e) {}
-            
-            var ts = addFx(s, ['PE Thick Stroke', 'PE_ThickStroke', 'Thick Stroke', 'ThickStroke']);
-            if (ts) {
-                try { ts.property("Width").setValue(strokeWidth); } catch(e) {}
-                try { ts.property("End Width").setValue(strokeWidth); } catch(e) {}
-                try { ts.property("Cap").setValue(2); } catch(e) {}
-                try { ts.property("Cycle").expression = "time * " + cycleSpeed; } catch(e) {}
-            }
-            try { s.property("Transform").property("Position").setValue([xPos, h/2]); } catch(e) {}
-        } else {
-            var s = precomp.layers.addSolid([1,1,1], "Trail " + i, strokeWidth, h, 1);
-            
-            var ramp = addFx(s, ["ADBE Ramp", "Gradient Ramp", "Ramp"]);
-            if (ramp) {
-                try { ramp.property("Start Point").setValue([strokeWidth/2, 0]); } catch(e) {}
-                try { ramp.property("End Point").setValue([strokeWidth/2, h/2]); } catch(e) {}
-                try { ramp.property("Start Color").setValue([0,0,0]); } catch(e) {}
-                try { ramp.property("End Color").setValue([1,1,1]); } catch(e) {}
-            }
-            
-            var tile = addFx(s, ["ADBE MotionTile", "Motion Tile"]);
-            if (tile) {
-                try { tile.property("Output Height").setValue(400); } catch(e) {}
-                try { tile.property("Mirror Edges").setValue(true); } catch(e) {}
-                try { tile.property("Tile Center").expression = "[value[0], value[1] + (time * " + cycleSpeed + ")]"; } catch(e) {}
-            }
-            
-            try { s.property("Transform").property("Position").setValue([xPos, h/2]); } catch(e) {}
+        var s = precomp.layers.addSolid([1, 1, 1], "Trail " + i, strokeWidth, h, 1, dur);
+
+        var ramp = addFx(s, ["ADBE Ramp"]);
+        if (ramp) {
+            // Gradient Ramp's points are "Start of Ramp" / "End of Ramp".
+            safeSet(ramp, "Start of Ramp", 1, [strokeWidth / 2, 0]);
+            safeSet(ramp, "Start Color",   2, [0, 0, 0, 1]);
+            safeSet(ramp, "End of Ramp",   3, [strokeWidth / 2, h / 2]);
+            safeSet(ramp, "End Color",     4, [1, 1, 1, 1]);
         }
+
+        var tile = addFx(s, ["ADBE Tile"]);
+        if (tile) {
+            safeSet(tile, "Output Height", 7, 400);
+            safeSet(tile, "Mirror Edges",  8, true);
+            safeEx(tile, "Tile Center", 5,
+                   "[value[0], value[1] + (time * " + cycleSpeed + ")]");
+        }
+
+        try { s.property("Transform").property("Position").setValue([xPos, h / 2]); }
+        catch (e) { LG.warn("TrailGradient: cannot position stroke " + i); }
     }
-    
+
     var finalLayer = comp.layers.add(precomp);
     finalLayer.name = "Trail Animation";
-    
+
+    /* Map the greyscale trail onto the four picked colours. CC Toner is the
+       cleanest stock route: it maps luminance across five tonal stops. */
     var toner = addFx(finalLayer, ["CC Toner"]);
     if (toner) {
-        try { toner.property("Tones").setValue(3); } catch(e) {} // Pentatone
-        var c1 = c[0], c2 = c[1] || c[0], c3 = c[2] || c[1], c4 = c[3] || c[2];
-        try { toner.property("Highlights").setValue(c1); } catch(e) {}
-        try { toner.property("Brights").setValue(c2); } catch(e) {}
-        try { toner.property("Midtones").setValue(c3); } catch(e) {}
-        try { toner.property("Darktones").setValue(c4); } catch(e) {}
-        try { toner.property("Shadows").setValue(c1); } catch(e) {}
+        var c1 = c[0],
+            c2 = c[1] || c[0],
+            c3 = c[2] || c[1] || c[0],
+            c4 = c[3] || c[2] || c[0];
+        safeSet(toner, "Tones",      1, 3);   // Pentatone
+        safeSet(toner, "Highlights", 2, c1);
+        safeSet(toner, "Brights",    3, c2);
+        safeSet(toner, "Midtones",   4, c3);
+        safeSet(toner, "Darktones",  5, c4);
+        safeSet(toner, "Shadows",    6, c1);
     } else {
-        addFx(finalLayer, ['ADBE Colorama', 'Colorama']);
+        // No Cycore on this host — tint the extremes instead of leaving it grey.
+        var tint = addFx(finalLayer, ["ADBE Tint"]);
+        if (tint) {
+            safeSet(tint, "Map Black To", 1, c[3] || c[0]);
+            safeSet(tint, "Map White To", 2, c[0]);
+        }
     }
-    
-    var warp = addFx(finalLayer, ["ADBE Warp", "Warp"]);
+
+    var warp = addFx(finalLayer, ["ADBE WRPMESH"]);
     if (warp) {
-        try { warp.property("Warp Style").setValue(13); } catch(e) {} // Squeeze
+        // Warp Style is a 1-based dropdown; 14 = Squeeze (13 is Inflate).
+        safeSet(warp, "Warp Style", 1, 14);
         var bend = ctrl.bend !== undefined ? parseFloat(ctrl.bend) : 30;
-        try { warp.property("Bend").setValue(bend); } catch(e) {}
+        safeSet(warp, "Bend", 3, bend);
     }
 }
 
@@ -3460,10 +3722,11 @@ function buildAntigravity(comp, c, ctrl, w, h, dur) {
         safeSetGroup(pw, "Particle", "Death Color", null, color2);
     }
     
-    var glow = addFx(emitterLayer, ["Deep Glow", "ADBE Glow2", "Glow", "ADBE Glow"]);
-    if (glow && glow.matchName.indexOf("Deep Glow") === -1) {
-        safeSet(glow, "Glow Radius", null, 50);
-        safeSet(glow, "Glow Intensity", null, 1.5);
+    var glow = addFx(emitterLayer, ["ADBE Glo2"]);
+    if (glow) {
+        safeSet(glow, "Glow Threshold", 1, 30);   // particles are dim; bite early
+        safeSet(glow, "Glow Radius",    2, 50);
+        safeSet(glow, "Glow Intensity", 3, 1.5);
     }
 }
 
