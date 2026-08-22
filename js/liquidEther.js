@@ -1,272 +1,6 @@
-<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8">
-<title>Liquid Ether</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg:       #1a1a1e;
-    --surface:  #26262c;
-    --border:   #3a3a44;
-    --accent:   #7c5cfc;
-    --text:     #e0dff5;
-    --sub:      #888899;
-    --green:    #4ade80;
-    --red:      #f87171;
-    --radius:   6px;
-  }
-
-  html, body {
-    width: 100%; height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, 'Segoe UI', sans-serif;
-    font-size: 11px;
-    overflow: hidden;
-  }
-
-  #app {
-    display: flex;
-    flex-direction: column;
-    width: 100%; height: 100%;
-  }
-
-  /* ── Fluid canvas ─────────────────────────────── */
-  #sim-wrap {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    background: #000;
-    border-bottom: 1px solid var(--border);
-    overflow: hidden;
-  }
-
-  /* Layer-position crosshair overlay */
-  #crosshair {
-    position: absolute;
-    pointer-events: none;
-    display: none;
-    width: 16px; height: 16px;
-    transform: translate(-50%, -50%);
-  }
-  #crosshair::before,
-  #crosshair::after {
-    content: '';
-    position: absolute;
-    background: rgba(255,255,255,0.7);
-  }
-  #crosshair::before { left:7px; top:0; width:2px; height:100%; }
-  #crosshair::after  { top:7px; left:0; height:2px; width:100%; }
-
-  /* ── Controls bar ─────────────────────────────── */
-  #controls {
-    flex-shrink: 0;
-    padding: 8px 10px;
-    background: var(--surface);
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-  }
-
-  /* Status row */
-  #status-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  #status-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--sub);
-    flex-shrink: 0;
-    transition: background .3s;
-  }
-  #status-dot.active { background: var(--green); }
-  #status-dot.error  { background: var(--red); }
-  #status-text { color: var(--sub); flex: 1; }
-
-  /* Toggle row */
-  #toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  /* Track toggle */
-  .toggle-label {
-    display: flex; align-items: center; gap: 5px;
-    cursor: pointer; user-select: none;
-  }
-  .toggle-label input[type=checkbox] { display: none; }
-  .toggle-switch {
-    width: 30px; height: 16px;
-    background: var(--border);
-    border-radius: 8px;
-    position: relative;
-    transition: background .2s;
-  }
-  .toggle-switch::after {
-    content: '';
-    position: absolute;
-    width: 12px; height: 12px;
-    background: #fff;
-    border-radius: 50%;
-    top: 2px; left: 2px;
-    transition: left .2s;
-  }
-  .toggle-label input:checked + .toggle-switch { background: var(--accent); }
-  .toggle-label input:checked + .toggle-switch::after { left: 16px; }
-
-  /* Color presets */
-  #presets {
-    display: flex; gap: 4px; align-items: center;
-    margin-left: auto;
-  }
-  .preset-btn {
-    width: 22px; height: 22px;
-    border-radius: 4px;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: border-color .15s, transform .15s;
-  }
-  .preset-btn:hover   { transform: scale(1.1); }
-  .preset-btn.active  { border-color: #fff; }
-
-  /* Info row */
-  #info-row {
-    display: flex; gap: 12px; align-items: center;
-    color: var(--sub);
-  }
-  .info-item { display: flex; gap: 4px; }
-  .info-val  { color: var(--text); font-variant-numeric: tabular-nums; }
-
-  /* Force / cursor sliders */
-  #sliders {
-    display: flex; gap: 8px; align-items: center;
-    flex-wrap: wrap;
-  }
-  .slider-group { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 120px; }
-  .slider-group label { color: var(--sub); white-space: nowrap; width: 50px; }
-  .slider-group input[type=range] {
-    flex: 1;
-    -webkit-appearance: none;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-  }
-  .slider-group input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 12px; height: 12px;
-    background: var(--accent);
-    border-radius: 50%;
-  }
-  .slider-val { color: var(--text); width: 28px; text-align: right; }
-</style>
-</head>
-<body>
-<div id="app">
-
-  <!-- Fluid simulation viewport -->
-  <div id="sim-wrap"><canvas width="620" height="310" style="width: 100%; height: 100%; display: block;"></canvas>
-    <div id="crosshair" style="display: block; left: 310px; top: 154.5px;"></div>
-  </div>
-
-  <!-- Controls -->
-  <div id="controls">
-
-    <!-- Status -->
-    <div id="status-row">
-      <div id="status-dot" class="active"></div>
-      <span id="status-text">Tracking: TEMP_COLOR_PICKER</span>
-    </div>
-
-    <!-- Track toggle + presets -->
-    <div id="toggle-row">
-      <label class="toggle-label">
-        <input type="checkbox" id="trackToggle" checked="">
-        <span class="toggle-switch"></span>
-        Track selected layer
-      </label>
-
-      <div id="presets">
-        <div class="preset-btn active" style="background:linear-gradient(135deg,#5227FF,#FF9FFC)" data-colors="[&quot;#5227FF&quot;,&quot;#FF9FFC&quot;,&quot;#B497CF&quot;]" title="Purple Dream"></div>
-        <div class="preset-btn" style="background:linear-gradient(135deg,#F05A1A,#FFD700)" data-colors="[&quot;#F05A1A&quot;,&quot;#FF8C00&quot;,&quot;#FFD700&quot;]" title="Fire"></div>
-        <div class="preset-btn" style="background:linear-gradient(135deg,#00C9FF,#92FE9D)" data-colors="[&quot;#00C9FF&quot;,&quot;#00F5A0&quot;,&quot;#92FE9D&quot;]" title="Ocean Mint"></div>
-        <div class="preset-btn" style="background:linear-gradient(135deg,#FF0080,#FF8C00)" data-colors="[&quot;#FF0080&quot;,&quot;#FF4D00&quot;,&quot;#FF8C00&quot;]" title="Neon Sunset"></div>
-        <div class="preset-btn" style="background:linear-gradient(135deg,#fff,#aaa)" data-colors="[&quot;#ffffff&quot;,&quot;#cccccc&quot;,&quot;#888888&quot;]" title="Ghost"></div>
-      </div>
-    </div>
-
-    <!-- Coordinate readout -->
-    <div id="info-row">
-      <span>Layer pos:</span>
-      <span class="info-item">X <span class="info-val" id="val-x">960.0px</span></span>
-      <span class="info-item">Y <span class="info-val" id="val-y">540.0px</span></span>
-      <span class="info-item" id="layer-name-wrap">
-        <span class="info-val" id="val-layer">TEMP_COLOR_PICKER</span>
-      </span>
-    </div>
-
-    <!-- Sliders -->
-    <div id="sliders">
-      <div class="slider-group">
-        <label>Force</label>
-        <input type="range" id="sl-force" min="1" max="60" value="20" step="1">
-        <span class="slider-val" id="sv-force">20</span>
-      </div>
-      <div class="slider-group">
-        <label>Brush</label>
-        <input type="range" id="sl-cursor" min="20" max="300" value="100" step="10">
-        <span class="slider-val" id="sv-cursor">100</span>
-      </div>
-    </div>
-
-  </div><!-- /controls -->
-</div><!-- /app -->
-
-<script>
 /* =====================================================================
-   1. AE BRIDGE
-   Communicates with After Effects via __adobe_cep__.evalScript.
-   Falls back gracefully when running outside AE (e.g. in a browser).
-   ===================================================================== */
-const AEBridge = (() => {
-  const cep = (typeof window.__adobe_cep__ !== 'undefined') ? window.__adobe_cep__ : null;
-
-  function evalScript(script) {
-    return new Promise(resolve => {
-      if (!cep) { resolve(null); return; }
-      try {
-        cep.evalScript(script, result => resolve(result));
-      } catch(e) { resolve(null); }
-    });
-  }
-
-  async function getLayerInfo() {
-    const raw = await evalScript('getLayerInfo()');
-    if (!raw) return null;
-    try {
-      const d = JSON.parse(raw);
-      return d.error ? null : d;
-    } catch(e) { return null; }
-  }
-
-  return { available: !!cep, getLayerInfo };
-})();
-
-
-/* =====================================================================
-   2. LIQUID ETHER FLUID SIMULATION  (vanilla JS — ported from React)
-   Exposes: LiquidEther(container, opts)
-     .start() / .pause() / .dispose()
-     .setLayerInput(nx, ny)   — drives fluid from AE layer position
-     .clearLayerInput()       — resume auto-demo mode
-     .setColors(stops)        — hot-swap palette
-     .setOptions(patch)       — update force / cursor etc live
+   LIQUID ETHER FLUID SIMULATION
+   Extracted and modified for shape-aware layer tracking
    ===================================================================== */
 class LiquidEther {
   constructor(container, opts = {}) {
@@ -365,6 +99,8 @@ class LiquidEther {
       coords:    new THREE.Vector2(),
       coords_old:new THREE.Vector2(),
       diff:      new THREE.Vector2(),
+      currentW:  undefined,
+      currentH:  undefined,
       mouseMoved:false,
       isHoverInside:  false,
       hasUserControl: false,
@@ -417,11 +153,15 @@ class LiquidEther {
         const ny = (y - r.top)  / r.height;
         this.coords.set(nx*2-1, -(ny*2-1));
         this.mouseMoved = true;
+        this.currentW = undefined;
+        this.currentH = undefined;
         this._timer = setTimeout(() => { this.mouseMoved = false; }, 100);
       },
       setNormalized(nx, ny) {
         this.coords.set(nx, ny);
         this.mouseMoved = true;
+        this.currentW = undefined;
+        this.currentH = undefined;
       },
       _onMouseMove(e) {
         if (!this.isPointInside(e.clientX, e.clientY)) {
@@ -723,12 +463,22 @@ class LiquidEther {
       update(props) {
         const u = this.mouse.material.uniforms;
         u.force.value.set((Mouse.diff.x/2)*props.mouse_force,(Mouse.diff.y/2)*props.mouse_force);
-        const cx = props.cursor_size*props.cellScale.x;
-        const cy = props.cursor_size*props.cellScale.y;
+        
+        // Use w/h if provided by layer, otherwise fallback to cursor_size
+        const wPx = (Mouse.currentW !== undefined) ? Mouse.currentW : props.cursor_size;
+        const hPx = (Mouse.currentH !== undefined) ? Mouse.currentH : props.cursor_size;
+        
+        // The scale uniform uses radius
+        const rx = wPx / 2;
+        const ry = hPx / 2;
+        
+        const cx = rx * props.cellScale.x;
+        const cy = ry * props.cellScale.y;
+        
         u.center.value.set(
           Math.min(Math.max(Mouse.coords.x,-1+cx+props.cellScale.x*2),1-cx-props.cellScale.x*2),
           Math.min(Math.max(Mouse.coords.y,-1+cy+props.cellScale.y*2),1-cy-props.cellScale.y*2));
-        u.scale.value.set(props.cursor_size,props.cursor_size);
+        u.scale.value.set(rx, ry);
         super.update();
       }
     }
@@ -938,13 +688,16 @@ class LiquidEther {
   /**
    * Called each frame when AE layer tracking is active.
    * nx, ny are normalised coords (-1..1, Y-up).
+   * w, h are bounds size
    */
-  setLayerInput(nx, ny) {
+  setLayerInput(nx, ny, w, h) {
     this._aeActive = true;
     // Suppress auto-driver
     if (this._autoDriver) this._autoDriver.forceStop();
     this._lastInteraction.value = performance.now();
     this._Mouse.coords.set(nx, ny);
+    if (w !== undefined) this._Mouse.currentW = w;
+    if (h !== undefined) this._Mouse.currentH = h;
     this._Mouse.mouseMoved      = true;
     this._Mouse.isAutoActive    = false;
     this._Mouse.hasUserControl  = true;
@@ -1028,150 +781,5 @@ class LiquidEther {
   }
 }
 
-
-/* =====================================================================
-   3. PANEL CONTROLLER
-   Wires up: AEBridge ↔ LiquidEther ↔ UI controls
-   ===================================================================== */
-(function main() {
-
-  const simWrap  = document.getElementById('sim-wrap');
-  const crosshair = document.getElementById('crosshair');
-  const statusDot = document.getElementById('status-dot');
-  const statusTxt = document.getElementById('status-text');
-  const trackToggle = document.getElementById('trackToggle');
-  const valX = document.getElementById('val-x');
-  const valY = document.getElementById('val-y');
-  const valLayer = document.getElementById('val-layer');
-
-  const slForce  = document.getElementById('sl-force');
-  const slCursor = document.getElementById('sl-cursor');
-  const svForce  = document.getElementById('sv-force');
-  const svCursor = document.getElementById('sv-cursor');
-
-  // Init fluid sim
-  const sim = new LiquidEther(simWrap, {
-    colors:          ['#5227FF','#FF9FFC','#B497CF'],
-    autoDemo:        true,
-    autoSpeed:       0.5,
-    autoIntensity:   2.2,
-    autoResumeDelay: 3000,
-    autoRampDuration:0.6,
-    mouseForce:      20,
-    cursorSize:      100
-  });
-  sim.start();
-
-  // ── Slider controls ──────────────────────────────
-  slForce.addEventListener('input', () => {
-    const v = parseInt(slForce.value, 10);
-    svForce.textContent = v;
-    sim.setOptions({ mouseForce: v });
-  });
-  slCursor.addEventListener('input', () => {
-    const v = parseInt(slCursor.value, 10);
-    svCursor.textContent = v;
-    sim.setOptions({ cursorSize: v });
-  });
-
-  // ── Preset swatches ──────────────────────────────
-  document.querySelectorAll('.preset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const colors = JSON.parse(btn.dataset.colors);
-      sim.setColors(colors);
-    });
-  });
-
-  // ── AE polling ───────────────────────────────────
-  let pollTimer    = null;
-  let trackActive  = true;
-  let lastNx = null, lastNy = null;
-
-  function setStatus(state, msg) {
-    statusDot.className = state ? 'active' : (msg.includes('Error') ? 'error' : '');
-    statusTxt.textContent = msg;
-  }
-
-  async function pollAE() {
-    if (!trackActive) return;
-
-    const info = await AEBridge.getLayerInfo();
-
-    if (!info) {
-      // AE not available or no layer — let sim run in auto/mouse mode
-      setStatus(false, AEBridge.available
-        ? 'No layer selected — hover to interact'
-        : 'Running in browser mode — use your mouse');
-      crosshair.style.display = 'none';
-      valX.textContent = valY.textContent = valLayer.textContent = '—';
-      sim.clearLayerInput();
-      return;
-    }
-
-    // ── Map AE layer position → fluid input ──
-    const nx = info.nx;  // normalised -1..1
-    const ny = info.ny;
-
-    // Map -1..1 to pixel position in the sim panel for the crosshair
-    const pw = simWrap.clientWidth;
-    const ph = simWrap.clientHeight;
-    const px = ((nx + 1) / 2) * pw;
-    const py = ((1 - (ny + 1) / 2)) * ph;
-
-    crosshair.style.display = 'block';
-    crosshair.style.left    = px + 'px';
-    crosshair.style.top     = py + 'px';
-
-    // Update readout
-    valX.textContent     = info.x.toFixed(1) + 'px';
-    valY.textContent     = info.y.toFixed(1) + 'px';
-    valLayer.textContent = info.layerName || '—';
-
-    setStatus(true, `Tracking: ${info.layerName}`);
-
-    // Feed to fluid sim (velocity is computed from delta in Mouse.update)
-    sim.setLayerInput(nx, ny);
-
-    lastNx = nx; lastNy = ny;
-  }
-
-  function startPolling() {
-    if (pollTimer) return;
-    pollTimer = setInterval(pollAE, 33); // ~30 fps
-    pollAE(); // immediate first call
-  }
-
-  function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    sim.clearLayerInput();
-    crosshair.style.display = 'none';
-    valX.textContent = valY.textContent = valLayer.textContent = '—';
-    setStatus(false, 'Tracking off — use your mouse or auto-demo');
-  }
-
-  // ── Track toggle ─────────────────────────────────
-  trackToggle.addEventListener('change', () => {
-    trackActive = trackToggle.checked;
-    if (trackActive) startPolling();
-    else             stopPolling();
-  });
-
-  // ── Initial state ────────────────────────────────
-  if (AEBridge.available) {
-    setStatus(false, 'Select a layer to start tracking');
-    startPolling();
-  } else {
-    setStatus(false, 'Running in browser — mouse & auto-demo active');
-    // Disable the track toggle since AE isn't available
-    trackToggle.checked  = false;
-    trackToggle.disabled = true;
-    trackActive          = false;
-  }
-
-})();
-</script>
-
-
-</body></html>
+// Global liquid ether instance (will be managed by main.js)
+window.LiquidEther = LiquidEther;

@@ -114,56 +114,275 @@ function renderLibrary() {
   if (!gradientGrid || typeof GRADIENT_LIBRARY === 'undefined') return;
   gradientGrid.innerHTML = '';
 
-  GRADIENT_LIBRARY.forEach((preset, index) => {
-    const card = document.createElement('div');
-    card.className = 'gradient-card' + (index === 0 ? ' selected' : '');
-    card.dataset.type = preset.id;
+  const categories = {};
+  GRADIENT_LIBRARY.forEach(preset => {
+    const cat = preset.category || 'Other';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(preset);
+  });
 
-    card.innerHTML = `
-      <div class="card-preview ${preset.cssClass}"></div>
-      <span class="card-label">${preset.label}</span>
-    `;
+  let firstItem = true;
 
-    card.addEventListener('click', function () {
-      document.querySelectorAll('.gradient-card').forEach(c => c.classList.remove('selected'));
-      this.classList.add('selected');
-      selectedType = preset.id;
+  Object.keys(categories).forEach(cat => {
+    const catHeader = document.createElement('div');
+    catHeader.className = 'category-header';
+    catHeader.textContent = cat;
+    catHeader.style.width = '100%';
+    catHeader.style.gridColumn = '1 / -1';
+    catHeader.style.marginTop = '16px';
+    catHeader.style.marginBottom = '8px';
+    catHeader.style.fontSize = '12px';
+    catHeader.style.color = 'var(--text-faint)';
+    catHeader.style.textTransform = 'uppercase';
+    catHeader.style.letterSpacing = '1px';
+    catHeader.style.fontWeight = '600';
+    gradientGrid.appendChild(catHeader);
 
-      if (preset.defaultColors && preset.defaultColors.length === 4) {
-        state.colors = [...preset.defaultColors];
-        document.querySelectorAll('.color-pick').forEach((p, i) => {
-          p.value = state.colors[i];
-        });
-        if (typeof triggerColorUpdate === 'function') {
-          triggerColorUpdate();
+    categories[cat].forEach(preset => {
+      const card = document.createElement('div');
+      card.className = 'gradient-card' + (firstItem ? ' selected' : '');
+      if (firstItem) { selectedType = preset.id; firstItem = false; }
+      card.dataset.type = preset.id;
+
+      card.innerHTML = `
+        <div class="card-preview ${preset.cssClass}"></div>
+        <span class="card-label">${preset.label}</span>
+      `;
+
+      card.addEventListener('click', function () {
+        document.querySelectorAll('.gradient-card').forEach(c => c.classList.remove('selected'));
+        this.classList.add('selected');
+        selectedType = preset.id;
+
+        if (preset.defaultColors && preset.defaultColors.length === 4) {
+          state.colors = [...preset.defaultColors];
+          document.querySelectorAll('.color-pick').forEach((p, i) => {
+            p.style.backgroundColor = state.colors[i];
+          });
+          if (typeof triggerColorUpdate === 'function') {
+            triggerColorUpdate();
+          }
         }
-      }
 
-      if (inspectorPanel) {
-        if (inspectorTitle) inspectorTitle.textContent = preset.label;
-        if (inspectorPreviewMini) {
-          inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+        if (inspectorPanel) {
+          if (inspectorTitle) inspectorTitle.textContent = preset.label;
+          if (inspectorPreviewMini) {
+            inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+          }
+          if (typeof tabEdit !== 'undefined' && tabEdit) {
+             tabEdit.click();
+          }
         }
-        inspectorPanel.classList.add('active');
-      }
-      renderControls(selectedType);
+        renderControls(selectedType);
+      });
+
+      gradientGrid.appendChild(card);
     });
-
-    gradientGrid.appendChild(card);
   });
 }
 
 // Init library
 renderLibrary();
 
-if (closeInspectorBtn) {
-  closeInspectorBtn.addEventListener('click', () => {
-    if (inspectorPanel) inspectorPanel.classList.remove('active');
+// Init controls
+renderControls(selectedType);
+
+const backToBrowseBtn = document.getElementById('back-to-browse-btn');
+
+// ── TABS NAVIGATION ──
+const tabBrowse = document.getElementById('tab-browse');
+const tabEdit = document.getElementById('tab-edit');
+const tabFluid = document.getElementById('tab-fluid');
+const viewBrowse = document.getElementById('browser-view');
+const viewEdit = document.getElementById('inspector-panel');
+const viewFluid = document.getElementById('fluid-view');
+
+if (backToBrowseBtn) {
+  backToBrowseBtn.addEventListener('click', () => {
+    if (tabBrowse) tabBrowse.click();
   });
 }
 
-// Init controls
-renderControls(selectedType);
+// Global reference for LiquidEther
+window.liquidEtherInst = null;
+let liquidPollInterval = null;
+
+if (tabBrowse && tabEdit) {
+  function switchTab(activeTab, activeView) {
+    if (tabBrowse) tabBrowse.classList.remove('active');
+    if (tabEdit) tabEdit.classList.remove('active');
+    if (tabFluid) tabFluid.classList.remove('active');
+    
+    if (viewBrowse) viewBrowse.classList.remove('active');
+    if (viewEdit) viewEdit.classList.remove('active');
+    if (viewFluid) viewFluid.classList.remove('active');
+    
+    if (activeTab) activeTab.classList.add('active');
+    if (activeView) activeView.classList.add('active');
+
+    // Manage Liquid Ether polling
+    if (activeView === viewFluid) {
+       if (!window.liquidEtherInst) {
+          const wrap = document.getElementById('sim-wrap');
+          if (wrap && typeof LiquidEther !== 'undefined') {
+             window.liquidEtherInst = new LiquidEther(wrap);
+             window.liquidEtherInst.start();
+          }
+       }
+       if (!liquidPollInterval && typeof CSInterface !== 'undefined') {
+          const cs = new CSInterface();
+          liquidPollInterval = setInterval(() => {
+             cs.evalScript('getLayerInfo()', (res) => {
+                if (!res || res === "undefined") return;
+                try {
+                   const data = JSON.parse(res);
+                   if (data.error) {
+                      window.liquidEtherInst.clearLayerInput();
+                   } else {
+                      window.liquidEtherInst.setLayerInput(data.nx, data.ny, data.width, data.height);
+                   }
+                } catch(e) {}
+             });
+          }, 1000 / 30); // ~30fps tracking
+       }
+    } else {
+       if (liquidPollInterval) {
+          clearInterval(liquidPollInterval);
+          liquidPollInterval = null;
+       }
+       if (window.liquidEtherInst) {
+          window.liquidEtherInst.clearLayerInput();
+       }
+    }
+  }
+
+  tabBrowse.addEventListener('click', () => switchTab(tabBrowse, viewBrowse));
+  tabEdit.addEventListener('click', () => switchTab(tabEdit, viewEdit));
+  if (tabFluid) {
+    tabFluid.addEventListener('click', () => switchTab(tabFluid, viewFluid));
+  }
+}
+
+// ── TWO-WAY SYNC POLLING ──
+let lastGradientState = '';
+setInterval(() => {
+  if (typeof CSInterface === 'undefined') return;
+  const cs = new CSInterface();
+  cs.evalScript('getSelectedGradientState()', (result) => {
+    if (result && result !== 'undefined' && result !== '' && result !== lastGradientState) {
+      lastGradientState = result;
+      try {
+        const stateObj = JSON.parse(result);
+        if (stateObj.type) {
+          selectedType = stateObj.type;
+          
+          if (stateObj.colors && stateObj.colors.length === 4) {
+            state.colors = [...stateObj.colors];
+            document.querySelectorAll('.color-pick').forEach((p, i) => {
+              p.value = state.colors[i];
+            });
+            // Update css variables
+            document.documentElement.style.setProperty('--c1', state.colors[0]);
+            document.documentElement.style.setProperty('--c2', state.colors[1]);
+            document.documentElement.style.setProperty('--c3', state.colors[2]);
+            document.documentElement.style.setProperty('--c4', state.colors[3]);
+          }
+
+          // Render controls for this type
+          renderControls(selectedType);
+
+          // Update UI title and class based on library preset
+          const preset = GRADIENT_LIBRARY.find(p => p.id === selectedType);
+          if (preset) {
+             if (inspectorTitle) inspectorTitle.textContent = preset.label;
+             if (inspectorPreviewMini) inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+          } else {
+             if (inspectorTitle) inspectorTitle.textContent = 'Editing Gradient';
+          }
+
+          // Set control values
+          if (stateObj.controls) {
+            setTimeout(() => {
+              Object.keys(stateObj.controls).forEach(key => {
+                const el = document.getElementById('ctrl-' + key);
+                if (el) {
+                  el.value = stateObj.controls[key];
+                  const valSpan = document.getElementById('val-' + key);
+                  if (valSpan) valSpan.textContent = el.value;
+                }
+              });
+            }, 50); // small delay to allow renderControls to finish
+          }
+
+          // Switch to Edit tab
+          if (!tabEdit.classList.contains('active')) {
+             tabEdit.click();
+             const dot = document.getElementById('edit-indicator');
+             if (dot) {
+               dot.classList.add('visible');
+               setTimeout(() => dot.classList.remove('visible'), 2000);
+             }
+          }
+        }
+      } catch(e) { console.error('Parse err:', e); }
+    } else if (result === '' && lastGradientState !== '') {
+      lastGradientState = '';
+      if (inspectorTitle) inspectorTitle.textContent = 'No Layer Selected';
+    }
+  });
+}, 400);
+
+// ── ACCORDION BEHAVIOR ──
+document.querySelectorAll('.section-header').forEach(header => {
+  header.style.cursor = 'pointer';
+  header.style.userSelect = 'none';
+  header.style.position = 'relative';
+  
+  // Add accordion arrow
+  const arrow = document.createElement('span');
+  arrow.innerHTML = '&#9660;'; // Down arrow
+  arrow.style.position = 'absolute';
+  arrow.style.right = '0';
+  arrow.style.fontSize = '9px';
+  arrow.style.transition = 'transform 0.2s';
+  header.appendChild(arrow);
+
+  header.addEventListener('click', function() {
+    const section = this.parentElement;
+    section.classList.toggle('collapsed');
+    
+    // Find content div or all subsequent siblings
+    let content = section.querySelector('.section-content');
+    if (!content) {
+      // Wrap children (except header) in a content div on first click if not present
+      content = document.createElement('div');
+      content.className = 'section-content';
+      while (this.nextSibling) {
+        content.appendChild(this.nextSibling);
+      }
+      section.appendChild(content);
+    }
+    
+    if (section.classList.contains('collapsed')) {
+      content.style.display = 'none';
+      arrow.style.transform = 'rotate(-90deg)';
+    } else {
+      content.style.display = 'block';
+      arrow.style.transform = 'rotate(0deg)';
+    }
+  });
+});
+
+// ── BIND SLIDERS TO REALTIME ──
+// Hook up any changes in the inspector to triggerRealtimeUpdate
+viewEdit.addEventListener('input', (e) => {
+  if (e.target.classList.contains('slider') || e.target.classList.contains('color-pick')) {
+    if (typeof window.triggerRealtimeUpdate === 'function') {
+      window.triggerRealtimeUpdate();
+    }
+  }
+});
+
 
 // ── GLOBAL CONTROLS (GRAIN & BPM) ──
 const grainSlider = document.getElementById('grain-slider');
@@ -173,6 +392,15 @@ if (grainSlider && grainVal) {
     grainVal.textContent = e.target.value;
   });
 }
+
+const glowSlider = document.getElementById('glow-slider');
+const glowVal = document.getElementById('glow-val');
+if (glowSlider && glowVal) {
+  glowSlider.addEventListener('input', (e) => {
+    glowVal.textContent = e.target.value;
+  });
+}
+
 
 const bpmToggle = document.getElementById('bpm-sync-toggle');
 const bpmInputRow = document.getElementById('bpm-input-row');
@@ -262,7 +490,7 @@ if (importBtn && importModal) {
           state.colors[i] = hex;
         }
       }
-      document.querySelectorAll('.color-pick').forEach((p, i) => p.value = state.colors[i]);
+      document.querySelectorAll('.color-pick').forEach((p, i) => p.style.backgroundColor = state.colors[i]);
       triggerColorUpdate();
       importModal.classList.remove('active');
     } else {
@@ -275,14 +503,27 @@ if (importBtn && importModal) {
 const eyeBtn = document.getElementById('eyedropper-btn');
 if (eyeBtn) {
   eyeBtn.addEventListener('click', async () => {
-    if (window.EyeDropper) {
+    if (typeof CSInterface !== 'undefined') {
+      const cs = new CSInterface();
+      cs.evalScript(`openNativeColorPicker('#FFFFFF')`, function(res) {
+        if (res && res !== "-1") {
+          state.colors.unshift(res.toUpperCase());
+          state.colors.pop();
+          document.querySelectorAll('.color-pick').forEach((p, i) => p.style.backgroundColor = state.colors[i]);
+          triggerColorUpdate();
+          if (typeof window.triggerRealtimeUpdate === 'function') {
+            window.triggerRealtimeUpdate();
+          }
+        }
+      });
+    } else if (window.EyeDropper) {
       const eye = new EyeDropper();
       try {
         const result = await eye.open();
         // Shift colors right, insert new color at start
         state.colors.unshift(result.sRGBHex.toUpperCase());
         state.colors.pop();
-        document.querySelectorAll('.color-pick').forEach((p, i) => p.value = state.colors[i]);
+        document.querySelectorAll('.color-pick').forEach((p, i) => p.style.backgroundColor = state.colors[i]);
         triggerColorUpdate();
       } catch (e) {
         // user canceled
@@ -335,6 +576,23 @@ try {
 
 // ── NATIVE COLOR PICKER LOGIC ──
 document.querySelectorAll('.color-pick').forEach((picker, i) => {
+  picker.addEventListener('click', function(e) {
+    if (typeof CSInterface !== 'undefined') {
+      e.preventDefault();
+      const cs = new CSInterface();
+      cs.evalScript(`openNativeColorPicker('${state.colors[i]}')`, function(res) {
+        if (res && res !== "-1") {
+          state.colors[i] = res;
+          picker.style.backgroundColor = res;
+          triggerColorUpdate();
+          if (typeof window.triggerRealtimeUpdate === 'function') {
+            window.triggerRealtimeUpdate();
+          }
+        }
+      });
+    }
+  });
+
   picker.addEventListener('input', function (e) {
     state.colors[i] = e.target.value.toUpperCase();
     triggerColorUpdate();
@@ -429,7 +687,7 @@ function extractColorsFromImage(img) {
     const hex = '#' + (rStr + gStr + bStr).toUpperCase();
     state.colors[i] = hex;
     const picker = document.getElementById('color' + (i + 1));
-    if (picker) picker.value = hex;
+    if (picker) picker.style.backgroundColor = hex;
   }
 
   triggerColorUpdate();
@@ -440,7 +698,7 @@ document.getElementById('shuffle-btn').addEventListener('click', function () {
   const pickers = document.querySelectorAll('.color-pick');
   pickers.forEach((p, i) => {
     const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-    p.value = randomColor;
+    p.style.backgroundColor = randomColor;
     state.colors[i] = randomColor;
   });
   triggerColorUpdate();
@@ -454,7 +712,7 @@ document.getElementById('mood-select').addEventListener('change', function () {
   const colors = MOODS[mood];
   const pickers = document.querySelectorAll('.color-pick');
   pickers.forEach((p, i) => {
-    p.value = colors[i] || colors[0];
+    p.style.backgroundColor = colors[i] || colors[0];
     state.colors[i] = colors[i] || colors[0];
   });
 
@@ -474,11 +732,19 @@ document.getElementById('generate-btn').addEventListener('click', function () {
     colors: state.colors,
     controls: getControlValues(selectedType),
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
+    glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
     bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
     bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
     trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
     trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
   };
+
+  if (selectedType === 'ai_custom' && window.lastAiCode) {
+    params.customCode = window.lastAiCode;
+  }
+  if (selectedType === 'ai_image' && window.lastAiImagePath) {
+    params.imagePath = window.lastAiImagePath;
+  }
 
   btn.disabled = true;
   setStatus(statusEl, 'Sending to After Effects…', '');
@@ -521,7 +787,18 @@ window.triggerRealtimeUpdate = function () {
   const vals = getControlValues(selectedType);
   if (typeof CSInterface !== 'undefined') {
     const cs = new CSInterface();
-    const paramStr = JSON.stringify(Object.assign({ type: selectedType, controls: vals }, vals)).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const fullParams = {
+        type: selectedType,
+        colors: state.colors,
+        controls: vals,
+        grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
+        glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
+        bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
+        bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
+        trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
+        trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
+    };
+    const paramStr = JSON.stringify(fullParams).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     cs.evalScript(`updateSilkFlareWave('${paramStr}')`);
   }
 };
@@ -543,3 +820,5 @@ function triggerColorUpdate() {
 
 // Initialize preview colors on load
 triggerColorUpdate();
+
+
