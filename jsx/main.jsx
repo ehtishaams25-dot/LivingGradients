@@ -53,6 +53,8 @@ var LG = (function () {
         cellPattern:       ["ADBE Cell Pattern", "Cell Pattern"],
         sliderControl:     ["ADBE Slider Control", "Slider Control"],
         colorControl:      ["ADBE Color Control", "Color Control"],
+        pointControl:      ["ADBE Point Control", "Point Control"],
+        bulge:             ["ADBE Bulge", "Bulge"],
         angleControl:      ["ADBE Angle Control", "Angle Control"],
         levels:            ["ADBE Easy Levels2", "Levels"],
         setMatte:          ["ADBE Set Matte3", "Set Matte"],
@@ -666,9 +668,9 @@ function applyGlobalPolish(comp, p, layer) {
     if (p.glow && p.glow > 0) {
         var glow = addFx(layer, ['ADBE Glo2']);
         if (glow) {
-            safeSet(glow, 'Glow Threshold', 1, 100 - (p.glow * 0.5));
-            safeSet(glow, 'Glow Radius',    2, p.glow);
-            safeSet(glow, 'Glow Intensity', 3, p.glow / 50);
+            safeSet(glow, 'Glow Threshold', 2, 100 - (p.glow * 0.5));
+            safeSet(glow, 'Glow Radius',    3, p.glow);
+            safeSet(glow, 'Glow Intensity', 4, p.glow / 50);
         }
     }
 
@@ -677,120 +679,476 @@ function applyGlobalPolish(comp, p, layer) {
     }
 }
 
-function applyTrailTracking(comp, p, addedLayersCount) {
-    if (addedLayersCount <= 0) return;
+/* =====================================================================
+   PHYSICS TRACKING
+   ---------------------------------------------------------------------
+   The gradient reacts to a layer moving through it.
 
-    var indices = [];
-    for (var i = 1; i <= addedLayersCount; i++) {
-        indices.push(i);
+   Architecture: simulate, bake, express.
+
+   The simulation runs here in ExtendScript — sample the target's comp-space
+   position on every frame, integrate a spring and an energy envelope, and
+   write the result as one keyframe per frame onto a control null. Effects on
+   the gradient then read that null through single-frame expressions.
+
+   That split is what keeps it smooth. Expression-based physics has to walk
+   backwards through valueAtTime() on every evaluation, which gets slower the
+   further into the comp you scrub and visibly stutters on long comps. Baked
+   keyframes cost nothing at preview time, and a key on every frame means AE
+   never interpolates the physics — it plays back exactly as simulated.
+
+   The trade is that the bake is a snapshot. Move the tracked layer and press
+   Re-Bake.
+   ===================================================================== */
+
+var LG_CTRL_NAME = "LG Track Ctrl";
+
+/* Resolve the tracked layer by name. */
+function findTrackTarget(comp, layerName) {
+    for (var i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).name === layerName) return comp.layer(i);
     }
-    
-    var precompItem;
+    return null;
+}
+
+/* Sample the target's comp-space position once per frame.
+
+   toComp() is used rather than transform.position so that parenting, 3D
+   position and anchor offsets are all accounted for — the position a viewer
+   actually sees, not the layer's local value. */
+function sampleTargetPath(comp, target) {
+    var fps    = comp.frameRate;
+    var frames = Math.round(comp.duration * fps);
+
+    // Guard against a pathological comp length locking up the panel.
+    if (frames > 3600) {
+        frames = 3600;
+        LG.warn("tracking baked for the first " + Math.round(frames / fps) + "s only");
+    }
+
+    var path = [], f, t, pt, anchor;
+    for (f = 0; f <= frames; f++) {
+        t = f / fps;
+        pt = null;
+        try {
+            anchor = target.transform.anchorPoint.valueAtTime(t, false);
+            pt = target.toComp(anchor, t);
+        } catch (e) {
+            try { pt = target.transform.position.valueAtTime(t, false); } catch (e2) { pt = null; }
+        }
+        if (!pt) {
+            LG.warn("could not read the position of '" + target.name + "'");
+            return null;
+        }
+        path.push([pt[0], pt[1]]);
+    }
+    return { fps: fps, frames: frames, pts: path };
+}
+
+/* The simulation.
+
+   Semi-implicit Euler on a damped spring, run at four substeps per frame so
+   that a high tension value stays stable at 24fps. Alongside it, an energy
+   envelope with a fast attack and slow release — this is what makes a quick
+   swipe churn the gradient and then settle, rather than the disturbance
+   vanishing the instant the layer stops.
+
+   Returns per-frame position, energy (0..1) and wake offset. */
+function simulateTracking(sample, opts) {
+    var dt     = 1 / sample.fps;
+    var sub    = 4;
+    var sdt    = dt / sub;
+    var n      = sample.pts.length;
+
+    // Tension and friction arrive 0..100 from the panel.
+    var k = Math.max(0.5, opts.tension * 0.9);    // spring constant
+    var c = Math.max(0.5, opts.friction * 0.35);  // viscous damping
+
+    // Spring state, seeded on the target so frame 0 does not lurch.
+    var px = sample.pts[0][0], py = sample.pts[0][1];
+    var vx = 0, vy = 0;
+
+    // Energy envelope. Attack is immediate; release is a time constant.
+    var releaseTime = Math.max(0.08, opts.settle);        // seconds
+    var releaseK    = Math.exp(-dt / releaseTime);
+    var maxSpeed    = 2200;                               // px/sec ≈ full energy
+    var energy      = 0;
+
+    // Wake displacement: momentum pushed into the medium, bleeding back to rest.
+    var wx = 0, wy = 0;
+    var wakeCoupling = opts.wake * 0.06;
+    var wakeReturn   = 1.8;
+
+    var out = [], i, s, tx, ty, ax, ay, dx, dy, speed, raw;
+
+    for (i = 0; i < n; i++) {
+        tx = sample.pts[i][0];
+        ty = sample.pts[i][1];
+
+        // Target velocity from the sampled path, in px/sec.
+        if (i > 0) {
+            dx = (tx - sample.pts[i - 1][0]) / dt;
+            dy = (ty - sample.pts[i - 1][1]) / dt;
+        } else {
+            dx = 0; dy = 0;
+        }
+        speed = Math.sqrt(dx * dx + dy * dy);
+
+        // Energy: rises instantly with speed, falls on the release constant.
+        raw = speed / maxSpeed;
+        if (raw > 1) raw = 1;
+        energy = (raw > energy) ? raw : (energy * releaseK);
+
+        // Spring integration.
+        for (s = 0; s < sub; s++) {
+            ax = k * (tx - px) - c * vx;
+            ay = k * (ty - py) - c * vy;
+            vx += ax * sdt;
+            vy += ay * sdt;
+            px += vx * sdt;
+            py += vy * sdt;
+        }
+
+        // Wake offset carries the object's momentum and relaxes back to zero.
+        wx += (dx * wakeCoupling - wx * wakeReturn) * dt;
+        wy += (dy * wakeCoupling - wy * wakeReturn) * dt;
+
+        out.push({
+            t:      i / sample.fps,
+            pos:    [px, py],
+            raw:    [tx, ty],
+            energy: energy,
+            wake:   [wx, wy]
+        });
+    }
+    return out;
+}
+
+/* Write the simulation onto a control null.
+
+   Every property gets a key on every frame and every key is set to LINEAR.
+   Bezier interpolation between per-frame keys would round off exactly the
+   sharp velocity changes the simulation just computed. */
+function bakeTrackingNull(comp, sim, opts, mode) {
+    var ctrl = null, i;
+
+    // Reuse the existing null on a re-bake so parenting and manual tweaks survive.
+    for (i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).name === LG_CTRL_NAME) { ctrl = comp.layer(i); break; }
+    }
+    if (!ctrl) {
+        ctrl = comp.layers.addNull(comp.duration);
+        ctrl.name = LG_CTRL_NAME;
+        ctrl.enabled = false;
+        try { ctrl.label = 9; } catch (e) { }
+    }
+
+    var pos = ctrl.transform.position;
+    try { while (pos.numKeys > 0) pos.removeKey(1); } catch (e) { }
+
+    var energyFx = findFx(ctrl, ["Energy"]);
+    if (!energyFx) {
+        energyFx = LG.add(ctrl, ["ADBE Slider Control"], "tracking");
+        if (energyFx) energyFx.name = "Energy";
+    }
+    var energyProp = null;
+    if (energyFx) {
+        try {
+            energyProp = energyFx.property(1);
+            while (energyProp.numKeys > 0) energyProp.removeKey(1);
+        } catch (e) { energyProp = null; }
+    }
+
+    var wakeFx = findFx(ctrl, ["Wake"]);
+    if (!wakeFx) {
+        wakeFx = LG.add(ctrl, ["ADBE Point Control"], "tracking");
+        if (wakeFx) wakeFx.name = "Wake";
+    }
+    var wakeProp = null;
+    if (wakeFx) {
+        try {
+            wakeProp = wakeFx.property(1);
+            while (wakeProp.numKeys > 0) wakeProp.removeKey(1);
+        } catch (e) { wakeProp = null; }
+    }
+
+    // Static parameters the expressions read.
+    function slider(name, value) {
+        var fx = findFx(ctrl, [name]);
+        if (!fx) {
+            fx = LG.add(ctrl, ["ADBE Slider Control"], "tracking");
+            if (fx) fx.name = name;
+        }
+        if (fx) safeSet(fx, "Slider", 1, value, "tracking");
+        return fx;
+    }
+    slider("Radius", opts.radius);
+    slider("Force",  opts.force);
+
+    // Bake.
+    for (i = 0; i < sim.length; i++) {
+        pos.setValueAtTime(sim[i].t, sim[i].pos);
+        if (energyProp) energyProp.setValueAtTime(sim[i].t, sim[i].energy * 100);
+        if (wakeProp)   wakeProp.setValueAtTime(sim[i].t, sim[i].wake);
+    }
+
+    function linearise(prop) {
+        if (!prop) return;
+        try {
+            for (var q = 1; q <= prop.numKeys; q++) {
+                prop.setInterpolationTypeAtKey(q,
+                    KeyframeInterpolationType.LINEAR,
+                    KeyframeInterpolationType.LINEAR);
+            }
+        } catch (e) { LG.warn("could not linearise baked keyframes"); }
+    }
+    linearise(pos);
+    linearise(energyProp);
+    linearise(wakeProp);
+
+    try { ctrl.comment = "LG_TRACK:" + mode; } catch (e) { }
+    return ctrl;
+}
+
+/* Expression fragments that read the control null. All O(1) per frame. */
+function trackExpr(what) {
+    var base = 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n';
+    switch (what) {
+        case 'pos':    return base + 'n.transform.position;';
+        case 'energy': return base + 'n.effect("Energy")("Slider") / 100;';
+        case 'radius': return base + 'n.effect("Radius")("Slider");';
+        case 'force':  return base + 'n.effect("Force")("Slider");';
+        case 'wake':   return base + 'n.effect("Wake")("Point");';
+    }
+    return 'value;';
+}
+
+/* ── Mode: SPRING ──────────────────────────────────────────────────────
+   A blob of the gradient chases the layer with lag and overshoot, and the
+   rest is hidden. This is the cursor-follower look: the reveal is what
+   moves, and the spring is what sells it. */
+function applyTrackSpring(comp, gradientLayer, ctrl, opts) {
+    var matte = comp.layers.addShape();
+    matte.name = "LG Track Matte";
+
+    var grp = matte.property("Contents").addProperty("ADBE Vector Group");
+    var gc  = grp.property("Contents");
+    var ell = gc.addProperty("ADBE Vector Shape - Ellipse");
+    safeSet(ell, "Size", 2, [opts.radius * 2, opts.radius * 2], "tracking");
+    var fill = gc.addProperty("ADBE Vector Graphic - Fill");
+    safeSet(fill, "Color", 4, [1, 1, 1, 1], "tracking");
+
+    // Anchor at the origin so the Transform effect maps 1:1 with comp space.
     try {
-        precompItem = comp.layers.precompose(indices, p.type + " Trail Base", true);
-    } catch(e) {
-    }
-    // `precompose` returns a CompItem. The actual layer representing the precomp is now at index 1.
-    var precompLayer = comp.layer(1); 
+        matte.property("Transform").property("Anchor Point").setValue([0, 0]);
+        matte.property("Transform").property("Position").setValue([0, 0]);
+    } catch (e) { LG.warn("tracking: could not zero the matte transform"); }
 
-    var exprLayer = "try {\n" +
-               "  var tgt = comp('" + comp.name + "').layer('" + p.trackingLayerName + "');\n" +
-               "  if (tgt.hasParent) {\n" + 
-               "     tgt.toComp(tgt.anchorPoint);\n" +
-               "  } else {\n" +
-               "     tgt.transform.position;\n" +
-               "  }\n" +
-               "} catch(e) { value; }";
-
-    var matteComp;
-    try {
-        matteComp = app.project.items.addComp("Fluid Track Matte", comp.width, comp.height, comp.pixelAspect, comp.duration, comp.frameRate);
-    } catch(e) {
-        return; // fallback if precomp fails
+    var xf = LG.add(matte, ["ADBE Geometry2"], "tracking");
+    if (xf) {
+        safeSet(xf, "Anchor Point", null, [0, 0], "tracking");
+        LG.expr(xf, "Position", null, trackExpr('pos'), "tracking");
     }
 
-    // 1. Fluid Base using Fractal Noise for high-contrast Luma Matte
-    var fluidLayer = matteComp.layers.addSolid([1,1,1], "Fluid Base", comp.width, comp.height, comp.duration);
-    
-    var fracNoise = addFx(fluidLayer, ["ADBE Fractal Noise", "Fractal Noise"]);
-    if (fracNoise) {
-        safeSet(fracNoise, "Fractal Type", null, 1); // Dynamic
-        safeSet(fracNoise, "Noise Type", null, 1); // Block
-        safeSet(fracNoise, "Contrast", null, 250);
-        safeSet(fracNoise, "Brightness", null, -20);
-        safeSet(fracNoise, "Complexity", null, 4);
-        safeEx(fracNoise, "Evolution", null, "time * 250");
-    }
-
-    var turb = addFx(fluidLayer, ["ADBE Turbulent Displace", "Turbulent Displace"]);
-    if (turb) {
-        safeSet(turb, "Amount", null, 150);
-        safeSet(turb, "Size", null, 100);
-        safeSet(turb, "Complexity", null, 2);
-        safeEx(turb, "Evolution", null, "time * 200");
-    }
-
-    // 2. Tracking shape to reveal the fluid
-    var trailMatte = matteComp.layers.addShape();
-    trailMatte.name = "Trail Matte (" + p.trackingLayerName + ")";
-    var contents = trailMatte.property("Contents");
-    var grp = contents.addProperty("ADBE Vector Group");
-    var grpContents = grp.property("Contents");
-    var ellipse = grpContents.addProperty("ADBE Vector Shape - Ellipse");
-    try { ellipse.property("Size").setValue([300, 300]); } catch(e) {
-        try { ellipse.property(2).setValue([300, 300]); } catch(e2){}
-    }
-    var fill = grpContents.addProperty("ADBE Vector Graphic - Fill");
-    try { fill.property("Color").setValue([1,1,1]); } catch(e) {
-        try { fill.property(4).setValue([1,1,1]); } catch(e2){}
-    }
-
-    // CRITICAL: Reset Shape layer anchors to 0,0 so Transform effect maps 1:1 with comp space
-    try { trailMatte.property("Transform").property("Anchor Point").setValue([0,0]); } catch(e){}
-    try { trailMatte.property("Transform").property("Position").setValue([0,0]); } catch(e){}
-
-    var xform = addFx(trailMatte, ["ADBE Geometry2", "Transform"]);
-    if (xform) {
-        safeSet(xform, "Anchor Point", null, [0,0]);
-        safeEx(xform, "Position", null, exprLayer);
-    }
-
-    var echo = addFx(trailMatte, ["Echo", "ADBE Echo"]);
+    // Echo turns the swept path into a trail. Scaled by energy so a still
+    // layer leaves a clean blob and a fast one leaves a streak.
+    var echo = LG.add(matte, ["ADBE Echo"], "tracking");
     if (echo) {
-        safeEx(echo, "Echo Time (seconds)", null, "-thisComp.frameDuration");
-        safeSet(echo, "Number Of Echoes", null, 50);
-        safeSet(echo, "Starting Intensity", null, 1.0);
-        safeSet(echo, "Decay", null, 0.95);
-        safeSet(echo, "Echo Operator", null, 2);
+        LG.expr(echo, "Echo Time (seconds)", 1, "-thisComp.frameDuration", "tracking");
+        safeSet(echo, "Number Of Echoes",  2, Math.round(6 + opts.trail * 0.34), "tracking");
+        safeSet(echo, "Starting Intensity", 3, 1.0, "tracking");
+        safeSet(echo, "Decay",              4, 0.88, "tracking");
+        safeSet(echo, "Echo Operator",      5, 2, "tracking");   // Maximum
     }
-    var blur = addFx(trailMatte, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Gaussian Blur 2", "Gaussian Blur"]);
-    if (blur) safeSet(blur, "Blur Radius", null, 60);
 
-    var choker = addFx(trailMatte, ["ADBE Simple Choker", "Simple Choker"]);
-    if (choker) safeSet(choker, "Choke Matte", null, 30);
-
-    // 3. Mask the fluid with the tracking trail
-    trailMatte.moveBefore(fluidLayer);
-    try { fluidLayer.setTrackMatte(trailMatte, TrackMatteType.ALPHA); } catch(e) {
-        try { fluidLayer.trackMatteType = TrackMatteType.ALPHA; } catch(e2){}
+    var blur = LG.add(matte, ["ADBE Box Blur2"], "tracking");
+    if (blur) {
+        LG.expr(blur, "Blur Radius", 1,
+                trackExpr('energy') + '\n20 + n.effect("Energy")("Slider") * 0.6;', "tracking");
+        safeSet(blur, "Iterations", 2, 3, "tracking");
+        safeSet(blur, "Repeat Edge Pixels", 4, true, "tracking");
     }
-    // Explicitly disable the matte layer
-    try { trailMatte.enabled = false; } catch(e){}
 
-    // 4. Bring precomp back to main comp and Luma mask the gradient
-    var matteCompLayer = comp.layers.add(matteComp);
-    matteCompLayer.name = "Fluid Track Matte";
-    matteCompLayer.moveBefore(precompLayer);
-    
+    var choke = LG.add(matte, ["ADBE Simple Choker"], "tracking");
+    if (choke) safeSet(choke, "Choke Matte", 2, -8, "tracking");
+
+    matte.moveBefore(gradientLayer);
+    matte.enabled = false;
+    setTrackMatteSafely(gradientLayer, matte, "ALPHA");
+    return matte;
+}
+
+/* ── Mode: WAKE ────────────────────────────────────────────────────────
+   The layer shoves the gradient aside. Turbulence amount rides the energy
+   envelope, and the turbulence offset carries the baked momentum, so a fast
+   pass carves a channel that keeps churning after the layer has gone. */
+function applyTrackWake(comp, gradientLayer, ctrl, opts) {
+    var turb = LG.add(gradientLayer, ["ADBE Turbulent Displace"], "tracking");
+    if (turb) {
+        safeSet(turb, "Displacement", 1, 1, "tracking");       // Turbulent
+        LG.expr(turb, "Amount", 2,
+                trackExpr('energy') +
+                'var f = n.effect("Force")("Slider");\n' +
+                'n.effect("Energy")("Slider") * f * 0.02;', "tracking");
+        LG.expr(turb, "Size", 3,
+                trackExpr('radius') + 'Math.max(4, n.effect("Radius")("Slider") * 0.18);', "tracking");
+        LG.expr(turb, "Offset (Turbulence)", 4,
+                'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
+                'n.transform.position + n.effect("Wake")("Point");', "tracking");
+        safeSet(turb, "Complexity", 5, 2, "tracking");
+        LG.expr(turb, "Evolution", 6, "time * " + (60 + opts.force) + ";", "tracking");
+    }
+
+    // A local push at the layer itself, so the disturbance has a source.
+    var bulge = LG.add(gradientLayer, ["ADBE Bulge"], "tracking");
+    if (bulge) {
+        LG.expr(bulge, "Horizontal Radius", 1, trackExpr('radius'), "tracking");
+        LG.expr(bulge, "Vertical Radius",   2, trackExpr('radius'), "tracking");
+        LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
+        LG.expr(bulge, "Bulge Height",      4,
+                trackExpr('energy') +
+                'var f = n.effect("Force")("Slider");\n' +
+                '-(0.15 + n.effect("Energy")("Slider") / 100 * 0.85) * f * 0.014;', "tracking");
+        safeSet(bulge, "Taper Radius", 5, 0.5, "tracking");
+        safeSet(bulge, "Antialiasing", 6, 2, "tracking");
+    }
+    return null;
+}
+
+/* ── Mode: REPEL ───────────────────────────────────────────────────────
+   The gradient is pushed out of the way within a radius and springs back
+   when the layer leaves. No trail — this one reads as pressure, not wake. */
+function applyTrackRepel(comp, gradientLayer, ctrl, opts) {
+    var bulge = LG.add(gradientLayer, ["ADBE Bulge"], "tracking");
+    if (bulge) {
+        LG.expr(bulge, "Horizontal Radius", 1, trackExpr('radius'), "tracking");
+        LG.expr(bulge, "Vertical Radius",   2, trackExpr('radius'), "tracking");
+        LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
+        // Negative height pushes the imagery outward from the centre.
+        LG.expr(bulge, "Bulge Height",      4,
+                'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
+                '-n.effect("Force")("Slider") * 0.02;', "tracking");
+        safeSet(bulge, "Taper Radius", 5, 0.6, "tracking");
+        safeSet(bulge, "Antialiasing", 6, 2, "tracking");
+    }
+
+    // A softer, wider counter-push gives the edge somewhere to relax into.
+    var twirl = LG.add(gradientLayer, ["ADBE Twirl"], "tracking");
+    if (twirl) {
+        LG.expr(twirl, "Angle", 1,
+                trackExpr('energy') +
+                'n.effect("Energy")("Slider") * 0.9;', "tracking");
+        LG.expr(twirl, "Twirl Radius", 2,
+                trackExpr('radius') + 'n.effect("Radius")("Slider") * 0.12;', "tracking");
+        LG.expr(twirl, "Twirl Center", 3, trackExpr('pos'), "tracking");
+    }
+    return null;
+}
+
+/* Track mattes moved to a layer-reference API in AE 2023. Try the modern
+   call, then the legacy enum. */
+function setTrackMatteSafely(layer, matteLayer, kind) {
+    var type = (kind === "LUMA") ? TrackMatteType.LUMA : TrackMatteType.ALPHA;
+    try { layer.setTrackMatte(matteLayer, type); return true; } catch (e) { }
+    try { layer.trackMatteType = type; return true; } catch (e2) { }
+    LG.warn("tracking: could not set the track matte");
+    return false;
+}
+
+/* Entry point. `gradientLayer` is the single layer produced by
+   groupGeneratedLayers(), so the reaction applies to the finished gradient
+   however many layers the builder happened to create. */
+function applyTrailTracking(comp, p, gradientLayer) {
+    if (!gradientLayer) { LG.warn("tracking: no gradient layer"); return; }
+
+    var target = findTrackTarget(comp, p.trackingLayerName);
+    if (!target) {
+        LG.warn("tracking: layer '" + p.trackingLayerName + "' not found");
+        return;
+    }
+    if (target === gradientLayer) {
+        LG.warn("tracking: the target layer is the gradient itself");
+        return;
+    }
+
+    var opts = trackOptions(p);
+
+    var sample = sampleTargetPath(comp, target);
+    if (!sample) return;
+
+    var sim  = simulateTracking(sample, opts);
+    var null_ = bakeTrackingNull(comp, sim, opts, opts.mode);
+
+    if (opts.mode === 'Spring')      applyTrackSpring(comp, gradientLayer, null_, opts);
+    else if (opts.mode === 'Repel')  applyTrackRepel(comp, gradientLayer, null_, opts);
+    else                             applyTrackWake(comp, gradientLayer, null_, opts);
+
+    // Keep the null at the top so it is easy to find and never renders.
+    try { null_.moveToBeginning(); } catch (e) { }
+}
+
+function num(v, fallback) {
+    var n = parseFloat(v);
+    return (v === undefined || v === null || isNaN(n)) ? fallback : n;
+}
+
+/* One reader for both the generate path and Re-Bake, so the two can never
+   simulate with different parameters.
+
+   Persistence is a single panel slider standing in for three related
+   quantities: how long the energy envelope takes to release, how much
+   momentum the medium absorbs, and how long the Spring trail runs. They
+   always want to move together, so exposing them separately would be three
+   sliders users have to keep in sync by hand. */
+function trackOptions(p) {
+    var c = p.controls || {};
+    var persistence = num(c.trackPersistence, 50);
+    return {
+        mode:     c.trackMode || 'Wake',
+        radius:   num(c.trackRadius,   300),
+        force:    num(c.trackForce,    100),
+        tension:  num(c.trackTension,   40),
+        friction: num(c.trackFriction,  30),
+        settle:   0.15 + (persistence / 100) * 1.2,   // 0.15s … 1.35s
+        wake:     persistence,
+        trail:    persistence
+    };
+}
+
+/* Re-run the simulation against the current position of the tracked layer,
+   without rebuilding the gradient. Called by the panel's Re-Bake button. */
+function rebakeTracking(paramsStr) {
     try {
-        precompLayer.setTrackMatte(matteCompLayer, TrackMatteType.LUMA);
-    } catch(e) {
-        try { precompLayer.trackMatteType = TrackMatteType.LUMA; } catch(e2){}
+        var p = JSON.parse(paramsStr);
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) return 'ERROR: No active composition.';
+
+        LG.reset();
+
+        var ctrlLayer = null, i;
+        for (i = 1; i <= comp.numLayers; i++) {
+            if (comp.layer(i).name === LG_CTRL_NAME) { ctrlLayer = comp.layer(i); break; }
+        }
+        if (!ctrlLayer) return 'ERROR: No tracking rig in this comp. Generate with tracking on first.';
+
+        var target = findTrackTarget(comp, p.trackingLayerName);
+        if (!target) return "ERROR: Layer '" + p.trackingLayerName + "' not found.";
+
+        var opts = trackOptions(p);
+
+        app.beginUndoGroup('Re-Bake Tracking');
+        var sample = sampleTargetPath(comp, target);
+        if (!sample) { app.endUndoGroup(); return 'ERROR: Could not sample the target layer.' + LG.report(); }
+
+        var sim = simulateTracking(sample, opts);
+        bakeTrackingNull(comp, sim, opts, opts.mode);
+        app.endUndoGroup();
+
+        return 'Re-baked ' + sim.length + ' frames' + LG.report();
+    } catch (e) {
+        try { app.endUndoGroup(); } catch (x) { }
+        return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
     }
-    // Explicitly disable the matte layer
-    try { matteCompLayer.enabled = false; } catch(e){}
-    
-    // Removed redundant "head" layer since the user's tracked layer is already visible on screen.
 }
 
 function applyBpmCycleToComp(comp, p, depth) {
@@ -3050,15 +3408,15 @@ function buildAnimeWater(comp, c, ctrl, w, h, dur) {
     // these were never tuned at all when Deep Glow was absent.
     var gl1 = addFx(l4, ["ADBE Glo2"]);
     if (gl1) {
-        safeSet(gl1, "Glow Threshold", 1, 45);
-        safeSet(gl1, "Glow Radius",    2, 50);
-        safeSet(gl1, "Glow Intensity", 3, 2);
+        safeSet(gl1, "Glow Threshold", 2, 45);
+        safeSet(gl1, "Glow Radius",    3, 50);
+        safeSet(gl1, "Glow Intensity", 4, 2);
     }
     var gl2 = addFx(l4, ["ADBE Glo2"]);
     if (gl2) {
-        safeSet(gl2, "Glow Threshold", 1, 60);
-        safeSet(gl2, "Glow Radius",    2, 100);
-        safeSet(gl2, "Glow Intensity", 3, 1);
+        safeSet(gl2, "Glow Threshold", 2, 60);
+        safeSet(gl2, "Glow Radius",    3, 100);
+        safeSet(gl2, "Glow Intensity", 4, 1);
     }
 }
 
@@ -3572,9 +3930,9 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
 
         var tile = addFx(s, ["ADBE Tile"]);
         if (tile) {
-            safeSet(tile, "Output Height", 7, 400);
-            safeSet(tile, "Mirror Edges",  8, true);
-            safeEx(tile, "Tile Center", 5,
+            safeSet(tile, "Output Height", 5, 400);
+            safeSet(tile, "Mirror Edges",  6, true);
+            safeEx(tile, "Tile Center", 1,
                    "[value[0], value[1] + (time * " + cycleSpeed + ")]");
         }
 
@@ -3724,9 +4082,9 @@ function buildAntigravity(comp, c, ctrl, w, h, dur) {
     
     var glow = addFx(emitterLayer, ["ADBE Glo2"]);
     if (glow) {
-        safeSet(glow, "Glow Threshold", 1, 30);   // particles are dim; bite early
-        safeSet(glow, "Glow Radius",    2, 50);
-        safeSet(glow, "Glow Intensity", 3, 1.5);
+        safeSet(glow, "Glow Threshold", 2, 30);   // particles are dim; bite early
+        safeSet(glow, "Glow Radius",    3, 50);
+        safeSet(glow, "Glow Intensity", 4, 1.5);
     }
 }
 

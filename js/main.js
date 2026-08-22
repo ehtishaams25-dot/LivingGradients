@@ -412,10 +412,75 @@ if (bpmToggle && bpmInputRow) {
 
 const trackingToggle = document.getElementById('tracking-toggle');
 const trackingInputRow = document.getElementById('tracking-input-row');
+const trackPhysics = document.getElementById('track-physics');
 if (trackingToggle && trackingInputRow) {
   trackingToggle.addEventListener('change', (e) => {
     trackingInputRow.style.display = e.target.checked ? 'flex' : 'none';
+    if (trackPhysics) trackPhysics.classList.toggle('visible', e.target.checked);
     if (e.target.checked) refreshTrackingLayers();
+  });
+}
+
+/* ── Tracking physics controls ──────────────────────────────────────── */
+
+const TRACK_PARAMS = [
+  'trackMode', 'trackRadius', 'trackForce',
+  'trackTension', 'trackFriction', 'trackPersistence'
+];
+
+// Live value readouts next to each slider label.
+TRACK_PARAMS.forEach(id => {
+  const el = document.getElementById('ctrl-' + id);
+  const out = document.getElementById('val-' + id);
+  if (!el || !out) return;
+  const sync = () => { out.textContent = el.value; };
+  el.addEventListener('input', sync);
+  sync();
+});
+
+/* Read the physics controls into the shape jsx/main.jsx expects — they live
+   under `controls` alongside the per-type sliders, not at the top level. */
+function getTrackingValues() {
+  const out = {};
+  TRACK_PARAMS.forEach(id => {
+    const el = document.getElementById('ctrl-' + id);
+    if (!el) return;
+    out[id] = (el.tagName === 'SELECT') ? el.value : parseFloat(el.value);
+  });
+  return out;
+}
+
+const rebakeBtn = document.getElementById('rebake-btn');
+if (rebakeBtn) {
+  rebakeBtn.addEventListener('click', function () {
+    const statusEl = document.getElementById('generate-status');
+    const layerName = document.getElementById('tracking-layer-select')?.value || '';
+    if (!layerName) {
+      setStatus(statusEl, '✕ Pick a layer to track first.', 'error');
+      return;
+    }
+    if (typeof CSInterface === 'undefined') {
+      setStatus(statusEl, '✓ [Dev mode] Re-bake skipped.', 'success');
+      return;
+    }
+
+    rebakeBtn.disabled = true;
+    setStatus(statusEl, 'Re-running the simulation…', '');
+
+    const payload = { trackingLayerName: layerName, controls: getTrackingValues() };
+    new CSInterface().evalScript(`rebakeTracking(${esArg(payload)})`, function (result) {
+      rebakeBtn.disabled = false;
+      if (!result || result === 'EvalScript error.' || result === 'undefined') {
+        setStatus(statusEl, '✕ Re-bake failed. Check the JSX.', 'error');
+      } else if (result.indexOf('ERROR') !== -1) {
+        setStatus(statusEl, '✕ ' + result.replace('ERROR:', '').trim(), 'error');
+      } else if (result.indexOf('warning') !== -1) {
+        const [done, detail] = result.split(' | ');
+        setStatus(statusEl, '⚠ ' + done + ' — ' + detail, 'warn');
+      } else {
+        setStatus(statusEl, '✓ ' + result, 'success');
+      }
+    });
   });
 }
 
@@ -739,7 +804,7 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   const params = {
     type: selectedType,
     colors: state.colors,
-    controls: getControlValues(selectedType),
+    controls: Object.assign(getControlValues(selectedType), getTrackingValues()),
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
     glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
     bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,

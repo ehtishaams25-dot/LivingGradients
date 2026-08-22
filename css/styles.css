@@ -381,3 +381,47 @@ html, body {
 .preview-webthreads { background: radial-gradient(circle at center, var(--c1), var(--c2), var(--c3), var(--c4)); animation: webthreads-pulse 3s ease-in-out infinite alternate; }
 @keyframes webthreads-pulse { 0% { transform: scale(1); filter: hue-rotate(0deg); } 100% { transform: scale(1.05); filter: hue-rotate(20deg); } }
 
+
+
+/* ── Tracking physics ─────────────────────────────────────────────── */
+.track-physics {
+  display: none;                 /* revealed with the tracking input row */
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+}
+.track-physics.visible { display: flex; }
+
+.track-physics .mini-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.track-physics .mini-label .val {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-main);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.track-physics input[type="range"] { width: 100%; display: block; }
+.track-slider { display: flex; flex-direction: column; }
+
+.track-note {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  margin: 2px 0 0;
+}
+.track-note strong { color: var(--text-muted); font-weight: 600; }
+
+#rebake-btn { margin-top: 2px; }
