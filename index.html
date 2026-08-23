@@ -284,16 +284,20 @@
 
             <div class="controls-container" style="margin-top: 16px;">
               <!-- GLOBAL SETTINGS -->
-              <div class="control-item modern-row">
-                <span class="control-label">Noise Intensity</span>
-                <input type="range" class="slider global-slider" id="grain-slider" min="0" max="100" value="0">
-                <span class="control-value" id="grain-val">0.00</span>
+              <div class="ctrl">
+                <div class="ctrl-head">
+                  <label class="ctrl-label" for="grain-slider">Noise Intensity</label>
+                  <input type="number" class="ctrl-num" id="num-grain" min="0" max="100" step="1" value="0">
+                </div>
+                <input type="range" class="ctrl-range" id="grain-slider" min="0" max="100" step="1" value="0">
               </div>
 
-              <div class="control-item modern-row" style="margin-top: 8px;">
-                <span class="control-label">Glow</span>
-                <input type="range" class="slider global-slider" id="glow-slider" min="0" max="100" value="0">
-                <span class="control-value" id="glow-val">0.00</span>
+              <div class="ctrl" style="margin-top: 14px;">
+                <div class="ctrl-head">
+                  <label class="ctrl-label" for="glow-slider">Glow</label>
+                  <input type="number" class="ctrl-num" id="num-glow" min="0" max="100" step="1" value="0">
+                </div>
+                <input type="range" class="ctrl-range" id="glow-slider" min="0" max="100" step="1" value="0">
               </div>
 
 
@@ -340,48 +344,66 @@
 
                 <!-- PHYSICS -->
                 <div class="track-physics" id="track-physics">
-                  <div class="select-wrap" style="margin-bottom: 10px;">
-                    <label class="mini-label" for="ctrl-trackMode">Reaction</label>
-                    <select class="custom-select" id="ctrl-trackMode">
-                      <option value="Wake">Wake — pushes the gradient aside, churns, refills</option>
-                      <option value="Spring">Spring — a blob follows with lag and overshoot</option>
-                      <option value="Repel">Repel — presses the gradient outward, springs back</option>
-                    </select>
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackMode">Reaction</label>
+                    </div>
+                    <div class="select-wrap">
+                      <select class="custom-select" id="ctrl-trackMode">
+                        <option value="Wake">Wake — shoves the gradient aside</option>
+                        <option value="Spring">Spring — follows with lag</option>
+                        <option value="Repel">Repel — presses outward</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div class="track-slider" data-min="50"  data-max="1200" data-step="10" data-default="300">
-                    <label class="mini-label" for="ctrl-trackRadius">Radius <span class="val" id="val-trackRadius">300</span></label>
-                    <input type="range" id="ctrl-trackRadius" min="50" max="1200" step="10" value="300">
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackRadius">Radius</label>
+                      <input type="number" class="ctrl-num" id="num-trackRadius" min="50" max="1200" step="10" value="300">
+                    </div>
+                    <input type="range" class="ctrl-range" id="ctrl-trackRadius" min="50" max="1200" step="10" value="300">
                   </div>
 
-                  <div class="track-slider">
-                    <label class="mini-label" for="ctrl-trackForce">Force <span class="val" id="val-trackForce">100</span></label>
-                    <input type="range" id="ctrl-trackForce" min="0" max="300" step="5" value="100">
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackForce">Force</label>
+                      <input type="number" class="ctrl-num" id="num-trackForce" min="0" max="300" step="5" value="100">
+                    </div>
+                    <input type="range" class="ctrl-range" id="ctrl-trackForce" min="0" max="300" step="5" value="100">
                   </div>
 
-                  <div class="track-slider">
-                    <label class="mini-label" for="ctrl-trackTension">Tension <span class="val" id="val-trackTension">40</span></label>
-                    <input type="range" id="ctrl-trackTension" min="1" max="100" step="1" value="40">
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackTension">Tension</label>
+                      <input type="number" class="ctrl-num" id="num-trackTension" min="1" max="100" step="1" value="40">
+                    </div>
+                    <input type="range" class="ctrl-range" id="ctrl-trackTension" min="1" max="100" step="1" value="40">
                   </div>
 
-                  <div class="track-slider">
-                    <label class="mini-label" for="ctrl-trackFriction">Friction <span class="val" id="val-trackFriction">30</span></label>
-                    <input type="range" id="ctrl-trackFriction" min="1" max="100" step="1" value="30">
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackFriction">Friction</label>
+                      <input type="number" class="ctrl-num" id="num-trackFriction" min="1" max="100" step="1" value="30">
+                    </div>
+                    <input type="range" class="ctrl-range" id="ctrl-trackFriction" min="1" max="100" step="1" value="30">
                   </div>
 
-                  <div class="track-slider">
-                    <label class="mini-label" for="ctrl-trackPersistence">Persistence <span class="val" id="val-trackPersistence">50</span></label>
-                    <input type="range" id="ctrl-trackPersistence" min="0" max="100" step="1" value="50">
+                  <div class="ctrl">
+                    <div class="ctrl-head">
+                      <label class="ctrl-label" for="ctrl-trackPersistence">Persistence</label>
+                      <input type="number" class="ctrl-num" id="num-trackPersistence" min="0" max="100" step="1" value="50">
+                    </div>
+                    <input type="range" class="ctrl-range" id="ctrl-trackPersistence" min="0" max="100" step="1" value="50">
                   </div>
 
                   <button class="btn-secondary" id="rebake-btn" title="Re-run the simulation against the tracked layer's current animation">
                     Re-Bake Motion
                   </button>
                   <p class="track-note">
-                    The simulation is baked to keyframes on the <strong>LG Track Ctrl</strong> null.
-                    Move or re-animate the tracked layer, then Re-Bake.
+                    The simulation is baked onto the <strong>LG Track Ctrl</strong> null.
+                    Re-animate the tracked layer, then Re-Bake.
                   </p>
-                </div>
               </div>
             </div>
           </section>

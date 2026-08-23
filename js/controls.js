@@ -3,6 +3,25 @@
    ============================================ */
 
 const GRADIENT_CONTROLS = {
+  /* Types that previously rendered "No settings for this type" in the
+     inspector. Keys match what each builder actually reads. */
+  OklabSmooth: [
+    { id: 'gradientType', label: 'Gradient Type', options: ['Linear', 'Radial'], default: 'Linear', type: 'select' },
+    { id: 'angle',        label: 'Angle',  min: 0, max: 90,  step: 90, default: 0,  type: 'slider' }
+  ],
+  Metallic: [
+    { id: 'speed', label: 'Rotation Speed', min: 1, max: 60, step: 1, default: 10, type: 'slider' }
+  ],
+  Antigravity: [
+    { id: 'count',        label: 'Particles',    min: 50,  max: 2000, step: 50,  default: 500, type: 'slider' },
+    { id: 'waveSpeed',    label: 'Drift Speed',  min: 0.05, max: 3,   step: 0.05, default: 0.4, type: 'slider' },
+    { id: 'particleSize', label: 'Particle Size', min: 0.5, max: 10,  step: 0.5, default: 2,   type: 'slider' }
+  ],
+  Waves: [
+    { id: 'waveSpeedX', label: 'Wave Speed', min: 0.005, max: 0.2, step: 0.005, default: 0.02, type: 'slider' },
+    { id: 'waveAmpX',   label: 'Amplitude',  min: 5,     max: 200, step: 5,     default: 40,   type: 'slider' },
+    { id: 'xGap',       label: 'Line Gap',   min: 4,     max: 60,  step: 1,     default: 12,   type: 'slider' }
+  ],
   living: [
     { id: 'speed',    label: 'Shift Speed',  min: 1,   max: 60,  step: 1,   default: 10,  type: 'slider' },
     { id: 'softness', label: 'Turbulence',   min: 0,   max: 900, step: 1,   default: 250, type: 'slider' },
@@ -216,38 +235,70 @@ const GRADIENT_CONTROLS = {
   ]
 };
 
+/* Format a value for display: keep decimals only where the step needs them,
+   so 0.30 stays 0.30 but 250 does not become 250.00. */
+function formatCtrlValue(ctrl, value) {
+  var n = parseFloat(value);
+  if (isNaN(n)) return String(value);
+  if (ctrl.type !== 'slider') return String(value);
+  return (ctrl.step < 1) ? n.toFixed(2) : String(Math.round(n));
+}
+
+/* Paint the filled portion of a range input.
+   Range inputs cannot style their own progress, so the track is a gradient
+   whose stop is driven by a custom property. */
+function paintRange(el) {
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  const pct = ((parseFloat(el.value) - min) / (max - min)) * 100;
+  el.style.setProperty('--pct', pct + '%');
+}
+
 function renderControls(type) {
   const container = document.getElementById('controls-container');
   if (!container) return;
+
   const controls = GRADIENT_CONTROLS[type] || [];
   container.innerHTML = '';
+
   if (!controls.length) {
-    container.innerHTML = '<div style="color:var(--text3);font-size:11px;">No settings for this type.</div>';
+    container.innerHTML =
+      '<p class="ctrl-empty">This gradient has no adjustable settings yet — ' +
+      'the colours above still apply.</p>';
     return;
   }
+
   const group = document.createElement('div');
-  group.className = 'control-group';
+  group.className = 'ctrl-group';
+
   controls.forEach(ctrl => {
     const item = document.createElement('div');
-    item.className = 'control-item modern-row';
-    
-    const label = document.createElement('span');
-    label.className = 'control-label';
-    label.textContent = ctrl.label;
-    item.appendChild(label);
+    item.className = 'ctrl';
+    item.dataset.id = ctrl.id;
 
-    const valDisplay = document.createElement('span');
-    valDisplay.className = 'control-value';
-    valDisplay.id = 'val-' + ctrl.id;
-    // Formatting the default value
-    valDisplay.textContent = (ctrl.type === 'slider' && ctrl.step < 1) 
-      ? parseFloat(ctrl.default).toFixed(2) 
-      : ctrl.default;
-    
+    // ── header: label, reset, value ──
+    const head = document.createElement('div');
+    head.className = 'ctrl-head';
+
+    const label = document.createElement('label');
+    label.className = 'ctrl-label';
+    label.setAttribute('for', 'ctrl-' + ctrl.id);
+    label.textContent = ctrl.label;
+    head.appendChild(label);
+
+    const reset = document.createElement('button');
+    reset.className = 'ctrl-reset';
+    reset.type = 'button';
+    reset.title = 'Reset to ' + ctrl.default;
+    reset.setAttribute('aria-label', 'Reset ' + ctrl.label + ' to default');
+    reset.textContent = '⟲';
+    head.appendChild(reset);
+
+    item.appendChild(head);
+
     if (ctrl.type === 'select') {
       const wrap = document.createElement('div');
       wrap.className = 'select-wrap';
-      
+
       const select = document.createElement('select');
       select.className = 'custom-select';
       select.id = 'ctrl-' + ctrl.id;
@@ -258,67 +309,108 @@ function renderControls(type) {
         select.appendChild(option);
       });
       select.value = ctrl.default;
-      
-      select.addEventListener('change', function() {
-        // Toggle custom text input if it exists
-        if (ctrl.id === 'shape') {
-          const textItem = document.getElementById('ctrl-customText');
-          if (textItem) {
-            textItem.closest('.control-item').style.display = this.value === 'Custom Text/Emoji' ? 'block' : 'none';
-          }
-        }
-        
-        if (typeof window.triggerRealtimeUpdate === 'function') {
-          window.triggerRealtimeUpdate();
-        }
+
+      select.addEventListener('change', function () {
+        if (ctrl.id === 'shape') syncCustomTextVisibility(this.value);
+        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
       });
+
+      reset.addEventListener('click', () => {
+        select.value = ctrl.default;
+        select.dispatchEvent(new Event('change'));
+      });
+
       wrap.appendChild(select);
       item.appendChild(wrap);
-      
-      // Initialize visibility for shape dropdowns
-      if (ctrl.id === 'shape') {
-        setTimeout(() => {
-          const textItem = document.getElementById('ctrl-customText');
-          if (textItem) {
-            textItem.closest('.control-item').style.display = select.value === 'Custom Text/Emoji' ? 'block' : 'none';
-          }
-        }, 10);
-      }
+
+      if (ctrl.id === 'shape') setTimeout(() => syncCustomTextVisibility(select.value), 10);
+
     } else if (ctrl.type === 'text') {
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'custom-input';
       input.id = 'ctrl-' + ctrl.id;
       input.value = ctrl.default;
-      input.style.marginTop = '4px';
-      
-      input.addEventListener('input', function() {
-        if (typeof window.triggerRealtimeUpdate === 'function') {
-          window.triggerRealtimeUpdate();
-        }
+      input.addEventListener('input', function () {
+        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+      });
+      reset.addEventListener('click', () => {
+        input.value = ctrl.default;
+        input.dispatchEvent(new Event('input'));
       });
       item.appendChild(input);
+
     } else {
+      /* Slider plus a number field. Dragging is fine for exploring, but
+         these values get dialled in precisely and copied between presets,
+         so typing has to work too. */
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.className = 'ctrl-num';
+      num.id = 'num-' + ctrl.id;
+      num.min = ctrl.min;
+      num.max = ctrl.max;
+      num.step = ctrl.step;
+      num.value = formatCtrlValue(ctrl, ctrl.default);
+      head.appendChild(num);
+
       const slider = document.createElement('input');
       slider.type = 'range';
-      slider.className = 'slider';
+      slider.className = 'ctrl-range';
       slider.id = 'ctrl-' + ctrl.id;
       slider.min = ctrl.min;
       slider.max = ctrl.max;
       slider.step = ctrl.step;
       slider.value = ctrl.default;
-      slider.addEventListener('input', function() {
-        valDisplay.textContent = parseFloat(this.value).toFixed(ctrl.step < 1 ? 2 : 0);
-        if (typeof window.triggerRealtimeUpdate === 'function') {
-          window.triggerRealtimeUpdate();
-        }
+
+      const commit = (source) => {
+        if (source !== num) num.value = formatCtrlValue(ctrl, slider.value);
+        paintRange(slider);
+        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+      };
+
+      slider.addEventListener('input', () => commit(slider));
+
+      num.addEventListener('input', () => {
+        const v = parseFloat(num.value);
+        if (isNaN(v)) return;                       // mid-typing, leave it alone
+        slider.value = Math.min(ctrl.max, Math.max(ctrl.min, v));
+        paintRange(slider);
+        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
       });
+
+      // Clamp only on blur, so typing "1" on the way to "150" is not fought.
+      num.addEventListener('blur', () => {
+        let v = parseFloat(num.value);
+        if (isNaN(v)) v = ctrl.default;
+        v = Math.min(ctrl.max, Math.max(ctrl.min, v));
+        slider.value = v;
+        num.value = formatCtrlValue(ctrl, v);
+        commit(num);
+      });
+
+      reset.addEventListener('click', () => {
+        slider.value = ctrl.default;
+        num.value = formatCtrlValue(ctrl, ctrl.default);
+        commit(num);
+      });
+
       item.appendChild(slider);
-      item.appendChild(valDisplay);
+      paintRange(slider);
     }
+
     group.appendChild(item);
   });
+
   container.appendChild(group);
+}
+
+/* The Custom Text field only makes sense for one shape option. */
+function syncCustomTextVisibility(shapeValue) {
+  const textInput = document.getElementById('ctrl-customText');
+  if (!textInput) return;
+  const row = textInput.closest('.ctrl');
+  if (row) row.style.display = (shapeValue === 'Custom Text/Emoji') ? '' : 'none';
 }
 
 function getControlValues(type) {

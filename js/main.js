@@ -124,18 +124,10 @@ function renderLibrary() {
   let firstItem = true;
 
   Object.keys(categories).forEach(cat => {
+    // Styling lives in css/styles.css — see .category-header
     const catHeader = document.createElement('div');
     catHeader.className = 'category-header';
     catHeader.textContent = cat;
-    catHeader.style.width = '100%';
-    catHeader.style.gridColumn = '1 / -1';
-    catHeader.style.marginTop = '16px';
-    catHeader.style.marginBottom = '8px';
-    catHeader.style.fontSize = '12px';
-    catHeader.style.color = 'var(--text-faint)';
-    catHeader.style.textTransform = 'uppercase';
-    catHeader.style.letterSpacing = '1px';
-    catHeader.style.fontWeight = '600';
     gradientGrid.appendChild(catHeader);
 
     categories[cat].forEach(preset => {
@@ -494,21 +486,40 @@ viewEdit.addEventListener('input', (e) => {
 
 
 // ── GLOBAL CONTROLS (GRAIN & BPM) ──
-const grainSlider = document.getElementById('grain-slider');
-const grainVal = document.getElementById('grain-val');
-if (grainSlider && grainVal) {
-  grainSlider.addEventListener('input', (e) => {
-    grainVal.textContent = e.target.value;
+
+/* Two-way bind a range input to a number field and keep the track fill in
+   sync. The per-type controls get this from renderControls; these two live
+   in static markup, so they wire it here. */
+function bindRangeAndNumber(rangeId, numId) {
+  const range = document.getElementById(rangeId);
+  const num = document.getElementById(numId);
+  if (!range) return;
+  if (typeof paintRange === 'function') paintRange(range);
+  if (!num) return;
+
+  const lo = parseFloat(range.min), hi = parseFloat(range.max);
+  range.addEventListener('input', () => {
+    num.value = range.value;
+    if (typeof paintRange === 'function') paintRange(range);
+  });
+  num.addEventListener('input', () => {
+    const v = parseFloat(num.value);
+    if (isNaN(v)) return;
+    range.value = Math.min(hi, Math.max(lo, v));
+    if (typeof paintRange === 'function') paintRange(range);
+  });
+  num.addEventListener('blur', () => {
+    let v = parseFloat(num.value);
+    if (isNaN(v)) v = lo;
+    v = Math.min(hi, Math.max(lo, v));
+    range.value = v;
+    num.value = v;
+    if (typeof paintRange === 'function') paintRange(range);
   });
 }
 
-const glowSlider = document.getElementById('glow-slider');
-const glowVal = document.getElementById('glow-val');
-if (glowSlider && glowVal) {
-  glowSlider.addEventListener('input', (e) => {
-    glowVal.textContent = e.target.value;
-  });
-}
+bindRangeAndNumber('grain-slider', 'num-grain');
+bindRangeAndNumber('glow-slider', 'num-glow');
 
 
 const bpmToggle = document.getElementById('bpm-sync-toggle');
@@ -537,14 +548,33 @@ const TRACK_PARAMS = [
   'trackTension', 'trackFriction', 'trackPersistence'
 ];
 
-// Live value readouts next to each slider label.
+// Bind each physics slider to its number field, matching the behaviour
+// renderControls gives the per-type sliders.
 TRACK_PARAMS.forEach(id => {
-  const el = document.getElementById('ctrl-' + id);
-  const out = document.getElementById('val-' + id);
-  if (!el || !out) return;
-  const sync = () => { out.textContent = el.value; };
-  el.addEventListener('input', sync);
-  sync();
+  const range = document.getElementById('ctrl-' + id);
+  const num = document.getElementById('num-' + id);
+  if (!range) return;
+  if (typeof paintRange === 'function') paintRange(range);
+  if (!num) return;
+
+  range.addEventListener('input', () => {
+    num.value = range.value;
+    if (typeof paintRange === 'function') paintRange(range);
+  });
+  num.addEventListener('input', () => {
+    const v = parseFloat(num.value);
+    if (isNaN(v)) return;
+    range.value = Math.min(parseFloat(range.max), Math.max(parseFloat(range.min), v));
+    if (typeof paintRange === 'function') paintRange(range);
+  });
+  num.addEventListener('blur', () => {
+    let v = parseFloat(num.value);
+    if (isNaN(v)) v = parseFloat(range.defaultValue);
+    v = Math.min(parseFloat(range.max), Math.max(parseFloat(range.min), v));
+    range.value = v;
+    num.value = v;
+    if (typeof paintRange === 'function') paintRange(range);
+  });
 });
 
 /* Read the physics controls into the shape jsx/main.jsx expects — they live

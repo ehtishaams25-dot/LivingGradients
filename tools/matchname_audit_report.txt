@@ -1,0 +1,179 @@
+Living Gradients — effect audit
+AE version : 26.0x67
+Language   : en_US
+Date       : Sun Aug 23 2026 02:39:12 GMT+0530
+
+STATUS  EFFECT                | matchName works | display name works | real matchName
+------------------------------------------------------------------------------------
+  OK    Fractal Noise         | yes             | yes                | ADBE Fractal Noise
+  OK    Turbulent Displace    | yes             | yes                | ADBE Turbulent Displace
+  OK    Glow                  | yes             | yes                | ADBE Glo2
+  OK    Fast Box Blur         | yes             | yes                | ADBE Box Blur2
+  OK    Gaussian Blur         | yes             | yes                | ADBE Gaussian Blur 2
+  OK    Fast Blur (legacy)    | yes             | NO                 | ADBE Fast Blur
+  OK    Wave Warp             | yes             | yes                | ADBE Wave Warp
+  OK    4-Color Gradient      | yes             | yes                | ADBE 4ColorGradient
+  OK    Motion Tile           | yes             | yes                | ADBE Tile
+  OK    Twirl                 | yes             | yes                | ADBE Twirl
+  OK    Tint                  | yes             | yes                | ADBE Tint
+  OK    Gradient Ramp         | yes             | yes                | ADBE Ramp
+  OK    Colorama              | yes             | yes                | APC Colorama
+  OK    Extract               | yes             | yes                | ADBE Extract
+  OK    Transform (effect)    | yes             | yes                | ADBE Geometry2
+  OK    Optics Compensation   | yes             | yes                | ADBE Optics Compensation
+  OK    Polar Coordinates     | yes             | yes                | ADBE Polar Coordinates
+  OK    Displacement Map      | yes             | yes                | ADBE Displacement Map
+  OK    Curves                | yes             | yes                | ADBE CurvesCustom
+  OK    Mirror                | yes             | yes                | ADBE Mirror
+  OK    Mosaic                | yes             | yes                | ADBE Mosaic
+  OK    Noise                 | yes             | yes                | ADBE Noise
+  OK    Echo                  | yes             | yes                | ADBE Echo
+  OK    Directional Blur      | yes             | yes                | ADBE Motion Blur
+  OK    Simple Choker         | yes             | yes                | ADBE Simple Choker
+  OK    Fill                  | yes             | yes                | ADBE Fill
+  OK    Drop Shadow           | yes             | yes                | ADBE Drop Shadow
+  OK    Warp                  | yes             | yes                | ADBE WRPMESH
+  OK    Venetian Blinds       | yes             | yes                | ADBE Venetian Blinds
+  OK    Cell Pattern          | yes             | yes                | ADBE Cell Pattern
+  OK    Slider Control        | yes             | yes                | ADBE Slider Control
+  OK    Color Control         | yes             | yes                | ADBE Color Control
+  OK    CC RepeTile           | yes             | yes                | CC RepeTile
+  OK    CC Bubbles            | yes             | yes                | CC Bubbles
+  OK    CC Toner              | yes             | yes                | CC Toner
+  OK    CC Vector Blur        | yes             | yes                | CC Vector Blur
+  OK    CC Particle World     | yes             | yes                | CC Particle World
+ FAIL   VR Color Gradient     | NO              | NO                 | 
+  OK    VR Rotate Sphere      | NO              | yes                | Mettle SkyBox Rotate Sphere
+  OK    VR Plane to Sphere    | NO              | yes                | Mettle SkyBox Project 2D
+ FAIL   PE Thick Stroke       | NO              | NO                 | 
+  OK    Deep Glow             | yes             | yes                | PEDG
+
+PROPERTY NAMES (what the panel must use to set values)
+------------------------------------------------------------------------------------
+ADBE Ramp  (Gradient Ramp)
+    [1] Start of Ramp   {ADBE Ramp-0001}
+    [2] Start Color   {ADBE Ramp-0002}
+    [3] End of Ramp   {ADBE Ramp-0003}
+    [4] End Color   {ADBE Ramp-0004}
+    [5] Ramp Shape   {ADBE Ramp-0005}
+    [6] Ramp Scatter   {ADBE Ramp-0006}
+    [7] Blend With Original   {ADBE Ramp-0007}
+    [8]    {ADBE Ramp-0008}
+    [9] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE Tile  (Motion Tile)
+    [1] Tile Center   {ADBE Tile-0001}
+    [2] Tile Width   {ADBE Tile-0002}
+    [3] Tile Height   {ADBE Tile-0003}
+    [4] Output Width   {ADBE Tile-0004}
+    [5] Output Height   {ADBE Tile-0005}
+    [6] Mirror Edges   {ADBE Tile-0006}
+    [7] Phase   {ADBE Tile-0007}
+    [8] Horizontal Phase Shift   {ADBE Tile-0008}
+    [9] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE Box Blur2  (Fast Box Blur)
+    [1] Blur Radius   {ADBE Box Blur2-0001}
+    [2] Iterations   {ADBE Box Blur2-0002}
+    [3] Blur Dimensions   {ADBE Box Blur2-0003}
+    [4] Repeat Edge Pixels   {ADBE Box Blur2-0004}
+    [5] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE Glo2  (Glow)
+    [1] Glow Based On   {ADBE Glo2-0001}
+    [2] Glow Threshold   {ADBE Glo2-0002}
+    [3] Glow Radius   {ADBE Glo2-0003}
+    [4] Glow Intensity   {ADBE Glo2-0004}
+    [5] Composite Original   {ADBE Glo2-0005}
+    [6] Glow Operation   {ADBE Glo2-0006}
+    [7] Glow Colors   {ADBE Glo2-0007}
+    [8] Color Looping   {ADBE Glo2-0008}
+    [9] Color Loops   {ADBE Glo2-0009}
+    [10] Color Phase   {ADBE Glo2-0010}
+    [11] A & B Midpoint   {ADBE Glo2-0011}
+    [12] Color A   {ADBE Glo2-0012}
+    [13] Color B   {ADBE Glo2-0013}
+    [14] Glow Dimensions   {ADBE Glo2-0014}
+    [15] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE 4ColorGradient  (4-Color Gradient)
+    [1] Positions & Colors   {ADBE 4ColorGradient-0011}
+    [2] Point 1   {ADBE 4ColorGradient-0001}
+    [3] Color 1   {ADBE 4ColorGradient-0002}
+    [4] Point 2   {ADBE 4ColorGradient-0003}
+    [5] Color 2   {ADBE 4ColorGradient-0004}
+    [6] Point 3   {ADBE 4ColorGradient-0005}
+    [7] Color 3   {ADBE 4ColorGradient-0006}
+    [8] Point 4   {ADBE 4ColorGradient-0007}
+    [9] Color 4   {ADBE 4ColorGradient-0008}
+    [10] Color 4   {ADBE 4ColorGradient-0012}
+    [11] Blend   {ADBE 4ColorGradient-0009}
+    [12] Jitter   {ADBE 4ColorGradient-0010}
+    [13] Opacity   {ADBE 4ColorGradient-0013}
+    [14] Blending Mode   {ADBE 4ColorGradient-0014}
+    [15] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE Cell Pattern  (Cell Pattern)
+    [1] Cell Pattern   {ADBE Cell Pattern-0001}
+    [2] Invert   {ADBE Cell Pattern-0002}
+    [3] Contextual Slider   {ADBE Cell Pattern-0003}
+    [4] Overflow   {ADBE Cell Pattern-0004}
+    [5] Disperse   {ADBE Cell Pattern-0005}
+    [6] Size   {ADBE Cell Pattern-0006}
+    [7] Offset   {ADBE Cell Pattern-0007}
+    [8] Tiling Options   {ADBE Cell Pattern-0008}
+    [9] Enable Tiling   {ADBE Cell Pattern-0009}
+    [10] Cells Horizontal   {ADBE Cell Pattern-0010}
+    [11] Cells Vertical   {ADBE Cell Pattern-0011}
+    [12] Cells Vertical   {ADBE Cell Pattern-0012}
+    [13] Evolution   {ADBE Cell Pattern-0013}
+    [14] Evolution Options   {ADBE Cell Pattern-0014}
+    [15] Cycle Evolution   {ADBE Cell Pattern-0015}
+    [16] Cycle (in Revolutions)   {ADBE Cell Pattern-0016}
+    [17] Random Seed   {ADBE Cell Pattern-0017}
+    [18]    {ADBE Cell Pattern-0018}
+    [19] Compositing Options   {ADBE Effect Built In Params}
+
+APC Colorama  (Colorama)
+    [1] Input Phase   {APC Colorama-0003}
+    [2] Get Phase From   {APC Colorama-0002}
+    [3] Add Phase   {APC Colorama-0004}
+    [4] Add Phase From   {APC Colorama-0006}
+    [5] Add Mode   {APC Colorama-0040}
+    [6] Phase Shift   {APC Colorama-0008}
+    [7]    {APC Colorama-0015}
+    [8] Output Cycle   {APC Colorama-0017}
+    [9] Use Preset Palette   {APC Colorama-0010}
+    [10] Output Cycle   {APC Colorama-0012}
+    [11] Cycle Repetitions   {APC Colorama-0038}
+    [12] Interpolate Palette   {APC Colorama-0014}
+    [13]    {APC Colorama-0027}
+    [14] Modify   {APC Colorama-0029}
+    [15] Modify   {APC Colorama-0016}
+    [16] Modify Alpha   {APC Colorama-0018}
+    [17] Change Empty Pixels   {APC Colorama-0034}
+    [18]    {APC Colorama-0037}
+    [19] Pixel Selection   {APC Colorama-0039}
+    [20] Matching Color   {APC Colorama-0020}
+    [21] Matching Tolerance   {APC Colorama-0022}
+    [22] Matching Softness   {APC Colorama-0024}
+    [23] Matching Mode   {APC Colorama-0026}
+    [24]    {APC Colorama-0049}
+    [25] Masking   {APC Colorama-0051}
+    [26] Mask Layer   {APC Colorama-0028}
+    [27] Masking Mode   {APC Colorama-0030}
+    [28]    {APC Colorama-0057}
+    [29] Composite Over Layer   {APC Colorama-0032}
+    [30] Blend With Original   {APC Colorama-0036}
+    [31] Compositing Options   {ADBE Effect Built In Params}
+
+ADBE WRPMESH  (Warp)
+    [1] Warp Style   {ADBE WRPMESH-0001}
+    [2] Warp Axis   {ADBE WRPMESH-0002}
+    [3] Bend   {ADBE WRPMESH-0003}
+    [4] Horizontal Distortion   {ADBE WRPMESH-0004}
+    [5] Vertical Distortion   {ADBE WRPMESH-0005}
+    [6] Compositing Options   {ADBE Effect Built In Params}
+
+
+MISSING ON THIS MACHINE: VR Color Gradient, PE Thick Stroke
