@@ -251,7 +251,8 @@ if (batchGenerateBtn) {
       items,
       grain:    parseFloat(document.getElementById('grain-slider')?.value) || 0,
       glow:     parseFloat(document.getElementById('glow-slider')?.value) || 0,
-      bpmSync:  document.getElementById('bpm-sync-toggle')?.checked || false,
+      colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
+    bpmSync:  document.getElementById('bpm-sync-toggle')?.checked || false,
       bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120
     };
 
@@ -946,6 +947,7 @@ document.getElementById('generate-btn').addEventListener('click', function () {
     controls: Object.assign(getControlValues(selectedType), getTrackingValues()),
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
     glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
+    colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
     bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
     bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
     trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
@@ -1014,6 +1016,7 @@ window.triggerRealtimeUpdate = function () {
         controls: vals,
         grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
         glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
+        colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
         bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
         bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
         trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,

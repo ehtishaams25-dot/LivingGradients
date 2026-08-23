@@ -900,3 +900,11 @@ body.batch-mode .gradient-card.batch-selected {
 .batch-status.success { color: var(--success); }
 .batch-status.error   { color: var(--danger); }
 .batch-status.warn    { color: var(--warning); }
+
+.ctrl-hint {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  margin: 6px 0 0;
+  max-width: 46ch;
+}

@@ -14,6 +14,7 @@
 var LG = (function () {
 
     var warnings = [];
+    var notes    = [];   // things changed on the user's behalf, worth saying
     var resolved = {};   // logicalKey -> matchName that worked
     var reverse  = null; // any known alias (incl. historical typos) -> logicalKey
 
@@ -149,16 +150,28 @@ var LG = (function () {
     }
 
     return {
-        reset: function () { warnings = []; },
+        reset: function () { warnings = []; notes = []; },
 
         warn: record,
+
+        /* Not a failure — something was adjusted deliberately and the user
+           should know, e.g. a project setting changed for colour quality. */
+        note: function (msg) {
+            for (var i = 0; i < notes.length; i++) if (notes[i] === msg) return;
+            if (notes.length < 6) notes.push(msg);
+        },
+
+        notes: function () { return notes.slice(0); },
 
         count: function () { return warnings.length; },
 
         report: function () {
-            if (!warnings.length) return "";
-            return " | " + warnings.length + " warning" +
-                   (warnings.length === 1 ? "" : "s") + ": " + warnings.join("; ");
+            var out = "";
+            if (notes.length)    out += " | " + notes.join("; ");
+            if (warnings.length) out += " | " + warnings.length + " warning" +
+                                        (warnings.length === 1 ? "" : "s") +
+                                        ": " + warnings.join("; ");
+            return out;
         },
 
         /* Apply an effect. `names` may be logical keys, real matchNames, or
@@ -404,10 +417,11 @@ function hsvRgb(h, s, v) {
     return [r, g, b];
 }
 
-function vibrify(c) {
-    var h = rgbHsv(c[0], c[1], c[2]);
-    return hsvRgb(h[0], Math.min(1, h[1] * 1.2), Math.min(1, h[2] * 1.05));
-}
+/* vibrify() used to sit here, multiplying every picked colour's saturation
+   by 1.2 and its value by 1.05 before the build. It was a hidden edit to
+   the user's choice: an already-saturated colour clamped at 1.0 and shifted
+   hue on the way. Colours now reach After Effects exactly as picked, and
+   the Glow control covers the punch it was providing. */
 
 // --- OKLAB COLOR SPACE UTILS ---
 function srgbToLinear(c) {
@@ -599,9 +613,10 @@ function generateGradient(paramsStr) {
             h = comp.height,
             dur = comp.duration;
         var c = [];
-        for (var i = 0; i < p.colors.length; i++) c.push(vibrify(hexRgb(p.colors[i])));
+        for (var i = 0; i < p.colors.length; i++) c.push(hexRgb(p.colors[i]));
 
         LG.reset();
+        applyColorQuality(p.colorQuality !== false);
 
         p.controls = p.controls || {};
         p.controls.trackingEnabled = p.trackingEnabled;
@@ -633,6 +648,39 @@ function generateGradient(paramsStr) {
     }
 }
 
+/* Muddy gradients in After Effects are almost always the project, not the
+   effect stack.
+
+   Two settings do the damage. At 8 bits per channel a smooth ramp across a
+   1080p comp has fewer steps than it has pixels, so it bands and the
+   dithering reads as grain. And with gamma-space blending, mixing two
+   saturated complementary colours drives the midpoint toward grey — the
+   classic "muddy middle" on a four-colour gradient.
+
+   Both are project-wide, so this never runs silently: whatever it changes
+   is reported back to the panel. */
+function applyColorQuality(enabled) {
+    if (!enabled) return;
+
+    try {
+        if (app.project.bitsPerChannel < 16) {
+            app.project.bitsPerChannel = 16;
+            LG.note('project set to 16-bit for smoother ramps');
+        }
+    } catch (e) {
+        LG.warn('could not raise the project bit depth: ' + e.message);
+    }
+
+    try {
+        if (!app.project.linearBlending) {
+            app.project.linearBlending = true;
+            LG.note('linear blending on — stops saturated colours greying at the midpoint');
+        }
+    } catch (e) {
+        LG.warn('could not enable linear blending: ' + e.message);
+    }
+}
+
 /* Batch generation — one composition per selected type.
 
    The active comp is used only as a template for size, frame rate, pixel
@@ -651,6 +699,7 @@ function generateBatch(paramsStr) {
         if (!p.items || !p.items.length)        return 'ERROR: No gradients selected.';
 
         LG.reset();
+        applyColorQuality(p.colorQuality !== false);
         app.beginUndoGroup('Living Gradients — Batch');
 
         folder = app.project.items.addFolder('Living Gradients');
@@ -668,7 +717,7 @@ function generateBatch(paramsStr) {
                 comp.parentFolder = folder;
 
                 var c = [];
-                for (j = 0; j < item.colors.length; j++) c.push(vibrify(hexRgb(item.colors[j])));
+                for (j = 0; j < item.colors.length; j++) c.push(hexRgb(item.colors[j]));
 
                 var controls = item.controls || {};
                 var unknown = dispatchBuild(comp, item.type, c, controls,
@@ -1249,7 +1298,7 @@ function applyBpmCycleToComp(comp, p, depth) {
     if (depth > 5) return;
     var cStrs = [];
     for (var i = 0; i < p.colors.length; i++) {
-        var rgb = vibrify(hexRgb(p.colors[i]));
+        var rgb = hexRgb(p.colors[i]);
         cStrs.push("[" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",1]");
     }
     var arrStr = "[" + cStrs.join(",") + "]";
@@ -2526,7 +2575,7 @@ function updateLiveColors(colorsStr) {
         if (!comp || !(comp instanceof CompItem)) return;
 
         var c = [];
-        for (var i = 0; i < hexColors.length; i++) c.push(vibrify(hexRgb(hexColors[i])));
+        for (var i = 0; i < hexColors.length; i++) c.push(hexRgb(hexColors[i]));
 
         app.beginUndoGroup("Update Colors Live");
 
