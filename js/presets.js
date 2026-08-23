@@ -47,7 +47,7 @@ const GRADIENT_LIBRARY = [
 
   // PROCEDURAL & RETRO
   { id: 'Heatmap', category: 'Procedural & Retro', label: 'Heatmap', cssClass: 'preview-heat', defaultColors: ['#000033', '#FF0000', '#FFFF00', '#FFFFFF'] },
-  { id: 'Halftone', category: 'Procedural & Retro', label: 'Halftone', cssClass: 'preview-halftone', defaultColors: ['#FF0055', '#FFAA00', '#110018'] },
+  { id: 'Halftone', category: 'Procedural & Retro', label: 'Halftone', cssClass: 'preview-halftone', defaultColors: ['#12101A', '#5227FF', '#F4F1EA'] },
   { id: 'AsciiMatrix', category: 'Procedural & Retro', label: 'ASCII Matrix', cssClass: 'preview-ascii', defaultColors: ['#000000', '#004400', '#00AA00', '#00FF00'] },
   { id: 'ChromaFlare', category: 'Procedural & Retro', label: 'ChromaFlare', cssClass: 'preview-chromaflare', defaultColors: ['#FF00FF', '#00FFFF', '#FF00AA', '#00FF88'] },
   { id: 'Sunburst', category: 'Procedural & Retro', label: 'Sunburst', cssClass: 'preview-sunburst', defaultColors: ['#FF4500', '#FFD700', '#1A0A00'] },
@@ -74,5 +74,5 @@ const GRADIENT_LIBRARY = [
   { id: 'WebThreads', category: 'Web Studio Clones', label: 'Web Threads', cssClass: 'preview-webthreads', defaultColors: ['#230a89', '#ac07a7', '#882828', '#111111'] },
 
   // AI CUSTOM PROCEDURAL STYLE
-  { id: 'ai_custom', category: 'Experimental', label: 'AI Generated', cssClass: 'preview-living', defaultColors: [] }
+  { id: 'ai_custom', category: 'Experimental', label: 'AI Generated', cssClass: 'preview-living', defaultColors: ['#2B1B5A', '#7A2FF5', '#FF4D9D', '#FFD36E'] }
 ];

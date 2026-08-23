@@ -2495,18 +2495,13 @@ function updateGradientLive(paramsStr) {
             for (var hi = 1; hi <= comp.numLayers; hi++) {
                 var hl = comp.layer(hi);
                 if (hl.name === "Halftone Luma") {
-                    lgFractalSet(findFx(hl, ['ADBE Fractal Noise']), {
-                        fractalType: 2, contrast: num(lctrl.contrast, 128), brightness: 0,
-                        overflow: 2, complexity: 5, scale: 420, speed: hspeed * 1.2
-                    });
+                    tuneHalftoneField(hl, lctrl, realComp.width, realComp.height);
                 } else if (hl.name === "Screen") {
                     try { hl.property('Transform').property('Rotation').setValue(num(lctrl.angle, 45)); } catch (e) { }
                 } else if (hl.name === "Threshold") {
-                    var hx = findFx(hl, ['ADBE Extract']);
-                    if (hx) LG.set(hx, 'Black Softness', null, Math.max(2, (100 - num(lctrl.edge, 55)) * 0.9));
+                    tuneHalftoneThreshold(hl, num(lctrl.coverage, 128), num(lctrl.edge, 82));
                 } else if (hl.name === "Halftone Color") {
-                    lgGradientPoints(findFx(hl, ['ADBE 4ColorGradient']),
-                                     lgRayColors(lcols), realComp.width, realComp.height, hspeed);
+                    tuneHalftoneInk(hl, lcols, lctrl, realComp.width, realComp.height);
                 }
             }
             app.endUndoGroup();
@@ -2852,11 +2847,33 @@ function updateLayerColors(layer, c, depth) {
         } catch (x) { }
     }
 
-    if (lname === 'Halftone Gradient' || lname === 'Halftone Color' || lname === 'ASCII Color Overlay' || lname === 'Sunburst Colour' || lname === 'Lava Lamp' || lname === 'Stacked Background' || lname.indexOf('Square 3') !== -1) {
+    if (lname === 'Halftone Color') {
         try {
-            /* Halftone and Sunburst keep their last slot for the backdrop, so
-               only the ink/ray colours may reach the gradient. */
-            var src2 = (lname === 'Halftone Color' || lname === 'Sunburst Colour') ? lgRayColors(c) : c;
+            var ink = lgRayColors(c), n = ink.length, segs = (n > 1) ? n - 1 : 1;
+            var toner = findFx(layer, ['CC Toner']);
+            if (toner) {
+                var stops = [], si, st, sseg, sidx;
+                for (si = 0; si < 5; si++) {
+                    st = si / 4;
+                    sseg = st * segs;
+                    sidx = Math.min(Math.floor(sseg), segs - 1);
+                    stops.push(interpolateOklab(ink[sidx % n], ink[(sidx + 1) % n], sseg - sidx));
+                }
+                LG.set(toner, 'Tones',      1, 3);
+                LG.set(toner, 'Shadows',    6, stops[0]);
+                LG.set(toner, 'Darktones',  5, stops[1]);
+                LG.set(toner, 'Midtones',   4, stops[2]);
+                LG.set(toner, 'Brights',    3, stops[3]);
+                LG.set(toner, 'Highlights', 2, stops[4]);
+            }
+        } catch (x) { }
+    }
+
+    if (lname === 'Halftone Gradient' || lname === 'ASCII Color Overlay' || lname === 'Sunburst Colour' || lname === 'Lava Lamp' || lname === 'Stacked Background' || lname.indexOf('Square 3') !== -1) {
+        try {
+            /* Sunburst keeps its last slot for the backdrop, so only the ray
+               colours may reach the gradient. */
+            var src2 = (lname === 'Sunburst Colour') ? lgRayColors(c) : c;
             var ef2 = findFx(layer, ['4-Color Gradient', 'ADBE 4ColorGradient']);
             if (ef2) {
                 for (var ci2 = 0; ci2 < 4; ci2++) {
@@ -3004,48 +3021,73 @@ function buildHeatmap(comp, c, ctrl, w, h, dur) {
     }
 }
 
-/* A halftone screen is one comparison: a repeating soft dot against a moving
-   grey field. Where the dot is brighter than the field, there is ink.
+/* A halftone screen is one comparison: a repeating dot profile against a
+   moving grey field. Where the profile is brighter than the field, ink.
 
-   Two things stopped the old build rendering anything but a black frame. The
-   dot filled 90% of its cell, so once it was blurred there was no ramp left
-   to compare against — just flat white. And the comparison itself was a Hard
-   Mix blend, which stops meaning what it was dialled in to mean the moment
-   the project is switched to linear blending, which this panel was doing on
-   every build. Here the two layers are averaged at plain opacity and the
-   result is cut with Extract, so no blend mode is load-bearing. */
+   The part that kept going wrong is the profile. Drawing a shape and blurring
+   it gives a bump whose peak and floor depend on how much of the cell the
+   shape covered and how wide the blur was — at 90% coverage there is no floor
+   left, at a wide blur there is no peak, and either way the comparison has
+   almost no range to work in. Every dot then reads as fully on or fully off,
+   which is a frame of solid ink or an empty one.
+
+   A radial Gradient Ramp has no such problem. It is white at the centre and
+   black at the corner *by construction*, so the profile spans the full range
+   in every cell, and the threshold maps smoothly onto dot radius: a bright
+   field cuts low on the cone and leaves a wide dot, a dark field cuts high
+   and leaves a small one. That is what a halftone actually is.
+
+   The field has to be just as well behaved, and Fractal Noise is not. Its
+   turbulent types are bright-biased — the histogram sits well above mid-grey —
+   so with the threshold at the middle of the range almost every cell cut low
+   on the cone and the dots merged into solid ink. That was the red-to-cyan
+   frame with a few pinholes in it.
+
+   So the field is a ramp too, pushed around by Turbulent Displace. A linear
+   ramp is uniformly distributed by construction, and displacing it is a
+   spatial remap that leaves the histogram alone — it only makes the isolines
+   wander, which is exactly the organic drift wanted. With profile and field
+   both uniform over 0-255, the threshold is not a number to be tuned by
+   trial: half-way is genuinely half-way, and Ink Coverage at 128 gives a
+   40%-coverage mid-tone, 255 gives bare paper, 0 gives solid ink.
+
+   Shapes other than a circle cannot be expressed as a ramp, so those still go
+   through draw-and-blur — but at 70% coverage and a narrow blur, which leaves
+   the profile most of its range. */
 function buildHalftone(comp, c, ctrl, w, h, dur) {
     var proj = app.project;
     var fps  = comp.frameRate;
 
-    var dotSize  = Math.max(6, num(ctrl.dotSize, 40));
-    var contrast = num(ctrl.contrast, 128);
+    var dotSize  = Math.max(4, num(ctrl.dotSize, 20));
     var speed    = num(ctrl.speed, 30);
     var angle    = num(ctrl.angle, 45);
-    var edge     = num(ctrl.edge, 55);
+    var edge     = num(ctrl.edge, 82);
+    var coverage = num(ctrl.coverage, 128);
     var shape    = ctrl.shape || 'Circle';
 
     // 1. The grey field the dots are measured against.
     var lumaComp  = proj.items.addComp('Halftone Luma Map', w, h, 1, dur, fps);
     var lumaSolid = lumaComp.layers.addSolid([0.5, 0.5, 0.5], 'Halftone Luma', w, h, 1, dur);
-    lgFractalSet(lgFx(lumaSolid, ['ADBE Fractal Noise']), {
-        fractalType: 2, contrast: contrast, brightness: 0, overflow: 2,
-        complexity: 5, scale: 420, speed: speed * 1.2
-    });
+    tuneHalftoneField(lumaSolid, ctrl, w, h);
 
-    // 2. One cell, transparent apart from the dot.
+    // 2. One cell.
     var cellComp = proj.items.addComp('Halftone Cell', Math.round(dotSize), Math.round(dotSize), 1, dur, fps);
-    buildHalftoneCell(cellComp, shape, ctrl.customText, dotSize);
+    var isRamp = buildHalftoneCell(cellComp, shape, ctrl.customText, dotSize);
 
-    // 3. The screen, oversized so it still covers the frame once rotated.
-    var ow = Math.round(w * 1.7), oh = Math.round(h * 1.7);
+    /* 3. The screen. Square, and wider than the frame's diagonal, so that it
+          covers at every screen angle. The previous 1.7x rectangle did not:
+          rotated 45 degrees its half-height reached 918px while the frame's
+          corner sits 1102px out, so two opposite corners fell outside the
+          screen entirely and showed bare paper. A square whose side beats the
+          diagonal has no orientation that can fail. */
+    var side = Math.ceil(Math.sqrt(w * w + h * h) * 1.08);
+    var ow = side, oh = side;
     var patternComp = proj.items.addComp('Halftone Pattern Grid', ow, oh, 1, dur, fps);
     patternComp.layers.addSolid([0, 0, 0], 'Screen Base', ow, oh, 1, dur);
 
-    /* Tile out from the centre rather than from a corner: it halves how far
+    /* Tile out from the centre rather than a corner: it halves how far
        CC RepeTile has to expand, which keeps the screen covering the frame at
-       4K instead of running into the effect's own ceiling and leaving a bare
-       band down one side. */
+       4K instead of leaving a bare band down one side. */
     var cellLayer = patternComp.layers.add(cellComp);
     try { cellLayer.property('Transform').property('Position').setValue([ow / 2, oh / 2]); } catch (e) { }
     var repeTile = addFx(cellLayer, ['CC RepeTile']);
@@ -3062,41 +3104,173 @@ function buildHalftone(comp, c, ctrl, w, h, dur) {
     var screen = maskComp.layers.add(patternComp);
     screen.name = 'Screen';
     try { screen.property('Transform').property('Rotation').setValue(angle); } catch (e) { }
-    /* Blurring the dot is what gives it a ramp to threshold along: the middle
-       stays bright, the rim falls off, so a darker field eats the rim first
-       and the dot shrinks. Without this every dot is all-or-nothing. */
-    lgBlur(screen, dotSize * 0.3);
+    // A ramp cell is already a smooth profile; only a drawn shape needs softening.
+    lgBlur(screen, isRamp ? 0 : dotSize * 0.26);
 
+    /* Half of each, so the composite is the midpoint of profile and field and
+       the threshold below sits in the middle of a known range. */
     var field = maskComp.layers.add(lumaComp);
     field.name = 'Field';
     try { field.opacity.setValue(50); } catch (e) { }
 
     var cut = maskComp.layers.addSolid([1, 1, 1], 'Threshold', w, h, 1, dur);
     cut.adjustmentLayer = true;
-    var extract = addFx(cut, ['ADBE Extract']);
-    if (extract) {
-        LG.set(extract, 'Black Point',    null, 128);
-        LG.set(extract, 'White Point',    null, 255);
-        LG.set(extract, 'Black Softness', null, Math.max(2, (100 - edge) * 0.9));
-        LG.set(extract, 'White Softness', null, 0);
-    }
+    addFx(cut, ['ADBE Extract']);
+    tuneHalftoneThreshold(cut, coverage, edge);
 
     // 5. Colour, cut by the screen.
     comp.layers.addSolid(lgRole(c, 2, lgByLuma(c)[0]), 'Halftone Background', w, h, 1, dur);
 
     var colorMaster = comp.layers.addSolid([1, 1, 1], 'Halftone Color', w, h, 1, dur);
-    lgGradientPoints(addFx(colorMaster, ['ADBE 4ColorGradient']), lgRayColors(c), w, h, speed);
+    tuneHalftoneInk(colorMaster, c, ctrl, w, h);
 
     var screenMatte = comp.layers.add(maskComp);
     screenMatte.name = 'Halftone Screen';
     setTrackMatteSafely(colorMaster, screenMatte, 'ALPHA');
 }
 
-/* The dot is drawn at 60% of the cell so there is room around it for the blur
-   to fall off in. At the 90% the old build used, neighbouring dots merged
-   before the blur had done anything. */
+/* The field IS the gradient. Every reference for this effect is the same
+   thing: two colours, and a dot screen carrying the transition between them —
+   solid ink at one end, bare paper at the other, dots doing the middle. So
+   the field has to sweep the full 0-255 across the frame, and it has to be
+   aimable, because which way it sweeps is the whole composition.
+
+   The previous version used Fractal Noise at scale 420. At that scale the
+   features are larger than the frame, so the field came out essentially flat
+   and every cell got the same threshold — a uniform screen of identical dots
+   with no gradient in it at all.
+
+   Tone Spread is the ramp's length. At 1.0 it spans exactly the frame, so the
+   far edges reach solid and bare; shorter pushes more of the frame to the
+   extremes, longer keeps more of it in the mid-tones where the dots read as
+   dots. Flow Warp bends the isolines off straight. */
+function tuneHalftoneField(lumaSolid, ctrl, w, h) {
+    if (!lumaSolid) return;
+    if (!w) { try { w = lumaSolid.width;  } catch (e) { w = 1920; } }
+    if (!h) { try { h = lumaSolid.height; } catch (e) { h = 1080; } }
+
+    var field  = ctrl.field || 'Linear';
+    var spread = Math.max(0.25, Math.min(2.0, 1.8 - num(ctrl.contrast, 128) / 160));
+    var speed  = num(ctrl.speed, 20);
+    var warp   = num(ctrl.warp, 260);
+    var radial = (field === 'Radial');
+
+    var rad = num(ctrl.direction, 90) * Math.PI / 180;
+    var cx  = w / 2, cy = h / 2;
+    /* Project the frame onto the gradient's own axis, so a 1.0 spread spans
+       the frame whichever way it is pointing. */
+    var reach = (Math.abs(Math.cos(rad)) * w + Math.abs(Math.sin(rad)) * h) * 0.5 * spread;
+    if (radial) reach = Math.max(w, h) * 0.5 * spread;
+
+    var ramp = lgFx(lumaSolid, ['ADBE Ramp']);
+    if (ramp) {
+        if (radial) {
+            LG.set(ramp, 'Start of Ramp', 1, [cx, cy]);
+            LG.set(ramp, 'End of Ramp',   3, [cx + reach, cy]);
+        } else {
+            LG.set(ramp, 'Start of Ramp', 1, [cx - Math.cos(rad) * reach, cy - Math.sin(rad) * reach]);
+            LG.set(ramp, 'End of Ramp',   3, [cx + Math.cos(rad) * reach, cy + Math.sin(rad) * reach]);
+        }
+        LG.set(ramp, 'Start Color', 2, [0, 0, 0]);
+        LG.set(ramp, 'End Color',   4, [1, 1, 1]);
+        LG.set(ramp, 'Ramp Shape',  5, radial ? 2 : 1);   // probe grid 7
+
+        /* Flow Speed has to move the ramp itself. Leaving it to Turbulent
+           Displace's Evolution was the same mistake as everywhere else in this
+           file: displacing a smooth gradient barely changes a smooth gradient,
+           so Linear and Radial sat completely still while only Organic — which
+           warps hard enough to fold the field — appeared to animate.
+
+           It sweeps back and forth rather than travelling. A ramp that only
+           translates runs off its own ends and the frame goes solid. */
+        var f = speed / 25;
+        if (speed > 0) {
+            if (radial) {
+                LG.expr(ramp, 'End of Ramp', 3,
+                    '[value[0] + Math.sin(time * ' + f + ') * ' + (reach * 0.3) + ', value[1]]');
+                LG.expr(ramp, 'Start of Ramp', 1,
+                    '[value[0] + Math.sin(time * ' + (f * 0.7) + ') * ' + (w * 0.08) +
+                    ', value[1] + Math.cos(time * ' + (f * 0.53) + ') * ' + (h * 0.08) + ']');
+            } else {
+                var sweep = '[value[0] + Math.sin(time * ' + f + ') * ' +
+                            (Math.cos(rad) * reach * 0.42) +
+                            ', value[1] + Math.sin(time * ' + f + ') * ' +
+                            (Math.sin(rad) * reach * 0.42) + ']';
+                LG.expr(ramp, 'Start of Ramp', 1, sweep);
+                LG.expr(ramp, 'End of Ramp',   3, sweep);
+            }
+        } else {
+            LG.expr(ramp, 'Start of Ramp', 1, 'value');
+            LG.expr(ramp, 'End of Ramp',   3, 'value');
+        }
+    }
+
+    /* Organic doubles the warp and coarsens it, which turns the sweep into
+       wandering blobs of density rather than a directional fade. */
+    var drift = (field === 'Organic') ? warp * 2.5 : warp;
+
+    lgTurbSet(lgFxNamed(lumaSolid, ['ADBE Turbulent Displace'], 'Field Drift'), {
+        mode: 4, amount: drift, size: (field === 'Organic') ? 700 : 450, speed: speed * 0.4
+    });
+    lgTurbSet(lgFxNamed(lumaSolid, ['ADBE Turbulent Displace'], 'Field Detail'), {
+        mode: 1, amount: drift * 0.3, size: 130, speed: speed * 0.7
+    });
+}
+
+/* The ink is one fade from Ink A to Ink B, pointed the same way as the screen.
+
+   It used to be a four-colour gradient fed the two ink colours, which put A at
+   two opposite corners and B at the other two — so a red-to-cyan palette came
+   out red in two corners with cyan between them, which is not a gradient, it
+   is a checkerboard. Every reference for this effect is a clean two-stop fade
+   with the dots carrying the transition, so that is what this is. */
+function tuneHalftoneInk(colorMaster, c, ctrl, w, h) {
+    if (!colorMaster) return;
+    if (!w) { try { w = colorMaster.width;  } catch (e) { w = 1920; } }
+    if (!h) { try { h = colorMaster.height; } catch (e) { h = 1080; } }
+    lgOklabRamp(colorMaster, lgRayColors(c), w, h,
+                num(ctrl.direction, 90), ctrl.field === 'Radial');
+}
+
+/* Ink Coverage is the threshold, and it is exposed rather than fixed because
+   it is the one number that decides whether the frame reads as a halftone or
+   as a solid block. Low values cut lower on the dot profile and leave more
+   ink. Edge Hardness is the softness band around the cut — the antialiasing. */
+function tuneHalftoneThreshold(cut, coverage, edge) {
+    var extract = findFx(cut, ['ADBE Extract']);
+    if (!extract) return;
+    LG.set(extract, 'Black Point',    3, coverage);
+    LG.set(extract, 'White Point',    4, 255);
+    LG.set(extract, 'Black Softness', 5, Math.max(2, (100 - edge) * 0.9));
+    LG.set(extract, 'White Softness', 6, 0);
+}
+
+/* Every shape is drawn to cover the same fraction of its cell — about 30%,
+   which is what the radial ramp's profile works out to.
+
+   Without that, Ink Coverage means something different for every shape. The
+   cross was the extreme case: four thin arms covering roughly 5% of the cell,
+   so its profile sat far below the threshold everywhere and the frame came out
+   as bare paper with a corner of dots. Sizes below are solved from each
+   shape's own area formula for a 30% fill, so one threshold reads the same
+   whichever shape is chosen.
+
+   Returns true when the cell is a ramp, so the caller knows it needs no blur. */
 function buildHalftoneCell(cellComp, shape, customText, dotSize) {
-    var r = dotSize * 0.3;
+    if (shape === 'Circle' || !shape) {
+        var dot = cellComp.layers.addSolid([0, 0, 0], 'Dot', Math.round(dotSize), Math.round(dotSize), 1, cellComp.duration);
+        var ramp = addFx(dot, ['ADBE Ramp']);
+        if (ramp) {
+            /* Reaching just past the cell corner is what lets a dot grow until
+               it touches its neighbours at full ink and vanish at none. */
+            LG.set(ramp, 'Start of Ramp', 1, [dotSize / 2, dotSize / 2]);
+            LG.set(ramp, 'Start Color',   2, [1, 1, 1]);
+            LG.set(ramp, 'End of Ramp',   3, [dotSize / 2 + dotSize * 0.72, dotSize / 2]);
+            LG.set(ramp, 'End Color',     4, [0, 0, 0]);
+            LG.set(ramp, 'Ramp Shape',    5, 2);      // 2 = Radial (probe grid 7)
+        }
+        return true;
+    }
 
     if (shape === 'Custom Text/Emoji') {
         var charStr = customText || '#';
@@ -3104,7 +3278,7 @@ function buildHalftoneCell(cellComp, shape, customText, dotSize) {
         textLayer.name = 'Custom Text';
         try {
             var txtDoc = textLayer.property('Source Text').value;
-            txtDoc.fontSize = dotSize * 0.7;
+            txtDoc.fontSize = dotSize * 0.95;
             txtDoc.fillColor = [1, 1, 1];
             txtDoc.applyFill = true;
             txtDoc.justification = ParagraphJustification.CENTER_JUSTIFY;
@@ -3115,37 +3289,46 @@ function buildHalftoneCell(cellComp, shape, customText, dotSize) {
         }
         var fillFx = addFx(textLayer, ['ADBE Fill']);
         if (fillFx) LG.set(fillFx, 'Color', null, [1, 1, 1]);
-        return textLayer;
+        return false;
     }
 
     var shapeLayer = cellComp.layers.addShape();
     shapeLayer.name = 'Dot';
     var gc = shapeLayer.property('Contents').addProperty('ADBE Vector Group').property('Contents');
-    var geo;
+    var geo, target = 0.30 * dotSize * dotSize;      // the area to hit
 
     if (shape === 'Square') {
+        // a^2 = target
+        var side = Math.sqrt(target);
         geo = gc.addProperty('ADBE Vector Shape - Rect');
-        LG.set(geo, 'Size', null, [r * 2, r * 2]);
+        LG.set(geo, 'Size', null, [side, side]);
     } else if (shape === 'Cross') {
+        /* A four-point star of outer R and inner ratio k has area 2*sqrt(2)*k*R^2.
+           At k = 0.40 that solves to R = sqrt(target / 1.131). */
+        var rCross = Math.sqrt(target / 1.131);
         geo = gc.addProperty('ADBE Vector Shape - Star');
         LG.set(geo, 'Type',         null, 1);          // star
         LG.set(geo, 'Points',       null, 4);
-        LG.set(geo, 'Inner Radius', null, r * 0.22);
-        LG.set(geo, 'Outer Radius', null, r);
+        LG.set(geo, 'Inner Radius', null, rCross * 0.40);
+        LG.set(geo, 'Outer Radius', null, rCross);
     } else if (shape === 'Triangle') {
+        // An equilateral triangle of circumradius R has area (3*sqrt(3)/4)*R^2.
+        var rTri = Math.sqrt(target / 1.299);
         geo = gc.addProperty('ADBE Vector Shape - Star');
         LG.set(geo, 'Type',         null, 2);          // polygon
         LG.set(geo, 'Points',       null, 3);
-        LG.set(geo, 'Outer Radius', null, r);
+        LG.set(geo, 'Outer Radius', null, rTri);
     } else {
+        // pi*r^2 = target
+        var rDot = Math.sqrt(target / Math.PI);
         geo = gc.addProperty('ADBE Vector Shape - Ellipse');
-        LG.set(geo, 'Size', null, [r * 2, r * 2]);
+        LG.set(geo, 'Size', null, [rDot * 2, rDot * 2]);
     }
 
     var fill = gc.addProperty('ADBE Vector Graphic - Fill');
     LG.set(fill, 'Color', null, [1, 1, 1]);
     try { shapeLayer.property('Transform').property('Position').setValue([dotSize / 2, dotSize / 2]); } catch (e) { }
-    return shapeLayer;
+    return false;
 }
 
 function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
@@ -4098,6 +4281,57 @@ function lgGlow(layer, amount, radiusScale) {
     return g;
 }
 
+/* Five Oklab-interpolated stops between the ends of a palette.
+
+   A Gradient Fill's "Colors" is a CUSTOM_VALUE property and setValue will not
+   take a plain array for it — that is the "gradient stops rejected" warning,
+   and the same silently-caught attempt has been sitting in buildOklabSmooth
+   all along. CC Toner is the way through: a black-to-white ramp carries the
+   shape, and Toner maps its five stops onto colours that scripting *can* set.
+   The interpolation still happens in Oklab, so a red-to-cyan fade still avoids
+   the brown middle that a straight sRGB line goes through. */
+function lgOklabRamp(layer, c, w, h, angleDeg, radial) {
+    if (!layer) return null;
+
+    var rad = (angleDeg || 0) * Math.PI / 180;
+    var cx = w / 2, cy = h / 2;
+    var reach = radial
+        ? Math.max(w, h) * 0.55
+        : (Math.abs(Math.cos(rad)) * w + Math.abs(Math.sin(rad)) * h) * 0.5;
+
+    var ramp = lgFx(layer, ['ADBE Ramp']);
+    if (ramp) {
+        if (radial) {
+            LG.set(ramp, 'Start of Ramp', 1, [cx, cy]);
+            LG.set(ramp, 'End of Ramp',   3, [cx + reach, cy]);
+        } else {
+            LG.set(ramp, 'Start of Ramp', 1, [cx - Math.cos(rad) * reach, cy - Math.sin(rad) * reach]);
+            LG.set(ramp, 'End of Ramp',   3, [cx + Math.cos(rad) * reach, cy + Math.sin(rad) * reach]);
+        }
+        LG.set(ramp, 'Start Color', 2, [0, 0, 0]);
+        LG.set(ramp, 'End Color',   4, [1, 1, 1]);
+        LG.set(ramp, 'Ramp Shape',  5, radial ? 2 : 1);
+    }
+
+    var toner = lgFx(layer, ['CC Toner']);
+    if (toner) {
+        var n = c.length, segs = (n > 1) ? n - 1 : 1, i, t, seg, idx, stops = [];
+        for (i = 0; i < 5; i++) {
+            t = i / 4;
+            seg = t * segs;
+            idx = Math.min(Math.floor(seg), segs - 1);
+            stops.push(interpolateOklab(c[idx % n], c[(idx + 1) % n], seg - idx));
+        }
+        LG.set(toner, 'Tones',      1, 3);          // 3 = Pentone
+        LG.set(toner, 'Shadows',    6, stops[0]);
+        LG.set(toner, 'Darktones',  5, stops[1]);
+        LG.set(toner, 'Midtones',   4, stops[2]);
+        LG.set(toner, 'Brights',    3, stops[3]);
+        LG.set(toner, 'Highlights', 2, stops[4]);
+    }
+    return ramp;
+}
+
 /* Four colours at the corners, each drifting on its own phase. Corners rather
    than inset points, so the gradient still covers the frame at full drift. */
 function lgGradientPoints(fx, c, w, h, speed) {
@@ -4316,9 +4550,14 @@ function buildCellularMosaic(comp, c, ctrl, w, h, dur) {
    highlight, so there was almost no luminance left to take. */
 function tuneCellularMosaic(s, c, ctrl) {
     if (!s) return;
+    /* Probe grid 5 renders all 13 options. Tubular (5), Pillow (6) and Static
+       Pillow (11) come out as flat grey at any size worth using, so they are
+       not offered — a menu entry that produces nothing is worse than a
+       shorter menu. */
     var patternMap = {
-        'Bubbles': 1, 'Crystals': 2, 'Plates': 3,
-        'Crystallize': 4, 'Tubular': 5, 'Pillow': 6
+        'Bubbles': 1, 'Crystals': 2, 'Plates': 3, 'Crystallize': 4,
+        'Static Plates': 7, 'Static Crystals': 8, 'Static Crystallize': 9,
+        'Mixed Crystals': 12, 'Static Mixed Crystals': 13
     };
     var pv    = patternMap[ctrl.pattern] || 1;
     var cells = num(ctrl.cells, 50);

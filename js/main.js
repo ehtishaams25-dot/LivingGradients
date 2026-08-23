@@ -203,10 +203,20 @@ function renderLibrary() {
       card.dataset.type = preset.id;
 
       card.innerHTML = `
-        <div class="card-preview ${preset.cssClass}"></div>
+        <div class="card-preview">
+          <canvas class="card-canvas" width="168" height="120" data-preview-type="${preset.id}"></canvas>
+        </div>
         <span class="card-label">${preset.label}</span>
         <span class="batch-tick">✓</span>
       `;
+
+      /* Each card previews its own palette rather than the one currently in
+         the inspector — the grid is for choosing between gradients, and they
+         do not all mean the same thing by "colour 3". */
+      const cardCanvas = card.querySelector('.card-canvas');
+      if (typeof paintPreview === 'function') {
+        paintPreview(cardCanvas, preset.id, preset.defaultColors);
+      }
 
       card.addEventListener('click', function () {
         // In batch mode a click adds to the set rather than switching the
@@ -221,7 +231,10 @@ function renderLibrary() {
         this.classList.add('selected');
         selectedType = preset.id;
 
-        if (preset.defaultColors && preset.defaultColors.length === 4) {
+        /* Not `=== 4`. Halftone has three slots and Sunburst three, and
+           testing for exactly four meant clicking either card loaded no
+           palette at all and left the previous gradient's swatches on screen. */
+        if (preset.defaultColors && preset.defaultColors.length) {
           state.colors = [...preset.defaultColors];
           renderColorSlots(selectedType);
           if (typeof triggerColorUpdate === 'function') {
@@ -234,6 +247,7 @@ function renderLibrary() {
           if (inspectorPreviewMini) {
             inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
           }
+          paintInspectorPreview();
           if (typeof tabEdit !== 'undefined' && tabEdit) {
              tabEdit.click();
           }
@@ -364,6 +378,7 @@ renderControls(selectedType);
     state.colors = [...preset.defaultColors];
   }
   renderColorSlots(selectedType);
+  paintInspectorPreview();
 })();
 
 const backToBrowseBtn = document.getElementById('back-to-browse-btn');
@@ -524,6 +539,7 @@ setInterval(() => {
           if (typeChanged) {
             renderControls(selectedType);
             lastRenderedType = selectedType;
+            paintInspectorPreview();
           }
 
           // Update UI title and class based on library preset
@@ -1227,8 +1243,18 @@ function paintPreviewVars() {
   }
 }
 
+/* The inspector's own preview, which follows the live palette rather than the
+   library defaults the cards show. */
+function paintInspectorPreview() {
+  const cv = document.getElementById('inspector-preview');
+  if (cv && typeof paintPreview === 'function') {
+    paintPreview(cv, selectedType, state.colors);
+  }
+}
+
 function triggerColorUpdate() {
   paintPreviewVars();
+  paintInspectorPreview();
 
   if (typeof CSInterface !== 'undefined') {
     const cs = new CSInterface();

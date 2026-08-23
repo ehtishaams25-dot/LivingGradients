@@ -153,11 +153,15 @@ const GRADIENT_CONTROLS = {
   Halftone: [
     { id: 'shape', label: 'Dot Shape', options: ['Circle', 'Square', 'Triangle', 'Cross', 'Custom Text/Emoji'], default: 'Circle', type: 'select' },
     { id: 'customText', label: 'Custom Symbol', type: 'text', default: '💀' },
-    { id: 'dotSize', label: 'Dot Size', min: 10, max: 200, step: 2, default: 40, type: 'slider' },
-    { id: 'contrast', label: 'Dot Contrast',  min: 20, max: 255, step: 5, default: 128, type: 'slider' },
-    { id: 'angle',    label: 'Screen Angle',  min: 0,  max: 90,  step: 1, default: 45,  type: 'slider' },
-    { id: 'edge',     label: 'Edge Hardness', min: 1,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'speed',    label: 'Gradient Speed',min: 1,  max: 100, step: 1, default: 30,  type: 'slider' }
+    { id: 'field',     label: 'Gradient Shape', options: ['Linear', 'Radial', 'Organic'], default: 'Linear', type: 'select' },
+    { id: 'direction', label: 'Gradient Angle', min: 0,  max: 360, step: 1, default: 90,  type: 'slider' },
+    { id: 'dotSize',   label: 'Dot Size',       min: 4,  max: 120, step: 1, default: 20,  type: 'slider' },
+    { id: 'coverage',  label: 'Ink Coverage',   min: 10, max: 245, step: 1, default: 128, type: 'slider' },
+    { id: 'contrast',  label: 'Tone Spread',    min: 20, max: 255, step: 5, default: 128, type: 'slider' },
+    { id: 'warp',      label: 'Flow Warp',      min: 0,  max: 900, step: 10, default: 260, type: 'slider' },
+    { id: 'angle',     label: 'Screen Angle',   min: 0,  max: 90,  step: 1, default: 45,  type: 'slider' },
+    { id: 'edge',      label: 'Edge Hardness',  min: 1,  max: 100, step: 1, default: 82,  type: 'slider' },
+    { id: 'speed',     label: 'Flow Speed',     min: 0,  max: 100, step: 1, default: 12,  type: 'slider' }
   ],
   AsciiMatrix: [
     { id: 'gridSize', label: 'Grid Size', min: 10, max: 150, step: 2, default: 40, type: 'slider' },
@@ -211,7 +215,8 @@ const GRADIENT_CONTROLS = {
   ],
   CellularMosaic: [
     { id: 'pattern',    label: 'Pattern Type',
-      options: ['Bubbles', 'Crystals', 'Plates', 'Crystallize', 'Tubular', 'Pillow'],
+      options: ['Bubbles', 'Crystals', 'Plates', 'Crystallize', 'Static Plates',
+                'Static Crystals', 'Static Crystallize', 'Mixed Crystals', 'Static Mixed Crystals'],
       default: 'Bubbles', type: 'select' },
     { id: 'cells',      label: 'Cell Density',    min: 5, max: 200, step: 1, default: 50,  type: 'slider' },
     { id: 'dispersion', label: 'Dispersion',      min: 0, max: 100, step: 1, default: 50,  type: 'slider' },
