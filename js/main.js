@@ -8,6 +8,79 @@ const state = {
   colors: ['#FF6B35', '#FF3366', '#CC00FF', '#0033FF']
 };
 
+/* ── COLOUR SLOTS ────────────────────────────────────────────────────
+   The number of swatches is a property of the gradient, not of the panel.
+   Everything below goes through setColors()/renderColorSlots() so that a
+   three-colour gradient never leaves a stale fourth swatch on screen, and
+   nothing has to know the count in advance. */
+
+function colorCountFor(type) {
+  const preset = (typeof GRADIENT_LIBRARY !== 'undefined')
+    ? GRADIENT_LIBRARY.find(g => g.id === type) : null;
+  if (preset && preset.defaultColors && preset.defaultColors.length) {
+    return preset.defaultColors.length;
+  }
+  return 4;
+}
+
+function renderColorSlots(type) {
+  const row = document.getElementById('color-row');
+  if (!row) return;
+
+  const roles = (typeof colorRolesFor === 'function') ? colorRolesFor(type) : [null, null, null, null];
+  const count = colorCountFor(type);
+
+  row.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'color-cell';
+
+    const slot = document.createElement('div');
+    slot.className = 'color-slot';
+
+    const pick = document.createElement('div');
+    pick.className = 'color-pick';
+    pick.id = 'color' + (i + 1);
+    pick.dataset.index = String(i);
+    pick.style.backgroundColor = state.colors[i] || '#000000';
+    pick.title = roles[i] ? roles[i] : ('Colour ' + (i + 1));
+
+    slot.appendChild(pick);
+    cell.appendChild(slot);
+
+    if (roles[i]) {
+      const caption = document.createElement('div');
+      caption.className = 'color-caption';
+      caption.textContent = roles[i];
+      cell.appendChild(caption);
+    }
+
+    row.appendChild(cell);
+  }
+}
+
+/* Replace the palette. Extra values are dropped, missing ones are filled by
+   cycling what was given, so a mood preset built for four still reads sensibly
+   on a three-slot gradient. */
+function setColors(colors, count) {
+  const n = count || state.colors.length || 4;
+  const next = [];
+  for (let i = 0; i < n; i++) {
+    next.push((colors && colors.length) ? (colors[i] || colors[i % colors.length]) : '#000000');
+  }
+  state.colors = next;
+  paintColorSlots();
+  triggerColorUpdate();
+}
+
+function paintColorSlots() {
+  const row = document.getElementById('color-row');
+  if (!row) return;
+  const picks = row.querySelectorAll('.color-pick');
+  if (picks.length !== state.colors.length) { renderColorSlots(selectedType); return; }
+  picks.forEach((p, i) => { p.style.backgroundColor = state.colors[i]; });
+}
+
 // ── MOOD PRESETS ──
 const MOODS = {
   sunset: ['#FF6B35', '#FF3366', '#FF8C00', '#FF4500'],
@@ -79,14 +152,7 @@ document.getElementById('load-preset-btn').addEventListener('click', function ()
   const colors = presets[name];
   if (!colors) { alert('Preset not found.'); return; }
 
-  const pickers = document.querySelectorAll('.color-pick');
-  pickers.forEach((p, i) => {
-    p.value = colors[i] || colors[0];
-    state.colors[i] = colors[i] || colors[0];
-  });
-
-  // Live update to AE
-  triggerColorUpdate();
+  setColors(colors);
 });
 
 // ── DELETE PRESET ──
@@ -157,9 +223,7 @@ function renderLibrary() {
 
         if (preset.defaultColors && preset.defaultColors.length === 4) {
           state.colors = [...preset.defaultColors];
-          document.querySelectorAll('.color-pick').forEach((p, i) => {
-            p.style.backgroundColor = state.colors[i];
-          });
+          renderColorSlots(selectedType);
           if (typeof triggerColorUpdate === 'function') {
             triggerColorUpdate();
           }
@@ -252,6 +316,8 @@ if (batchGenerateBtn) {
       grain:    parseFloat(document.getElementById('grain-slider')?.value) || 0,
       glow:     parseFloat(document.getElementById('glow-slider')?.value) || 0,
       colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
+      posterize: document.getElementById('posterize-toggle')?.checked || false,
+      posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
     bpmSync:  document.getElementById('bpm-sync-toggle')?.checked || false,
       bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120
     };
@@ -288,6 +354,17 @@ updateBatchCount();
 
 // Init controls
 renderControls(selectedType);
+
+/* The starting palette belongs to the starting gradient. Reading it from the
+   library rather than hard-coding four hexes in `state` is what lets the count
+   differ per type without the panel and the builder disagreeing. */
+(function initColors() {
+  const preset = GRADIENT_LIBRARY.find(g => g.id === selectedType);
+  if (preset && preset.defaultColors && preset.defaultColors.length) {
+    state.colors = [...preset.defaultColors];
+  }
+  renderColorSlots(selectedType);
+})();
 
 const backToBrowseBtn = document.getElementById('back-to-browse-btn');
 
@@ -366,32 +443,88 @@ if (tabBrowse && tabEdit) {
 }
 
 // ── TWO-WAY SYNC POLLING ──
+/* This poller reads the selected layer every 400ms and mirrors it into the
+   inspector. Two things made it fight the user for the panel.
+
+   The state it compares is the JSON stamped on the layer, and a live update
+   rewrites that JSON on every slider move. So the poller saw "the layer
+   changed", tore down the controls and built new ones — while the pointer was
+   still holding one of them. That is the jumpiness: the element being dragged
+   stops existing halfway through the drag.
+
+   Two guards. `inspectorBusy` says hands off while the user is actually
+   touching something, and `lastSentState` lets the poller recognise its own
+   echo. On top of that the controls are only rebuilt when the gradient *type*
+   changes; a change of values now writes into the existing inputs instead of
+   replacing them. */
 let lastGradientState = '';
+let lastRenderedType = null;
+
+let inspectorBusy = false;
+let inspectorIdleTimer = null;
+
+function markInspectorBusy() {
+  inspectorBusy = true;
+  if (inspectorIdleTimer) clearTimeout(inspectorIdleTimer);
+}
+
+function markInspectorIdle(delay) {
+  if (inspectorIdleTimer) clearTimeout(inspectorIdleTimer);
+  inspectorIdleTimer = setTimeout(() => {
+    inspectorIdleTimer = null;
+    inspectorBusy = false;
+  }, delay || 700);
+}
+
+['pointerdown', 'focusin', 'keydown'].forEach(evt =>
+  viewEdit.addEventListener(evt, markInspectorBusy));
+['pointerup', 'pointercancel', 'focusout', 'keyup'].forEach(evt =>
+  viewEdit.addEventListener(evt, () => markInspectorIdle()));
+
+/* Push polled values into the controls that are already on screen. Replacing
+   the inputs is what broke dragging, so nothing here creates an element. */
+function applyPolledControls(controls) {
+  if (!controls) return;
+  Object.keys(controls).forEach(key => {
+    const el = document.getElementById('ctrl-' + key);
+    if (!el || el === document.activeElement) return;
+    el.value = controls[key];
+    if (el.type === 'range') {
+      if (typeof paintRange === 'function') paintRange(el);
+      const num = document.getElementById('num-' + key);
+      if (num && num !== document.activeElement) num.value = el.value;
+    }
+  });
+}
+
 setInterval(() => {
   if (typeof CSInterface === 'undefined') return;
+  if (inspectorBusy || liveInFlight || livePending) return;
   const cs = new CSInterface();
   cs.evalScript('getSelectedGradientState()', (result) => {
+    if (inspectorBusy) return;
+    if (result === lastSentState) return;      // our own echo, not a real change
     if (result && result !== 'undefined' && result !== '' && result !== lastGradientState) {
       lastGradientState = result;
       try {
         const stateObj = JSON.parse(result);
         if (stateObj.type) {
+          const typeChanged = stateObj.type !== lastRenderedType;
           selectedType = stateObj.type;
           
-          if (stateObj.colors && stateObj.colors.length === 4) {
+          if (stateObj.colors && stateObj.colors.length) {
             state.colors = [...stateObj.colors];
-            document.querySelectorAll('.color-pick').forEach((p, i) => {
-              p.value = state.colors[i];
-            });
-            // Update css variables
-            document.documentElement.style.setProperty('--c1', state.colors[0]);
-            document.documentElement.style.setProperty('--c2', state.colors[1]);
-            document.documentElement.style.setProperty('--c3', state.colors[2]);
-            document.documentElement.style.setProperty('--c4', state.colors[3]);
+            if (typeChanged) renderColorSlots(selectedType);
+            else paintColorSlots();
+            paintPreviewVars();
           }
 
-          // Render controls for this type
-          renderControls(selectedType);
+          /* Only a different gradient needs a different set of controls.
+             Rebuilding them for a value change is what threw the drag away. */
+          if (typeChanged) {
+            renderControls(selectedType);
+            lastRenderedType = selectedType;
+          }
 
           // Update UI title and class based on library preset
           const preset = GRADIENT_LIBRARY.find(p => p.id === selectedType);
@@ -404,20 +537,16 @@ setInterval(() => {
 
           // Set control values
           if (stateObj.controls) {
-            setTimeout(() => {
-              Object.keys(stateObj.controls).forEach(key => {
-                const el = document.getElementById('ctrl-' + key);
-                if (el) {
-                  el.value = stateObj.controls[key];
-                  const valSpan = document.getElementById('val-' + key);
-                  if (valSpan) valSpan.textContent = el.value;
-                }
-              });
-            }, 50); // small delay to allow renderControls to finish
+            if (typeChanged) {
+              // renderControls has just replaced the DOM; let it settle first.
+              setTimeout(() => applyPolledControls(stateObj.controls), 50);
+            } else {
+              applyPolledControls(stateObj.controls);
+            }
           }
 
-          // Switch to Edit tab
-          if (!tabEdit.classList.contains('active')) {
+          // Switch to Edit tab — only when the selection genuinely changed.
+          if (typeChanged && !tabEdit.classList.contains('active')) {
              tabEdit.click();
              const dot = document.getElementById('edit-indicator');
              if (dot) {
@@ -435,54 +564,77 @@ setInterval(() => {
 }, 400);
 
 // ── ACCORDION BEHAVIOR ──
+/* The wrapper is built once, at load, from the section's element children.
+   Building it on the first click - and dragging the whitespace text nodes
+   along with it - is what made the first collapse reflow the inspector. */
 document.querySelectorAll('.section-header').forEach(header => {
+  const section = header.parentElement;
+  if (!section) return;
+
   header.style.cursor = 'pointer';
   header.style.userSelect = 'none';
   header.style.position = 'relative';
-  
-  // Add accordion arrow
+
   const arrow = document.createElement('span');
-  arrow.innerHTML = '&#9660;'; // Down arrow
+  arrow.innerHTML = '&#9660;';
   arrow.style.position = 'absolute';
   arrow.style.right = '0';
   arrow.style.fontSize = '9px';
   arrow.style.transition = 'transform 0.2s';
   header.appendChild(arrow);
 
-  header.addEventListener('click', function() {
-    const section = this.parentElement;
+  let content = null;
+  for (let i = 0; i < section.children.length; i++) {
+    if (section.children[i].classList.contains('section-content')) {
+      content = section.children[i];
+      break;
+    }
+  }
+  if (!content) {
+    content = document.createElement('div');
+    content.className = 'section-content';
+    Array.prototype.slice.call(section.children).forEach(child => {
+      if (child !== header) content.appendChild(child);
+    });
+    section.appendChild(content);
+  }
+
+  /* Only the chevron is set from here. The panel's height is animated in CSS
+     off the `collapsed` class, so nothing writes an inline display. */
+  const paint = () => {
+    const collapsed = section.classList.contains('collapsed');
+    arrow.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+  };
+  paint();
+
+  header.addEventListener('click', () => {
     section.classList.toggle('collapsed');
-    
-    // Find content div or all subsequent siblings
-    let content = section.querySelector('.section-content');
-    if (!content) {
-      // Wrap children (except header) in a content div on first click if not present
-      content = document.createElement('div');
-      content.className = 'section-content';
-      while (this.nextSibling) {
-        content.appendChild(this.nextSibling);
-      }
-      section.appendChild(content);
-    }
-    
-    if (section.classList.contains('collapsed')) {
-      content.style.display = 'none';
-      arrow.style.transform = 'rotate(-90deg)';
-    } else {
-      content.style.display = 'block';
-      arrow.style.transform = 'rotate(0deg)';
-    }
+    paint();
   });
 });
 
-// ── BIND SLIDERS TO REALTIME ──
-// Hook up any changes in the inspector to triggerRealtimeUpdate
-viewEdit.addEventListener('input', (e) => {
-  if (e.target.classList.contains('slider') || e.target.classList.contains('color-pick')) {
-    if (typeof window.triggerRealtimeUpdate === 'function') {
-      window.triggerRealtimeUpdate();
-    }
-  }
+// ── BIND CONTROLS TO REALTIME ──
+/* This used to test for a `.slider` class that nothing in the panel has ever
+   carried, so the global sliders and the toggles pushed nothing to After
+   Effects at all. Match the classes that actually exist, and listen for
+   `change` too so selects and checkboxes count.
+
+   renderControls also calls triggerRealtimeUpdate directly for the per-type
+   sliders, so a drag can raise both; the debounce inside it collapses them
+   into one trip. */
+const LIVE_CLASSES = ['ctrl-range', 'ctrl-num', 'custom-select', 'custom-input', 'color-pick'];
+
+function isLiveControl(el) {
+  if (!el || !el.classList) return false;
+  if (el.type === 'checkbox') return true;
+  return LIVE_CLASSES.some(cls => el.classList.contains(cls));
+}
+
+['input', 'change'].forEach(evt => {
+  viewEdit.addEventListener(evt, (e) => {
+    if (!isLiveControl(e.target)) return;
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  });
 });
 
 
@@ -522,6 +674,14 @@ function bindRangeAndNumber(rangeId, numId) {
 bindRangeAndNumber('grain-slider', 'num-grain');
 bindRangeAndNumber('glow-slider', 'num-glow');
 
+
+const posterizeToggle = document.getElementById('posterize-toggle');
+const posterizeRow = document.getElementById('posterize-input-row');
+if (posterizeToggle && posterizeRow) {
+  posterizeToggle.addEventListener('change', (e) => {
+    posterizeRow.style.display = e.target.checked ? 'flex' : 'none';
+  });
+}
 
 const bpmToggle = document.getElementById('bpm-sync-toggle');
 const bpmInputRow = document.getElementById('bpm-input-row');
@@ -753,10 +913,10 @@ document.getElementById('export-svg-btn')?.addEventListener('click', function ()
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
   <defs>
     <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${state.colors[0]}" />
-      <stop offset="33%" stop-color="${state.colors[1]}" />
-      <stop offset="66%" stop-color="${state.colors[2]}" />
-      <stop offset="100%" stop-color="${state.colors[3]}" />
+      ${state.colors.map((c, i) => {
+        const at = state.colors.length > 1 ? (i / (state.colors.length - 1)) * 100 : 0;
+        return `<stop offset="${at.toFixed(0)}%" stop-color="${c}" />`;
+      }).join('')}
     </linearGradient>
   </defs>
   <rect width="100%" height="100%" fill="url(#lg)" />
@@ -780,29 +940,37 @@ try {
 }
 
 // ── NATIVE COLOR PICKER LOGIC ──
-document.querySelectorAll('.color-pick').forEach((picker, i) => {
-  picker.addEventListener('click', function(e) {
-    if (typeof CSInterface !== 'undefined') {
-      e.preventDefault();
-      const cs = new CSInterface();
-      cs.evalScript(`openNativeColorPicker('${state.colors[i]}')`, function(res) {
-        if (res && res !== "-1") {
-          state.colors[i] = res;
-          picker.style.backgroundColor = res;
-          triggerColorUpdate();
-          if (typeof window.triggerRealtimeUpdate === 'function') {
-            window.triggerRealtimeUpdate();
-          }
-        }
-      });
-    }
+/* Delegated from the row rather than bound to each swatch: the swatches are
+   rebuilt every time the gradient changes, and per-element listeners would go
+   with them. */
+const colorRowEl = document.getElementById('color-row');
+if (colorRowEl) {
+  colorRowEl.addEventListener('click', function (e) {
+    const picker = e.target.closest('.color-pick');
+    if (!picker || typeof CSInterface === 'undefined') return;
+    e.preventDefault();
+    const i = parseInt(picker.dataset.index, 10);
+    if (isNaN(i)) return;
+
+    new CSInterface().evalScript(`openNativeColorPicker('${state.colors[i]}')`, function (res) {
+      if (res && res !== '-1') {
+        state.colors[i] = res;
+        picker.style.backgroundColor = res;
+        triggerColorUpdate();
+        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+      }
+    });
   });
 
-  picker.addEventListener('input', function (e) {
+  colorRowEl.addEventListener('input', function (e) {
+    const picker = e.target.closest('.color-pick');
+    if (!picker) return;
+    const i = parseInt(picker.dataset.index, 10);
+    if (isNaN(i)) return;
     state.colors[i] = e.target.value.toUpperCase();
     triggerColorUpdate();
   });
-});
+}
 
 // ── EXTRACT FROM IMAGE ──
 const uploadImageBtn = document.getElementById('upload-image-btn');
@@ -885,28 +1053,21 @@ function extractColorsFromImage(img) {
   }
 
   // Apply to UI
-  for (let i = 0; i < 4; i++) {
+  const extracted = [];
+  for (let i = 0; i < picked.length; i++) {
     const rStr = picked[i].r.toString(16).padStart(2, '0');
     const gStr = picked[i].g.toString(16).padStart(2, '0');
     const bStr = picked[i].b.toString(16).padStart(2, '0');
-    const hex = '#' + (rStr + gStr + bStr).toUpperCase();
-    state.colors[i] = hex;
-    const picker = document.getElementById('color' + (i + 1));
-    if (picker) picker.style.backgroundColor = hex;
+    extracted.push('#' + (rStr + gStr + bStr).toUpperCase());
   }
-
-  triggerColorUpdate();
+  setColors(extracted);
 }
 
 // ── SHUFFLE ──
 document.getElementById('shuffle-btn').addEventListener('click', function () {
-  const pickers = document.querySelectorAll('.color-pick');
-  pickers.forEach((p, i) => {
-    const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-    p.style.backgroundColor = randomColor;
-    state.colors[i] = randomColor;
-  });
-  triggerColorUpdate();
+  const shuffled = state.colors.map(() =>
+    '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase());
+  setColors(shuffled);
 });
 
 // ── MOOD PRESETS ──
@@ -914,14 +1075,7 @@ document.getElementById('mood-select').addEventListener('change', function () {
   const mood = this.value;
   if (!mood || !MOODS[mood]) return;
 
-  const colors = MOODS[mood];
-  const pickers = document.querySelectorAll('.color-pick');
-  pickers.forEach((p, i) => {
-    p.style.backgroundColor = colors[i] || colors[0];
-    state.colors[i] = colors[i] || colors[0];
-  });
-
-  triggerColorUpdate();
+  setColors(MOODS[mood]);
 
   // Reset select
   setTimeout(() => { this.value = ''; }, 100);
@@ -948,6 +1102,8 @@ document.getElementById('generate-btn').addEventListener('click', function () {
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
     glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
     colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
+    posterize: document.getElementById('posterize-toggle')?.checked || false,
+    posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
     bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
     bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
     trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
@@ -1005,34 +1161,74 @@ function setStatus(el, msg, type) {
   el.className = el.dataset.baseClass + (type ? ' ' + type : '');
 }
 
-// ── REALTIME: SPEED + DIRECTION ──
-window.triggerRealtimeUpdate = function () {
-  const vals = getControlValues(selectedType);
-  if (typeof CSInterface !== 'undefined') {
-    const cs = new CSInterface();
-    const fullParams = {
-        type: selectedType,
-        colors: state.colors,
-        controls: vals,
-        grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
-        glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
-        colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
-        bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
-        bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
-        trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
-        trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
-    };
-    cs.evalScript(`updateSilkFlareWave(${esArg(fullParams)})`);
+// ── REALTIME ──
+/* Dragging a slider fires `input` on every pixel of travel. Sending each one
+   straight down evalScript queues them faster than After Effects can drain
+   the queue, and the comp ends up seconds behind the pointer - which is what
+   "the changes aren't real time" actually was.
+
+   So: coalesce. At most one call is in flight; while it is, only the newest
+   parameter set is remembered, and it goes out the moment the previous call
+   returns. The comp tracks the slider instead of replaying it. */
+let liveInFlight = false;
+let livePending = false;
+let liveTimer = null;
+/* Exactly what the JSX stamps onto the layer, so the sync poller can tell our
+   own write apart from a real edit made in After Effects. */
+let lastSentState = '';
+
+function collectLiveParams() {
+  return {
+    type: selectedType,
+    colors: state.colors,
+    controls: Object.assign(getControlValues(selectedType), getTrackingValues()),
+    grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
+    glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
+    colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
+    posterize: document.getElementById('posterize-toggle')?.checked || false,
+    posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
+    bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
+    bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
+    trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
+    trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
+  };
+}
+
+function sendLiveUpdate() {
+  if (typeof CSInterface === 'undefined') {
+    console.log('LIVE PARAMS:', collectLiveParams());
+    return;
   }
+  if (liveInFlight) { livePending = true; return; }
+
+  liveInFlight = true;
+  const payload = collectLiveParams();
+  lastSentState = JSON.stringify(payload);
+  new CSInterface().evalScript(`updateGradientLive(${esArg(payload)})`, function () {
+    liveInFlight = false;
+    if (livePending) { livePending = false; sendLiveUpdate(); }
+  });
+}
+
+window.triggerRealtimeUpdate = function () {
+  if (liveTimer) clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => { liveTimer = null; sendLiveUpdate(); }, 60);
 };
 
 // ── REALTIME: COLORS ──
+/* The card previews are CSS and always want four stops. A palette with fewer
+   cycles to fill them rather than leaving a variable undefined, which would
+   render the preview transparent. */
+function paintPreviewVars() {
+  const c = state.colors;
+  if (!c.length) return;
+  for (let i = 0; i < 4; i++) {
+    document.documentElement.style.setProperty('--c' + (i + 1), c[i % c.length]);
+  }
+}
+
 function triggerColorUpdate() {
-  // Update CSS Variables for Live Previews
-  document.documentElement.style.setProperty('--c1', state.colors[0]);
-  document.documentElement.style.setProperty('--c2', state.colors[1]);
-  document.documentElement.style.setProperty('--c3', state.colors[2]);
-  document.documentElement.style.setProperty('--c4', state.colors[3]);
+  paintPreviewVars();
 
   if (typeof CSInterface !== 'undefined') {
     const cs = new CSInterface();

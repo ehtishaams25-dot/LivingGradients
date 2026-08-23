@@ -1,0 +1,273 @@
+Living Gradients — effect probe
+AE version : 26.0x67
+Language   : en_IN
+Date       : Sun Aug 23 2026 19:08:46 GMT+0530
+
+"clamps at" is the highest value the parameter accepted. A small
+number means the parameter is a dropdown and that is its option
+count. A large one means it is an ordinary slider.
+
+### Fractal Noise  {ADBE Fractal Noise}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Fractal Type                      ADBE Fractal Noise-0001           1D           20   <-- dropdown, 20 options
+    2    Noise Type                        ADBE Fractal Noise-0002           1D           4   <-- dropdown, 4 options
+    3    Invert                            ADBE Fractal Noise-0003           1D           1   <-- dropdown, 1 options
+    4    Contrast                          ADBE Fractal Noise-0004           1D           64
+    5    Brightness                        ADBE Fractal Noise-0005           1D           64
+    6    Overflow                          ADBE Fractal Noise-0006           1D           4   <-- dropdown, 4 options
+    7    Transform                         ADBE Fractal Noise-0007           group/none   
+    8    Rotation                          ADBE Fractal Noise-0008           1D           64
+    9    Uniform Scaling                   ADBE Fractal Noise-0009           1D           1   <-- dropdown, 1 options
+    10   Scale                             ADBE Fractal Noise-0010           1D           64
+    11   Scale Width                       ADBE Fractal Noise-0011           1D           64
+    12   Scale Height                      ADBE Fractal Noise-0012           1D           64
+    13   Offset Turbulence                 ADBE Fractal Noise-0013           2D spatial   
+    14   Perspective Offset                ADBE Fractal Noise-0031           1D           1   <-- dropdown, 1 options
+    15                                     ADBE Fractal Noise-0014           group/none   
+    16   Complexity                        ADBE Fractal Noise-0015           1D           20   <-- dropdown, 20 options
+    17   Sub Settings                      ADBE Fractal Noise-0016           group/none   
+    18   Sub Influence (%)                 ADBE Fractal Noise-0017           1D           64
+    19   Sub Scaling                       ADBE Fractal Noise-0018           1D           
+    20   Sub Rotation                      ADBE Fractal Noise-0019           1D           64
+    21   Sub Offset                        ADBE Fractal Noise-0020           2D spatial   
+    22   Center Subscale                   ADBE Fractal Noise-0021           1D           1   <-- dropdown, 1 options
+    23                                     ADBE Fractal Noise-0022           group/none   
+    24   Evolution                         ADBE Fractal Noise-0023           1D           64
+    25   Evolution Options                 ADBE Fractal Noise-0024           group/none   
+    26   Cycle Evolution                   ADBE Fractal Noise-0025           1D           1   <-- dropdown, 1 options
+    27   Cycle (in Revolutions)            ADBE Fractal Noise-0026           1D           64
+    28   Random Seed                       ADBE Fractal Noise-0027           1D           64
+    29   Random Seed                       ADBE Fractal Noise-0028           group/none   
+    30   Opacity                           ADBE Fractal Noise-0029           1D           64
+    31   Blending Mode                     ADBE Fractal Noise-0030           1D           21   <-- dropdown, 21 options
+    32   Compositing Options               ADBE Effect Built In Params       ?            
+
+### Turbulent Displace  {ADBE Turbulent Displace}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Displacement                      ADBE Turbulent Displace-0001      1D           11   <-- dropdown, 11 options
+    2    Amount                            ADBE Turbulent Displace-0002      1D           64
+    3    Size                              ADBE Turbulent Displace-0003      1D           
+    4    Offset (Turbulence)               ADBE Turbulent Displace-0004      2D spatial   
+    5    Complexity                        ADBE Turbulent Displace-0005      1D           10   <-- dropdown, 10 options
+    6    Evolution                         ADBE Turbulent Displace-0006      1D           64
+    7    Evolution Options                 ADBE Turbulent Displace-0007      group/none   
+    8    Cycle Evolution                   ADBE Turbulent Displace-0008      1D           1   <-- dropdown, 1 options
+    9    Cycle (in Revolutions)            ADBE Turbulent Displace-0009      1D           64
+    10   Random Seed                       ADBE Turbulent Displace-0010      1D           64
+    11   Random Seed                       ADBE Turbulent Displace-0011      group/none   
+    12   Pinning                           ADBE Turbulent Displace-0012      1D           17   <-- dropdown, 17 options
+    13   Resize Layer                      ADBE Turbulent Displace-0013      1D           1   <-- dropdown, 1 options
+    14   Antialiasing for Best Quality     ADBE Turbulent Displace-0014      1D           2   <-- dropdown, 2 options
+    15   Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC Toner  {CC Toner}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Tones                             CC Toner-0005                     1D           5   <-- dropdown, 5 options
+    2    Highlights                        CC Toner-0001                     colour       
+    3    Brights                           CC Toner-0006                     colour       
+    4    Midtones                          CC Toner-0002                     colour       
+    5    Darktones                         CC Toner-0007                     colour       
+    6    Shadows                           CC Toner-0003                     colour       
+    7    Blend w. Original                 CC Toner-0004                     1D           1   <-- dropdown, 1 options
+    8    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Cell Pattern  {ADBE Cell Pattern}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Cell Pattern                      ADBE Cell Pattern-0001            1D           13   <-- dropdown, 13 options
+    2    Invert                            ADBE Cell Pattern-0002            1D           1   <-- dropdown, 1 options
+    3    Contextual Slider                 ADBE Cell Pattern-0003            1D           64
+    4    Overflow                          ADBE Cell Pattern-0004            1D           3   <-- dropdown, 3 options
+    5    Disperse                          ADBE Cell Pattern-0005            1D           1   <-- dropdown, 1 options
+    6    Size                              ADBE Cell Pattern-0006            1D           
+    7    Offset                            ADBE Cell Pattern-0007            2D spatial   
+    8    Tiling Options                    ADBE Cell Pattern-0008            group/none   
+    9    Enable Tiling                     ADBE Cell Pattern-0009            1D           1   <-- dropdown, 1 options
+    10   Cells Horizontal                  ADBE Cell Pattern-0010            1D           64
+    11   Cells Vertical                    ADBE Cell Pattern-0011            1D           64
+    12   Cells Vertical                    ADBE Cell Pattern-0012            group/none   
+    13   Evolution                         ADBE Cell Pattern-0013            1D           64
+    14   Evolution Options                 ADBE Cell Pattern-0014            group/none   
+    15   Cycle Evolution                   ADBE Cell Pattern-0015            1D           1   <-- dropdown, 1 options
+    16   Cycle (in Revolutions)            ADBE Cell Pattern-0016            1D           64
+    17   Random Seed                       ADBE Cell Pattern-0017            1D           64
+    18                                     ADBE Cell Pattern-0018            group/none   
+    19   Compositing Options               ADBE Effect Built In Params       ?            
+
+### Gradient Ramp  {ADBE Ramp}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Start of Ramp                     ADBE Ramp-0001                    2D spatial   
+    2    Start Color                       ADBE Ramp-0002                    colour       
+    3    End of Ramp                       ADBE Ramp-0003                    2D spatial   
+    4    End Color                         ADBE Ramp-0004                    colour       
+    5    Ramp Shape                        ADBE Ramp-0005                    1D           2   <-- dropdown, 2 options
+    6    Ramp Scatter                      ADBE Ramp-0006                    1D           64
+    7    Blend With Original               ADBE Ramp-0007                    1D           1   <-- dropdown, 1 options
+    8                                      ADBE Ramp-0008                    group/none   
+    9    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Motion Tile  {ADBE Tile}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Tile Center                       ADBE Tile-0001                    2D spatial   
+    2    Tile Width                        ADBE Tile-0002                    1D           64
+    3    Tile Height                       ADBE Tile-0003                    1D           64
+    4    Output Width                      ADBE Tile-0004                    1D           64
+    5    Output Height                     ADBE Tile-0005                    1D           64
+    6    Mirror Edges                      ADBE Tile-0006                    1D           1   <-- dropdown, 1 options
+    7    Phase                             ADBE Tile-0007                    1D           64
+    8    Horizontal Phase Shift            ADBE Tile-0008                    1D           1   <-- dropdown, 1 options
+    9    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Fast Box Blur  {ADBE Box Blur2}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Blur Radius                       ADBE Box Blur2-0001               1D           64
+    2    Iterations                        ADBE Box Blur2-0002               1D           50
+    3    Blur Dimensions                   ADBE Box Blur2-0003               1D           3   <-- dropdown, 3 options
+    4    Repeat Edge Pixels                ADBE Box Blur2-0004               1D           1   <-- dropdown, 1 options
+    5    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Glow  {ADBE Glo2}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Glow Based On                     ADBE Glo2-0001                    1D           2   <-- dropdown, 2 options
+    2    Glow Threshold                    ADBE Glo2-0002                    1D           64
+    3    Glow Radius                       ADBE Glo2-0003                    1D           64
+    4    Glow Intensity                    ADBE Glo2-0004                    1D           64
+    5    Composite Original                ADBE Glo2-0005                    1D           3   <-- dropdown, 3 options
+    6    Glow Operation                    ADBE Glo2-0006                    1D           25
+    7    Glow Colors                       ADBE Glo2-0007                    1D           3   <-- dropdown, 3 options
+    8    Color Looping                     ADBE Glo2-0008                    1D           4   <-- dropdown, 4 options
+    9    Color Loops                       ADBE Glo2-0009                    1D           64
+    10   Color Phase                       ADBE Glo2-0010                    1D           64
+    11   A & B Midpoint                    ADBE Glo2-0011                    1D           
+    12   Color A                           ADBE Glo2-0012                    colour       
+    13   Color B                           ADBE Glo2-0013                    colour       
+    14   Glow Dimensions                   ADBE Glo2-0014                    1D           3   <-- dropdown, 3 options
+    15   Compositing Options               ADBE Effect Built In Params       ?            
+
+### Extract  {ADBE Extract}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Histogram                         ADBE Extract-0001                 group/none   
+    2    Channel                           ADBE Extract-0002                 1D           5   <-- dropdown, 5 options
+    3    Black Point                       ADBE Extract-0003                 1D           64
+    4    White Point                       ADBE Extract-0004                 1D           64
+    5    Black Softness                    ADBE Extract-0005                 1D           64
+    6    White Softness                    ADBE Extract-0006                 1D           64
+    7    Invert                            ADBE Extract-0007                 1D           1   <-- dropdown, 1 options
+    8    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Displacement Map  {ADBE Displacement Map}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Displacement Map Layer            ADBE Displacement Map-0001        layer        
+    2    Use For Horizontal Displacement   ADBE Displacement Map-0002        1D           11   <-- dropdown, 11 options
+    3    Max Horizontal Displacement       ADBE Displacement Map-0003        1D           64
+    4    Use For Vertical Displacement     ADBE Displacement Map-0004        1D           11   <-- dropdown, 11 options
+    5    Max Vertical Displacement         ADBE Displacement Map-0005        1D           64
+    6    Displacement Map Behavior         ADBE Displacement Map-0006        1D           3   <-- dropdown, 3 options
+    7    Edge Behavior                     ADBE Displacement Map-0007        1D           1   <-- dropdown, 1 options
+    8    Expand Output                     ADBE Displacement Map-0008        1D           1   <-- dropdown, 1 options
+    9    Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC RepeTile  {CC RepeTile}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Expand Right                      CC RepeTile-0001                  1D           64
+    2    Expand Left                       CC RepeTile-0002                  1D           64
+    3    Expand Down                       CC RepeTile-0003                  1D           64
+    4    Expand Up                         CC RepeTile-0004                  1D           64
+    5    Tiling                            CC RepeTile-0005                  1D           17   <-- dropdown, 17 options
+    6    Blend Borders                     CC RepeTile-0006                  1D           1   <-- dropdown, 1 options
+    7    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Polar Coordinates  {ADBE Polar Coordinates}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Interpolation                     ADBE Polar Coordinates-0001       1D           1   <-- dropdown, 1 options
+    2    Type of Conversion                ADBE Polar Coordinates-0002       1D           2   <-- dropdown, 2 options
+    3    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Venetian Blinds  {ADBE Venetian Blinds}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Transition Completion             ADBE Venetian Blinds-0001         1D           64
+    2    Direction                         ADBE Venetian Blinds-0002         1D           64
+    3    Width                             ADBE Venetian Blinds-0003         1D           64
+    4    Feather                           ADBE Venetian Blinds-0004         1D           64
+    5    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Posterize Time  {ADBE Posterize Time}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Frame Rate                        ADBE Posterize Time-0001          1D           64
+    2    Compositing Options               ADBE Effect Built In Params       ?            
+
+### 4-Color Gradient  {ADBE 4ColorGradient}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Positions & Colors                ADBE 4ColorGradient-0011          group/none   
+    2    Point 1                           ADBE 4ColorGradient-0001          2D spatial   
+    3    Color 1                           ADBE 4ColorGradient-0002          colour       
+    4    Point 2                           ADBE 4ColorGradient-0003          2D spatial   
+    5    Color 2                           ADBE 4ColorGradient-0004          colour       
+    6    Point 3                           ADBE 4ColorGradient-0005          2D spatial   
+    7    Color 3                           ADBE 4ColorGradient-0006          colour       
+    8    Point 4                           ADBE 4ColorGradient-0007          2D spatial   
+    9    Color 4                           ADBE 4ColorGradient-0008          colour       
+    10   Color 4                           ADBE 4ColorGradient-0012          group/none   
+    11   Blend                             ADBE 4ColorGradient-0009          1D           
+    12   Jitter                            ADBE 4ColorGradient-0010          1D           64
+    13   Opacity                           ADBE 4ColorGradient-0013          1D           64
+    14   Blending Mode                     ADBE 4ColorGradient-0014          1D           22   <-- dropdown, 22 options
+    15   Compositing Options               ADBE Effect Built In Params       ?            
+
+### Levels  {ADBE Easy Levels2}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Channel:                          ADBE Easy Levels2-0001            1D           5   <-- dropdown, 5 options
+    2    Histogram                         ADBE Easy Levels2-0002            custom       
+    3    Input Black                       ADBE Easy Levels2-0003            1D           64
+    4    Input White                       ADBE Easy Levels2-0004            1D           64
+    5    Gamma                             ADBE Easy Levels2-0005            1D           5   <-- dropdown, 5 options
+    6    Output Black                      ADBE Easy Levels2-0006            1D           64
+    7    Output White                      ADBE Easy Levels2-0007            1D           64
+    8    Clip To Output Black              ADBE Easy Levels2-0008            1D           3   <-- dropdown, 3 options
+    9    Clip To Output White              ADBE Easy Levels2-0009            1D           3   <-- dropdown, 3 options
+    10   Compositing Options               ADBE Effect Built In Params       ?            
+
+### Noise  {ADBE Noise}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Amount of Noise                   ADBE Noise-0001                   1D           64
+    2    Noise Type                        ADBE Noise-0002                   1D           1   <-- dropdown, 1 options
+    3    Clipping                          ADBE Noise-0003                   1D           1   <-- dropdown, 1 options
+    4    Compositing Options               ADBE Effect Built In Params       ?            
+
+### Tint  {ADBE Tint}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Map Black To                      ADBE Tint-0001                    colour       
+    2    Map White To                      ADBE Tint-0002                    colour       
+    3    Amount to Tint                    ADBE Tint-0003                    1D           64
+    4                                      ADBE Tint-0004                    group/none   
+    5    Compositing Options               ADBE Effect Built In Params       ?            
+
+
+=== OPTION GRIDS ===
+One comp per dropdown, every option rendered with its number on it.
+
+  LG PROBE 1 - Fractal Type
+  LG PROBE 2 - Overflow
+  LG PROBE 3 - Noise Type
+  LG PROBE 4 - Toner Tones
+  LG PROBE 5 - Cell Pattern
+  LG PROBE 6 - Displacement
+  LG PROBE 7 - Ramp Shape
+  LG PROBE 8 - Blur Dimensions

@@ -355,12 +355,41 @@ html, body {
   background: var(--border-light);
 }
 .section-header:hover { color: var(--text-main); }
-.section-content { transition: all 0.2s ease; }
+/* `transition: all` on a container that is shown and hidden with `display`
+   animates nothing — display is not an animatable property, so the section
+   snapped open and shut. Height is animatable; drive that instead, and let the
+   collapsed class do the work so JavaScript never touches inline styles. */
+.section-content {
+  overflow: hidden;
+  max-height: 4000px;
+  opacity: 1;
+  transition: max-height var(--trans-smooth), opacity var(--trans-fast);
+}
+.inspector-section.collapsed > .section-content {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.section-header span { transition: transform var(--trans-smooth); }
 
 /* ── COLOR SLOTS ── */
-.color-row { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+/* align-items: flex-start so a captioned slot and an uncaptioned one still
+   line their swatches up along the top edge. */
+.color-row { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 12px; }
+.color-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.color-caption {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .color-slot {
-  flex: 1;
+  width: 100%;
   height: 42px;
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -603,15 +632,16 @@ html, body {
   position: absolute;
   left: 2px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(0, -50%);
   width: 16px;
   height: 16px;
   background: var(--text-muted);
   border-radius: 50%;
   box-shadow: 0 1px 2px rgba(0,0,0,0.4);
-  transition: left var(--trans-fast), background var(--trans-fast);
+  transition: transform var(--trans-smooth), background var(--trans-fast);
+  will-change: transform;
 }
-.toggle input:checked + .toggle-track::after { left: 18px; background: #fff; }
+.toggle input:checked + .toggle-track::after { transform: translate(16px, -50%); background: #fff; }
 
 .comp-row { display: flex; gap: 12px; }
 .comp-field { flex: 1; display: flex; flex-direction: column; gap: 8px; }
@@ -740,8 +770,6 @@ html, body {
 .preview-sunburst { background: repeating-conic-gradient(var(--c1) 0 15deg, var(--c2) 15deg 30deg); animation: sunburst-spin 10s linear infinite; }
 @keyframes sunburst-spin { 100% { transform: rotate(360deg) scale(1.5); } }
 
-.preview-curved { background: repeating-linear-gradient(90deg, var(--c1) 0px, var(--c1) 10px, var(--c3) 10px, var(--c3) 20px); filter: contrast(120%); position: relative; overflow: hidden; animation: curved-wave 5s ease-in-out infinite alternate; }
-@keyframes curved-wave { 0% { transform: skewY(5deg) scale(1.2); } 100% { transform: skewY(-5deg) scale(1.2); } }
 
 .preview-cellular { background: radial-gradient(circle at 30% 30%, var(--c1), transparent 30%), radial-gradient(circle at 70% 70%, var(--c3), transparent 30%); background-color: var(--c4); background-size: 20px 20px; animation: cellular-pulse 4s infinite alternate; }
 @keyframes cellular-pulse { 0% { background-size: 20px 20px; } 100% { background-size: 30px 30px; filter: hue-rotate(45deg); } }

@@ -10,7 +10,17 @@ const GRADIENT_CONTROLS = {
     { id: 'angle',        label: 'Angle',  min: 0, max: 90,  step: 90, default: 0,  type: 'slider' }
   ],
   Metallic: [
-    { id: 'speed', label: 'Rotation Speed', min: 1, max: 60, step: 1, default: 10, type: 'slider' }
+    { id: 'finish',      label: 'Finish',
+      options: ['Chrome', 'Iridescent', 'Brushed', 'Y2K Chrome'],
+      default: 'Chrome', type: 'select' },
+    { id: 'bands',       label: 'Reflection Bands', min: 2,  max: 60,  step: 1,  default: 6,   type: 'slider' },
+    { id: 'tilt',        label: 'Band Tilt',        min: 0,  max: 100, step: 1,  default: 12,  type: 'slider' },
+    { id: 'speed',       label: 'Flow Speed',       min: 0,  max: 120, step: 1,  default: 20,  type: 'slider' },
+    { id: 'ripple',      label: 'Liquid Ripple',    min: 0,  max: 500, step: 5,  default: 180, type: 'slider' },
+    { id: 'rippleScale', label: 'Ripple Scale',     min: 20, max: 600, step: 10, default: 260, type: 'slider' },
+    { id: 'swirl',       label: 'Swirl',            min: 0,  max: 300, step: 5,  default: 70,  type: 'slider' },
+    { id: 'sheen',       label: 'Sheen',            min: 0,  max: 100, step: 1,  default: 45,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',         min: 0,  max: 40,  step: 1,  default: 2,   type: 'slider' }
   ],
   Antigravity: [
     { id: 'count',        label: 'Particles',    min: 50,  max: 2000, step: 50,  default: 500, type: 'slider' },
@@ -95,16 +105,22 @@ const GRADIENT_CONTROLS = {
     { id: 'speed', label: 'Evolution Speed', min: 10, max: 150, step: 10, default: 50, type: 'slider' }
   ],
   Glass: [
-    { id: 'softness', label: 'Frosted Softness', min: 5, max: 150, step: 5, default: 45, type: 'slider' },
-    { id: 'refraction', label: 'Refraction Index', min: 10, max: 200, step: 10, default: 80, type: 'slider' },
-    { id: 'speed', label: 'Wave Speed', min: 10, max: 150, step: 10, default: 40, type: 'slider' }
+    { id: 'speed',       label: 'Flow Speed',       min: 1,   max: 120,  step: 1,  default: 20,  type: 'slider' },
+    { id: 'scale',       label: 'Ribbon Scale',     min: 20,  max: 600,  step: 10, default: 140, type: 'slider' },
+    { id: 'stretch',     label: 'Ribbon Stretch',   min: 100, max: 2000, step: 20, default: 800, type: 'slider' },
+    { id: 'refraction',  label: 'Refraction',       min: 0,   max: 400,  step: 5,  default: 120, type: 'slider' },
+    { id: 'iridescence', label: 'Iridescence',      min: 0,   max: 100,  step: 1,  default: 55,  type: 'slider' },
+    { id: 'contrast',    label: 'Edge Contrast',    min: 50,  max: 500,  step: 10, default: 260, type: 'slider' },
+    { id: 'softness',    label: 'Frosted Softness', min: 0,   max: 120,  step: 1,  default: 12,  type: 'slider' }
   ],
   ReededGlass: [
-    { id: 'speed', label: 'Evolution Speed', min: 10, max: 200, step: 10, default: 60, type: 'slider' },
-    { id: 'scale', label: 'Noise Scale', min: 50, max: 500, step: 10, default: 150, type: 'slider' },
-    { id: 'blur', label: 'Reeded Blur', min: 0, max: 50, step: 1, default: 15, type: 'slider' },
-    { id: 'refraction', label: 'Refraction', min: 10, max: 200, step: 5, default: 50, type: 'slider' },
-    { id: 'lineSize', label: 'Line Width', min: 10, max: 200, step: 5, default: 80, type: 'slider' }
+    { id: 'lineSize',    label: 'Flute Width',     min: 6,  max: 200, step: 2,  default: 44,  type: 'slider' },
+    { id: 'refraction',  label: 'Refraction',      min: 0,  max: 300, step: 5,  default: 90,  type: 'slider' },
+    { id: 'orientation', label: 'Flute Direction', options: ['Vertical', 'Horizontal'], default: 'Vertical', type: 'select' },
+    { id: 'speed',       label: 'Colour Drift',    min: 0,  max: 120, step: 1,  default: 14,  type: 'slider' },
+    { id: 'scale',       label: 'Colour Scale',    min: 50, max: 900, step: 10, default: 420, type: 'slider' },
+    { id: 'sheen',       label: 'Edge Sheen',      min: 0,  max: 100, step: 1,  default: 45,  type: 'slider' },
+    { id: 'blur',        label: 'Surface Blur',    min: 0,  max: 60,  step: 1,  default: 6,   type: 'slider' }
   ],
   AnimeWater: [
     { id: 'bubbleAmount', label: 'Bubble Amount', min: 0, max: 300, step: 1, default: 50, type: 'slider' },
@@ -138,8 +154,10 @@ const GRADIENT_CONTROLS = {
     { id: 'shape', label: 'Dot Shape', options: ['Circle', 'Square', 'Triangle', 'Cross', 'Custom Text/Emoji'], default: 'Circle', type: 'select' },
     { id: 'customText', label: 'Custom Symbol', type: 'text', default: '💀' },
     { id: 'dotSize', label: 'Dot Size', min: 10, max: 200, step: 2, default: 40, type: 'slider' },
-    { id: 'contrast', label: 'Contrast', min: 20, max: 255, step: 5, default: 128, type: 'slider' },
-    { id: 'speed', label: 'Gradient Speed', min: 1, max: 100, step: 1, default: 30, type: 'slider' }
+    { id: 'contrast', label: 'Dot Contrast',  min: 20, max: 255, step: 5, default: 128, type: 'slider' },
+    { id: 'angle',    label: 'Screen Angle',  min: 0,  max: 90,  step: 1, default: 45,  type: 'slider' },
+    { id: 'edge',     label: 'Edge Hardness', min: 1,  max: 100, step: 1, default: 55,  type: 'slider' },
+    { id: 'speed',    label: 'Gradient Speed',min: 1,  max: 100, step: 1, default: 30,  type: 'slider' }
   ],
   AsciiMatrix: [
     { id: 'gridSize', label: 'Grid Size', min: 10, max: 150, step: 2, default: 40, type: 'slider' },
@@ -169,21 +187,22 @@ const GRADIENT_CONTROLS = {
     { id: 'turbEvolution', label: 'Evolution Speed', min: 10, max: 200, step: 10, default: 50, type: 'slider' }
   ],
   Sunburst: [
-    { id: 'rays', label: 'Number of Rays', min: 4, max: 100, step: 1, default: 24, type: 'slider' },
-    { id: 'rotationSpeed', label: 'Rotation Speed', min: -200, max: 200, step: 10, default: 50, type: 'slider' },
-    { id: 'centerOffset', label: 'Center Offset', min: 0, max: 100, step: 1, default: 0, type: 'slider' }
+    { id: 'rays',          label: 'Number of Rays', min: 3,    max: 120, step: 1, default: 18, type: 'slider' },
+    { id: 'thickness',     label: 'Ray Thickness',  min: 5,    max: 95,  step: 1, default: 50, type: 'slider' },
+    { id: 'rotationSpeed', label: 'Rotation Speed', min: -180, max: 180, step: 1, default: 15, type: 'slider' },
+    { id: 'pulse',         label: 'Ray Pulse',      min: 0,    max: 100, step: 1, default: 0,  type: 'slider' },
+    { id: 'softness',      label: 'Edge Softness',  min: 0,    max: 100, step: 1, default: 0,  type: 'slider' },
+    { id: 'coreSize',      label: 'Centre Disc',    min: 0,    max: 100, step: 1, default: 0,  type: 'slider' },
+    { id: 'centerX',       label: 'Centre X',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' },
+    { id: 'centerY',       label: 'Centre Y',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' }
   ],
   LiquidWaves: [
-    { id: 'speed', label: 'Flow Speed', min: 10, max: 200, step: 10, default: 60, type: 'slider' },
-    { id: 'turbulence', label: 'Turbulence', min: 10, max: 500, step: 10, default: 200, type: 'slider' },
-    { id: 'scale', label: 'Wave Scale', min: 50, max: 500, step: 10, default: 150, type: 'slider' },
-    { id: 'blur', label: 'Softness', min: 0, max: 200, step: 5, default: 50, type: 'slider' }
-  ],
-  CurvedStripes: [
-    { id: 'stripes', label: 'Stripe Count', min: 2, max: 100, step: 1, default: 20, type: 'slider' },
-    { id: 'waveHeight', label: 'Wave Height', min: 0, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'waveWidth', label: 'Wave Width', min: 10, max: 500, step: 10, default: 200, type: 'slider' },
-    { id: 'speed', label: 'Animation Speed', min: -100, max: 100, step: 5, default: 30, type: 'slider' }
+    { id: 'speed',      label: 'Flow Speed',   min: 1,  max: 200, step: 1,  default: 30,  type: 'slider' },
+    { id: 'scale',      label: 'Wave Scale',   min: 20, max: 900, step: 10, default: 260, type: 'slider' },
+    { id: 'turbulence', label: 'Turbulence',   min: 0,  max: 600, step: 10, default: 140, type: 'slider' },
+    { id: 'bands',      label: 'Band Density', min: 40, max: 600, step: 10, default: 200, type: 'slider' },
+    { id: 'complexity', label: 'Complexity',   min: 1,  max: 10,  step: 1,  default: 4,   type: 'slider' },
+    { id: 'blur',       label: 'Softness',     min: 0,  max: 100, step: 1,  default: 6,   type: 'slider' }
   ],
   TrailGradient: [
     { id: 'width', label: 'Trail Width', min: 10, max: 200, step: 5, default: 60, type: 'slider' },
@@ -191,10 +210,18 @@ const GRADIENT_CONTROLS = {
     { id: 'bend', label: 'Arc Bend', min: -100, max: 100, step: 1, default: 30, type: 'slider' }
   ],
   CellularMosaic: [
-    { id: 'cells', label: 'Cell Density', min: 10, max: 200, step: 5, default: 50, type: 'slider' },
-    { id: 'dispersion', label: 'Dispersion', min: 0, max: 100, step: 1, default: 50, type: 'slider' },
-    { id: 'speed', label: 'Evolution Speed', min: 10, max: 200, step: 10, default: 80, type: 'slider' },
-    { id: 'pattern', label: 'Pattern Type', options: ['Bubbles', 'Crystals', 'Plates', 'Tubular'], default: 'Bubbles', type: 'select' }
+    { id: 'pattern',    label: 'Pattern Type',
+      options: ['Bubbles', 'Crystals', 'Plates', 'Crystallize', 'Tubular', 'Pillow'],
+      default: 'Bubbles', type: 'select' },
+    { id: 'cells',      label: 'Cell Density',    min: 5, max: 200, step: 1, default: 50,  type: 'slider' },
+    { id: 'dispersion', label: 'Dispersion',      min: 0, max: 100, step: 1, default: 50,  type: 'slider' },
+    { id: 'speed',      label: 'Evolution Speed', min: 0, max: 300, step: 5, default: 80,  type: 'slider' },
+    { id: 'contrast',   label: 'Cell Contrast',   min: 0, max: 400, step: 5, default: 140, type: 'slider' },
+    { id: 'drift',      label: 'Drift',           min: 0, max: 400, step: 5, default: 60,  type: 'slider' },
+    { id: 'warp',       label: 'Organic Warp',    min: 0, max: 300, step: 5, default: 30,  type: 'slider' },
+    { id: 'softness',   label: 'Softness',        min: 0, max: 80,  step: 1, default: 4,   type: 'slider' },
+    { id: 'sheen',      label: 'Glow',            min: 0, max: 100, step: 1, default: 20,  type: 'slider' },
+    { id: 'invert',     label: 'Invert Cells',    options: ['Off', 'On'], default: 'Off', type: 'select' }
   ],
   SonduckLiquid: [
     { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 20, type: 'slider' }
