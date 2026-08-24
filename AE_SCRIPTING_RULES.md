@@ -97,6 +97,7 @@ Ranges worth knowing:
 | CC Glass `Roughness` | ~0..1 | shown as `0.100`; not a percentage |
 | CC Glass `Height`, `Displacement` | signed, wide | negatives invert the relief |
 | Fractal Noise `Contrast`, `Brightness` | wide | see rule 7 |
+| Turbulent Displace `Size` | 1..1000 | throws above 1000 — and a Size that never lands keeps the default of 100, see rule 8 |
 | Extract `Black Point` / `White Point` | 0..255 | unlike Levels |
 
 ---
@@ -202,10 +203,20 @@ And the mean is not 0.5 for every fractal type. The turbulent family (types
 all-one-colour bugs in this panel trace to that: an all-yellow frame, and four
 of five animal prints rendering solid black.
 
+**The worst case is a bump map.** A bright-biased field, soft-clamped, is
+nearly white nearly everywhere with a few dark filaments through it — which is
+to say it is *flat*. Hand that to a shader and the shader has nothing to shade,
+so it looks like the shader is not applied at all. Seven of this panel's eight
+metals were in exactly that state for two rounds: CC Glass was on the layer,
+correctly wired, doing nothing. The eighth was the one whose map came from Cell
+Pattern instead of noise, and it was the only one that ever looked like metal.
+That is not a coincidence, it is the controlled experiment, and it was sitting
+in the middle of a contact sheet for two rounds before anyone read it that way.
+
 Practical rules:
 
 - **Type 1 (Basic) is symmetric about mid-grey.** Use it whenever you intend to
-  threshold. It is a structural property, not a tuned number.
+  threshold, and whenever the output is going to be a height field. It is a structural property, not a tuned number.
 - Where you need a genuinely uniform distribution, do not use noise at all —
   fold a **ramp** with Motion Tile in Mirror Edges mode. A triangle wave gives
   every tone an equal share of the frame *by construction*.
@@ -299,10 +310,27 @@ shading multiplied.
 
 And:
 
-- **Displacement pulls pixels in from outside the frame.** On a comp-sized
-  layer there is nothing out there, so a large displacement drags the layer's
-  own edge into the middle of the picture. Build displaced layers oversized
-  (30% is plenty) and keep the displacement inside that overhang.
+- **Displacement pulls pixels in from outside the layer.** To put a pixel
+  here, Turbulent Displace fetches one from up to `Amount` away; past the
+  layer's own edge there is nothing to fetch, and what you get is a hard-edged
+  hole of pure transparency. Build displaced layers oversized — and then
+  **treat the overhang as a budget and spend it**, rather than hoping:
+
+  ```javascript
+  var overhang = (h - h / OVERSIZE) / 2;        // vertical binds: frames are wide
+  var budget   = overhang * 0.8;                // margin for the shader's own
+  var wanted   = twistAmount + envAmount;
+  if (wanted > budget) {                        // scale the stages to fit
+      var fit = budget / wanted;
+      twistAmount *= fit; envAmount *= fit;
+  }
+  ```
+
+  30% oversize sounds generous and is not: on a 1080-tall comp it is 162px of
+  vertical overhang, and two stacked displacements of 100 and 356 wanted 456.
+  The holes came in from the top and bottom edges, which is exactly where they
+  were. Derive the budget from the same constant the builder oversizes by, so
+  the two cannot drift apart.
 
 ---
 
@@ -384,7 +412,9 @@ than trusting this table** — that is the whole point of rule 0.
 
 CC Glass, CC Blobbylize, CC Mr. Mercury and CC Plastic all carry the same Light
 and Shading block under the same display names, at different indices, because
-their Surface groups are different sizes.
+their Surface groups are different sizes — and, in CC Plastic's case, because
+its Light and Shading groups have extra members of their own. The shift is
+**not** a single constant per effect.
 
 ### CC Glass
 
@@ -418,12 +448,39 @@ CC Glass has `Height` and `Displacement` at 5 and 6.
 | 10 | Light Color | | 21 | Metal |
 | 11 | Light Type | | | |
 
+### CC Plastic
+
+The one that breaks the pattern, and the reason a single integer offset from CC
+Glass is not good enough. Its Light block sits **one** lower than CC Glass's —
+but its Shading block is **two** lower again, because of `Ambient Light Color`,
+and its Specular is **three** lower, because `Dust` sits in front of it.
+
+| idx | name | | idx | name |
+|---|---|---|---|---|
+| 2 | Bump Layer *(layer)* | | 14 | Light Height |
+| 3 | Property | | 16 | Light Direction |
+| 4 | Softness | | 17 | Ambient Light Color |
+| 5 | Height | | 20 | Ambient |
+| 6 | Cut Min | | 21 | Diffuse |
+| 7 | Cut Max | | 22 | **Dust** |
+| 10 | Using | | 23 | Specular |
+| 11 | Light Intensity | | 24 | Roughness |
+| 12 | Light Color | | 25 | Metal |
+| 13 | Light Type | | | |
+
+`Dust` is unique to CC Plastic: a matte scatter across the whole surface, which
+is what makes it the right shader for anything sandblasted or frosted.
+
 ### CC Mr. Mercury
 
 A particle system with the same shading block bolted on: `Using` 17, `Light
 Intensity` 18, `Light Color` 19, `Light Type` 20, `Light Height` 21, `Light
 Direction` 23, `Ambient` 26, `Diffuse` 27, `Specular` 28, `Roughness` 29,
 `Metal` 30, `Material Opacity` 31.
+
+**Address these from a table, not from arithmetic.** One helper that takes a
+per-effect index map is both shorter and correct; one helper that takes an
+offset is shorter and wrong the moment CC Plastic turns up.
 
 ### Dropdowns worth writing down
 

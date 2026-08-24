@@ -1,0 +1,73 @@
+Living Gradients — shader lab
+AE 26.0   Tue Aug 25 2026 00:47:18 GMT+0530
+built at 1920x1080, scaled into 400x225 tiles
+
+One row per build. Column 0 is the height map as an image;
+after that the picture layer's effects are switched on one at
+a time, cumulatively. The stage where the row goes wrong is the
+stage that is wrong.
+
+Stages marked "builder had this OFF" stay off in every tile —
+an effect disabled because its slider is at zero is not a step.
+
+  Gold — 9 stages on "Gold Metal", bump layer "Gold Height"
+    1  Metal Ramp
+    2  Metal Fold
+    3  Metal Flow   (builder had this OFF)
+    4  Metal Twist
+    5  Metal Environment
+    6  CC Toner
+    7  CC Glass
+    8  Metal Bloom
+    9  Fast Box Blur
+
+  Polished — 9 stages on "Polished Metal", bump layer "Polished Height"
+    1  Metal Ramp
+    2  Metal Fold
+    3  Metal Flow   (builder had this OFF)
+    4  Metal Twist
+    5  Metal Environment
+    6  CC Toner
+    7  CC Glass
+    8  Metal Bloom
+    9  Fast Box Blur
+
+  Mercury — 9 stages on "Mercury Metal", bump layer "Mercury Height"
+    1  Metal Ramp
+    2  Metal Fold
+    3  Metal Flow   (builder had this OFF)
+    4  Metal Twist
+    5  Metal Environment
+    6  CC Toner
+    7  CC Glass
+    8  Metal Bloom
+    9  Fast Box Blur
+
+  Brushed — 9 stages on "Brushed Metal", bump layer "Brushed Height"
+    1  Metal Ramp
+    2  Metal Fold
+    3  Metal Flow   (builder had this OFF)
+    4  Metal Twist   (builder had this OFF)
+    5  Metal Environment   (builder had this OFF)
+    6  CC Toner
+    7  CC Glass
+    8  Metal Bloom
+    9  Fast Box Blur
+
+  Hammered — 9 stages on "Hammered Metal", bump layer "Hammered Height"
+    1  Metal Ramp
+    2  Metal Fold
+    3  Metal Flow   (builder had this OFF)
+    4  Metal Twist   (builder had this OFF)
+    5  Metal Environment
+    6  CC Toner
+    7  CC Glass
+    8  Metal Bloom
+    9  Fast Box Blur
+
+  Glass — 5 stages on "Glass Colour", bump layer "Glass Surface"
+    1  Glass Colour Field
+    2  CC Toner
+    3  CC Glass
+    4  Glass Iridescence
+    5  Fast Box Blur
