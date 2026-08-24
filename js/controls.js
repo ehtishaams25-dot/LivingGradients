@@ -105,8 +105,8 @@ const GRADIENT_CONTROLS = {
     { id: 'refraction',  label: 'Refraction',     min: 0,   max: 300, step: 5,  default: 110, type: 'slider' },
     { id: 'relief',      label: 'Relief',         min: 0,   max: 100, step: 1,  default: 45,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',    min: 0,   max: 360, step: 1,  default: 315, type: 'slider' },
-    { id: 'specular',    label: 'Specular',       min: 0,   max: 100, step: 1,  default: 85,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',      min: 1,   max: 100, step: 1,  default: 8,   type: 'slider' },
+    { id: 'specular',    label: 'Specular',       min: 0,   max: 100, step: 1,  default: 55,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',      min: 1,   max: 100, step: 1,  default: 18,  type: 'slider' },
     { id: 'iridescence', label: 'Iridescence',    min: 0,   max: 100, step: 1,  default: 22,  type: 'slider' },
     { id: 'softness',    label: 'Frost',          min: 0,   max: 120, step: 1,  default: 10,  type: 'slider' }
   ],
@@ -241,13 +241,13 @@ const GRADIENT_CONTROLS = {
   Polished: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 7,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 60,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 92,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 4,   type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 11,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 25,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
@@ -255,7 +255,7 @@ const GRADIENT_CONTROLS = {
   Brushed: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 80,  type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 0,   type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 300, type: 'slider' },
@@ -269,13 +269,13 @@ const GRADIENT_CONTROLS = {
   Gold: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 36,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 120, type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 320, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 45,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 96,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 8,   type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 15,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 8,   type: 'slider' }
@@ -283,13 +283,13 @@ const GRADIENT_CONTROLS = {
   Copper: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 90,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 330, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 48,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 90,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 10,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 17,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
@@ -311,7 +311,7 @@ const GRADIENT_CONTROLS = {
   Hammered: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 25,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 310, type: 'slider' },
@@ -331,7 +331,7 @@ const GRADIENT_CONTROLS = {
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 98,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 6,   type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 12,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 10,  type: 'slider' }
@@ -342,13 +342,13 @@ const GRADIENT_CONTROLS = {
   Mercury: [
     { id: 'scaleAll',    label: 'Blob Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 85,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Surface Churn', min: 0,  max: 400, step: 5, default: 160, type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 100, type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 2,   type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 7,   type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Flow Speed',    min: 0,  max: 60,  step: 1, default: 14,  type: 'slider' }

@@ -3209,13 +3209,13 @@ function tuneGlassSurface(s, ctrl) {
 
     lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Relief'), {
         fractalType:  2,
-        contrast:     110,
+        contrast:     150,
         brightness:   0,
         overflow:     2,                  // soft clamp — no folds, no flashing
-        complexity:   3,
+        complexity:   5,
         scaleWidth:   scale * 1.6,
         scaleHeight:  scale,
-        subInfluence: 55,
+        subInfluence: 80,
         speed:        speed * 0.7
     });
 
@@ -3266,10 +3266,10 @@ function tuneGlass(s, c, ctrl, bumpIndex) {
             intensity:   70 + num(ctrl.specular, 85) * 0.3,
             lightAngle:  num(ctrl.lightAngle, 315),
             lightHeight: 55,
-            ambient:     46,
-            diffuse:     38,
-            specular:    num(ctrl.specular, 85),
-            roughness:   num(ctrl.roughness, 8),
+            ambient:     40,
+            diffuse:     34,
+            specular:    num(ctrl.specular, 55),
+            roughness:   num(ctrl.roughness, 18),
             metal:       0                 // glass is not metal: white highlights
         });
     }
@@ -3799,25 +3799,43 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     var flow   = o.env === 'flow';
     var scale  = num(o.scaleAll, 100) / 100;
 
-    /* 1. The environment.
+    /* 1. The environment — one construction for all eight now.
 
-       Both routes are always on the layer; only one is enabled. Adding and
-       removing effects would change the stack order underneath a live update
-       and the shader below would lose track of which effect it sits after. */
+       WRAP BACK WAS THE HAIRLINES. The previous version built the flowing
+       metals out of Fractal Noise with Overflow on Wrap Back. That is the
+       right idea for ribbons and the wrong idea here, and the contact sheet
+       showed why at 1:1: Wrap Back folds every value that runs past white
+       back down again, so the number of dark-to-light cycles in the frame is
+       however many times the field's value sweeps through unity. Where the
+       field was gently sloping that was a handful. Where the twist had
+       compressed it, it was hundreds — and hundreds of hairline cycles
+       following the flow contours is a fingerprint, or marbled endpaper. It
+       is not metal. The big folds underneath were already right; the rings
+       sat on top of them.
+
+       A ramp folded by Motion Tile in Mirror Edges mode gives the same even
+       distribution of tones with none of that. It is a triangle wave: exactly
+       `bands` cycles, continuous at every fold rather than discontinuous, and
+       the count is a number this file chose rather than an emergent property
+       of a histogram. Then it gets bent, and how hard it gets bent is the
+       whole difference between a plate and a pour:
+
+         plate   barely bent. A flat industrial surface reflecting a room.
+         flow    bent hard, at a large size, twice. Large size is the load-
+                 bearing word — a displacement whose noise is smaller than the
+                 bands shreds them, and one whose noise is much larger than
+                 the bands moves them about as whole shapes, which is what
+                 pouring looks like. */
     var ramp = lgFxNamed(s, ['ADBE Ramp'], 'Metal Ramp');
     if (ramp) {
         LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
         LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
         LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
         LG.set(ramp, 'End Color',     4, [1, 1, 1]);
-        try { ramp.enabled = !flow; } catch (e) { }
     }
 
-    /* Motion Tile folds the ramp into a triangle wave: every tone gets an
-       equal share of the frame, which is what keeps a gradient map from
-       painting everything one colour. Sliding Tile Center rather than Phase —
-       Phase offsets alternate tiles against each other and shears the
-       reflection instead of drifting it. */
+    /* Sliding Tile Center rather than Phase — Phase offsets alternate tiles
+       against each other and shears the reflection instead of drifting it. */
     var tile = lgFxNamed(s, ['ADBE Tile'], 'Metal Fold');
     if (tile) {
         LG.set(tile, 'Tile Width',    2, 100 / bands);
@@ -3828,41 +3846,34 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
         LG.expr(tile, 'Tile Center', 1, speed !== 0
             ? '[value[0] + time * ' + (speed * 6) + ', value[1]]'
             : 'value');
-        try { tile.enabled = !flow; } catch (e) { }
     }
 
-    /* The flow field. Wrap Back is doing the work: contrast decides how many
-       times the field runs past white and folds, so Reflections maps onto
-       contrast here in the same way it maps onto tile count above. */
-    var fn = lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Flow');
-    lgFractalSet(fn, {
-        fractalType:  2,
-        contrast:     70 + bands * 24,
-        brightness:   0,
-        overflow:     3,                       // Wrap Back — this is the fold
-        complexity:   3,
-        scaleWidth:   980 * scale,
-        scaleHeight:  760 * scale,
-        rotation:     num(o.tilt, 14),
-        subInfluence: 65,
-        speed:        speed * 0.8
-    });
-    if (fn) { try { fn.enabled = flow; } catch (e) { } }
+    /* Anything a previous version of this file left behind. A layer built
+       before the hairlines were diagnosed still carries the wrap-back field,
+       and an effect nobody sets any more is an effect nobody turns off. */
+    var stale = lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Flow');
+    if (stale) { try { stale.enabled = false; } catch (e) { } }
 
-    /* 2. Make it pour. A twist is what turns concentric bands into the
-          folded, poured shapes liquid metal actually makes; the turbulent
-          pass after it breaks up the regularity the twist leaves behind. */
+    /* 2. Bend it. Twist Smoother rather than Twist: plain Twist winds tight
+          spirals whose centres compress the bands into a vortex, and a vortex
+          is the other thing the first sheet was full of. */
     var twist = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Twist');
-    var twistAmt = flow ? 120 + num(o.warp, 0) * 0.5 : 0;
+    var twistAmt = flow ? 70 + num(o.warp, 0) * 0.25 : 0;
     if (twist) {
-        lgTurbSet(twist, { mode: 3, amount: twistAmt, size: 520, speed: speed * -0.25 });
+        lgTurbSet(twist, {
+            mode: 6, amount: twistAmt,
+            size: Math.max(300, 1100 * scale), speed: speed * -0.2
+        });
         try { twist.enabled = twistAmt > 0; } catch (e) { }
     }
 
     var env = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Environment');
-    var envAmt = flow ? 60 + num(o.warp, 0) * 0.4 : num(o.warp, 0) * 0.6;
+    var envAmt = flow ? 260 + num(o.warp, 0) * 0.8 : num(o.warp, 0) * 0.6;
     if (env) {
-        lgTurbSet(env, { mode: 4, amount: envAmt, size: 300, speed: speed * 0.3 });
+        lgTurbSet(env, {
+            mode: 4, amount: envAmt,
+            size: Math.max(240, (flow ? 620 : 300) * scale), speed: speed * 0.3
+        });
         try { env.enabled = envAmt > 0; } catch (e) { }
     }
 

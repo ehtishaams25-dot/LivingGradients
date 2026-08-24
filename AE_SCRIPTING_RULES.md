@@ -218,7 +218,73 @@ Practical rules:
 
 ---
 
-## 8. Height fields: blur them, and give them room
+## 8. Displacement size is relative to what you are displacing
+
+Turbulent Displace has an `Amount` and a `Size`. Everyone reaches for Amount.
+**Size is the one that decides what kind of thing you get**, and it decides it
+by comparison with the features already in the image:
+
+| Size vs. the features | What happens | What it is good for |
+|---|---|---|
+| Much **larger** | features move as whole shapes | pouring, flowing, folding |
+| Comparable | features wobble | organic irregularity |
+| Much **smaller** | features are shredded along their edges into filaments | fur, hair, fibre, frost |
+
+Both ends of that table are in this panel, and they are the same effect:
+
+- **Liquid metal** is mirrored bands displaced at Size ~600 — far bigger than
+  the bands, so they move bodily and read as poured. An early version bent
+  them at a size *below* the band width and got hairline marbling, because at
+  that ratio a displacement does not move a band, it frays it.
+- **Fur** is a two-tone coat displaced at Size 3 with Amount 900 — far smaller
+  than the patches, so their edges shred into filaments leaning the way the
+  Twist mode turns them.
+
+If a build looks like marbled endpaper or a fingerprint when you wanted flow,
+you are on the wrong row of that table. Raise Size; do not lower Amount.
+
+---
+
+## 9. Wrap Back's band count is emergent, not chosen
+
+Fractal Noise's `Overflow > Wrap Back` folds every value past white back down
+again. It is the obvious way to turn a smooth field into repeating light-dark
+ribbons, and it has a trap: **the number of ribbons is however many times the
+field's value happens to sweep through unity**, which depends on contrast, on
+complexity, on the fractal type's own range, and — worst — on the local
+gradient. Somewhere flat you get three bands. Somewhere a displacement has
+compressed the field you get three hundred, as hairlines.
+
+When you want a *chosen* number of even bands, fold a **ramp** with Motion Tile
+in Mirror Edges mode instead. It is a triangle wave: exactly N cycles, even
+distribution by construction, and continuous at every fold rather than
+discontinuous. Then displace it (see rule 8) to make it organic.
+
+Use Wrap Back when you want the count to be emergent — turbulent ribbon
+fields where irregular banding is the point. Never when the count matters.
+
+---
+
+## 10. A sharp specular over a flat region is a switch, not a shade
+
+Blinn-Phong specular is a function of the surface normal. Across a region where
+the height field is genuinely flat, **the normal is constant** — so the whole
+region gets the same specular value at once. With a low roughness (a tight
+lobe) that value is either ~1 or ~0, so a flat area does not shade: it clips to
+white or stays dark, with a hard edge exactly where the surface finally tilts.
+
+This is what put a straight horizontal seam across the frosted glass and large
+flat white patches on the polished metals. Two fixes, and you usually want
+both:
+
+- **Make sure the height field is never flat over an area you can see.** Give
+  it low-frequency variation everywhere, not just detail in places.
+- **Do not run roughness near zero** unless the surface really is a mirror
+  with something interesting to reflect.
+
+---
+
+## 11. Height fields: blur them, and give them room
 
 Any shader that lights a bump map (CC Glass, CC Blobbylize, CC Plastic, CC Mr.
 Mercury) derives surface normals by **differencing** the map. A derivative
@@ -240,7 +306,7 @@ And:
 
 ---
 
-## 9. The exposure budget
+## 12. The exposure budget
 
 In the CC light shaders, `Ambient` is how much of the source image comes
 through unlit and `Diffuse` is how much the lamp adds. **They sum.**
@@ -258,7 +324,7 @@ highlight comes back to white.
 
 ---
 
-## 10. Animate with expressions, not keyframes
+## 13. Animate with expressions, not keyframes
 
 ```javascript
 LG.expr(fn, 'Evolution', 24, speed !== 0 ? 'time * ' + speed : 'value');
@@ -270,7 +336,7 @@ speed leaves the property genuinely untouched rather than pinning it.
 
 ---
 
-## 11. Build and live-update must run the same function
+## 14. Build and live-update must run the same function
 
 If the code that creates a layer and the code that responds to a slider are two
 different functions, they will drift, and a slider will mean one thing on
@@ -289,11 +355,16 @@ Two traps that follow:
 
 ---
 
-## 12. Render it and look at it
+## 15. Render it and look at it
 
 `tools/contact_sheet.jsx` builds every preset at its own defaults, through the
 same dispatch path the panel uses, and tiles them into one comp with a report
-alongside.
+alongside. `tools/shader_lab.jsx` goes one level further for the builds that
+are six effects deep: it shows the height map as an image and then switches the
+picture layer's effects on one at a time, so the stage where a row goes wrong
+is simply the stage that is wrong. Two rounds of metal fixes were reasoned from
+finished frames before that script existed, and one of the two diagnoses was
+only a hypothesis.
 
 Twenty-five of this panel's thirty-two gradients had never once been rendered
 and looked at. Every one of them was written the way the broken ones were:
@@ -382,7 +453,12 @@ numbered, which is faster than guessing what option 7 looks like.
 6. Never let a failure be silent.
 7. Enable/disable stages; don't add/remove them.
 8. Know your field's histogram before you map colours onto it.
-9. Blur height fields; oversize anything you displace.
-10. Ambient + Diffuse ≤ 90.
-11. One function for build and for live update.
-12. Render it. Look at it at 1:1.
+9. Displacement Size vs. feature size decides flow-or-fray. Size, not Amount.
+10. Wrap Back's band count is emergent. Fold a ramp when the count matters.
+11. Never leave a flat region under a tight specular lobe.
+12. Blur height fields; oversize anything you displace.
+13. Ambient + Diffuse ≤ 90.
+14. One function for build and for live update.
+15. Render it. Look at it at 1:1 — and when 1:1 still leaves you guessing,
+    render the stages separately (`tools/shader_lab.jsx`) instead of reasoning
+    about which one is wrong.

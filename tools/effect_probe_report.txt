@@ -1,7 +1,7 @@
 Living Gradients — effect probe
 AE version : 26.0x67
 Language   : en_IN
-Date       : Mon Aug 24 2026 23:40:56 GMT+0530
+Date       : Tue Aug 25 2026 00:33:29 GMT+0530
 
 "clamps at" is the highest value the parameter accepted. A small
 number means the parameter is a dropdown and that is its option
@@ -350,6 +350,37 @@ count. A large one means it is an ordinary slider.
     31   Material Opacity                  CC Mr. Mercury-0032               1D           64
     32                                     CC Mr. Mercury-0030               group/none   
     33   Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC Plastic  {CC Plastic}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Surface Bump                      CC Plastic-0001                   group/none   
+    2    Bump Layer                        CC Plastic-0002                   layer        
+    3    Property                          CC Plastic-0003                   1D           6   <-- dropdown, 6 options
+    4    Softness                          CC Plastic-0004                   1D           64
+    5    Height                            CC Plastic-0005                   1D           64
+    6    Cut Min                           CC Plastic-0006                   1D           64
+    7    Cut Max                           CC Plastic-0007                   1D           64
+    8                                      CC Plastic-0008                   group/none   
+    9    Light                             CC Plastic-0009                   group/none   
+    10   Using                             CC Plastic-0026                   1D           2   <-- dropdown, 2 options
+    11   Light Intensity                   CC Plastic-0010                   1D           64
+    12   Light Color                       CC Plastic-0011                   colour       
+    13   Light Type                        CC Plastic-0012                   1D           2   <-- dropdown, 2 options
+    14   Light Height                      CC Plastic-0013                   1D           64
+    15   Light Position                    CC Plastic-0014                   2D spatial   
+    16   Light Direction                   CC Plastic-0015                   1D           64
+    17   Ambient Light Color               CC Plastic-0016                   colour       
+    18                                     CC Plastic-0017                   group/none   
+    19   Shading                           CC Plastic-0018                   group/none   
+    20   Ambient                           CC Plastic-0019                   1D           64
+    21   Diffuse                           CC Plastic-0020                   1D           64
+    22   Dust                              CC Plastic-0021                   1D           64
+    23   Specular                          CC Plastic-0022                   1D           64
+    24   Roughness                         CC Plastic-0023                   1D           
+    25   Metal                             CC Plastic-0024                   1D           64
+    26                                     CC Plastic-0025                   group/none   
+    27   Compositing Options               ADBE Effect Built In Params       ?            
 
 
 === OPTION GRIDS ===

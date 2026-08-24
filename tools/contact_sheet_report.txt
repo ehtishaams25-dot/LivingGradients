@@ -1,14 +1,14 @@
 Living Gradients — contact sheet
-AE 26.0x67   Mon Aug 24 2026 23:42:26 GMT+0530
-45 gradients, 6 x 8 grid
+AE 26.0x67   Tue Aug 25 2026 00:34:21 GMT+0530
+46 gradients, 6 x 8 grid
 built at 1920x1080, scaled into 480x270 tiles
 project: 8 bpc, linear blending off
 
 ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
-builders : jsx/main.jsx, 228954 chars, modified Mon Aug 24 2026 23:30:33 GMT+0530
+builders : jsx/main.jsx, 236372 chars, modified Tue Aug 25 2026 00:21:33 GMT+0530
 globals: grain 0, glow 0, posterize off, 16-bit off — the panel defaults
 
-Control defaults read from js/controls.js for 45 types. Anything not listed there uses the builder fallbacks.
+Control defaults read from js/controls.js for 46 types. Anything not listed there uses the builder fallbacks.
 
 Read OK with care. Thirteen of these builders never call LG or
 safeSet - living, Oklab Smooth, the seven SilkFlare presets,
@@ -50,6 +50,7 @@ STATUS  GRADIENT            LAYERS NOTES
   OK    Zebra               1      
   OK    Leopard             1      
   OK    Cow                 1      
+  OK    Fur                 1      
   OK    Halftone            3      
   OK    ASCII Matrix        14     
   OK    Cellular Mosaic     1      
@@ -57,17 +58,17 @@ STATUS  GRADIENT            LAYERS NOTES
   OK    Frosted Glass       2      
   OK    Reeded Glass        4      
   OK    Liquid Chrome       1      
-  WARN  Liquid Mercury      2      1 warning: cannot set 'Specular'
-  WARN  Polished Chrome     2      1 warning: cannot set 'Specular'
+  OK    Liquid Mercury      2      
+  OK    Polished Chrome     2      
   OK    Brushed Steel       2      
-  WARN  Molten Gold         2      1 warning: cannot set 'Specular'
-  WARN  Polished Copper     2      1 warning: cannot set 'Specular'
+  OK    Molten Gold         2      
+  OK    Polished Copper     2      
   OK    Gunmetal            2      
   OK    Hammered Metal      2      
-  WARN  Crumpled Foil       2      1 warning: cannot set 'Specular'
+  OK    Crumpled Foil       2      
 -----------------------------------------------------------------------------------------------
-built 45   threw 0   warned 5
+built 46   threw 0   warned 0
 
 Single-layer builds. Worth a hard look — a gradient made of one
 layer is usually a builder that gave up early:
-  Wavy, Liquid Waves, Fluid Gradient, Silk, Aurora, Prism, Fiber, Veil, Pulse, Comet, Oklab Smooth, Living Gradient, Trail Gradient, Lava Lamp, ChromaFlare, Heatmap, Anime Water, Anime Cells, Giraffe, Tiger, Zebra, Leopard, Cow, Cellular Mosaic, Liquid Chrome
+  Wavy, Liquid Waves, Fluid Gradient, Silk, Aurora, Prism, Fiber, Veil, Pulse, Comet, Oklab Smooth, Living Gradient, Trail Gradient, Lava Lamp, ChromaFlare, Heatmap, Anime Water, Anime Cells, Giraffe, Tiger, Zebra, Leopard, Cow, Fur, Cellular Mosaic, Liquid Chrome

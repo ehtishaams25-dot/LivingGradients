@@ -478,15 +478,15 @@ function pvShade(d, W, H, pal, o) {
                    ribbons, twisted so they pour.
            plate   a ramp folded by mirrored tiling — straight bands, a
                    flat surface reflecting a room. */
-      let u;
-      if (o.env === 'flow') {
-        // Twist first, so the ribbons fold rather than just wave.
-        const tx = nx + 0.22 * (pvFbm(nx * 1.1, ny * 1.1, 2, 41) - 0.5);
-        const ty = ny + 0.22 * (pvFbm(nx * 1.1 + 5, ny * 1.1, 2, 41) - 0.5);
-        u = pvFbm(tx * 1.7 + Nx * 0.3, ty * 1.35 + Ny * 0.3, 3, 31) * bands * 1.5;
-      } else {
-        u = (nx + ny * (o.tilt || 0.14) + Nx * 0.35 + Ny * 0.2) * bands * 2;
-      }
+      /* Both are the same triangle wave; flow is the one that gets bent
+         hard, at a size much larger than the bands themselves. Bending at a
+         size SMALLER than the bands shreds them into hairlines instead —
+         which is the mistake the first metals shipped with. */
+      const bend = (o.env === 'flow') ? 0.75 : 0.06;
+      const bx = nx + bend * (pvFbm(nx * 0.9, ny * 0.9, 2, 41) - 0.5)
+                    + bend * 0.4 * (pvFbm(nx * 2.1, ny * 2.1, 2, 43) - 0.5);
+      const by = ny + bend * (pvFbm(nx * 0.9 + 5, ny * 0.9, 2, 41) - 0.5);
+      const u = (bx + by * (o.tilt || 0.14) + Nx * 0.35 + Ny * 0.2) * bands * 2;
       const env = Math.abs(((u % 2) + 2) % 2 - 1);
       const body = pvLut(lut, env);
 
