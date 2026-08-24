@@ -1,7 +1,7 @@
 Living Gradients — effect probe
 AE version : 26.0x67
 Language   : en_IN
-Date       : Sun Aug 23 2026 19:08:46 GMT+0530
+Date       : Mon Aug 24 2026 23:40:56 GMT+0530
 
 "clamps at" is the highest value the parameter accepted. A small
 number means the parameter is a dropdown and that is its option
@@ -258,6 +258,98 @@ count. A large one means it is an ordinary slider.
     3    Amount to Tint                    ADBE Tint-0003                    1D           64
     4                                      ADBE Tint-0004                    group/none   
     5    Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC Glass  {CC Glass}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Surface                           CC Glass-0001                     group/none   
+    2    Bump Map                          CC Glass-0002                     layer        
+    3    Property                          CC Glass-0003                     1D           6   <-- dropdown, 6 options
+    4    Softness                          CC Glass-0004                     1D           64
+    5    Height                            CC Glass-0005                     1D           64
+    6    Displacement                      CC Glass-0006                     1D           64
+    7                                      CC Glass-0007                     group/none   
+    8    Light                             CC Glass-0008                     group/none   
+    9    Using                             CC Glass-0023                     1D           2   <-- dropdown, 2 options
+    10   Light Intensity                   CC Glass-0009                     1D           64
+    11   Light Color                       CC Glass-0010                     colour       
+    12   Light Type                        CC Glass-0011                     1D           2   <-- dropdown, 2 options
+    13   Light Height                      CC Glass-0012                     1D           64
+    14   Light Position                    CC Glass-0013                     2D spatial   
+    15   Light Direction                   CC Glass-0014                     1D           64
+    16                                     CC Glass-0015                     group/none   
+    17   Shading                           CC Glass-0016                     group/none   
+    18   Ambient                           CC Glass-0017                     1D           64
+    19   Diffuse                           CC Glass-0018                     1D           64
+    20   Specular                          CC Glass-0019                     1D           64
+    21   Roughness                         CC Glass-0020                     1D           
+    22   Metal                             CC Glass-0021                     1D           64
+    23                                     CC Glass-0022                     group/none   
+    24   Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC Blobbylize  {CC Blobbylize}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Blobbiness                        CC Blobbylize-0001                group/none   
+    2    Blob Layer                        CC Blobbylize-0002                layer        
+    3    Property                          CC Blobbylize-0003                1D           6   <-- dropdown, 6 options
+    4    Softness                          CC Blobbylize-0004                1D           64
+    5    Cut Away                          CC Blobbylize-0005                1D           64
+    6                                      CC Blobbylize-0006                group/none   
+    7    Light                             CC Blobbylize-0007                group/none   
+    8    Using                             CC Blobbylize-0022                1D           2   <-- dropdown, 2 options
+    9    Light Intensity                   CC Blobbylize-0008                1D           64
+    10   Light Color                       CC Blobbylize-0009                colour       
+    11   Light Type                        CC Blobbylize-0010                1D           2   <-- dropdown, 2 options
+    12   Light Height                      CC Blobbylize-0011                1D           64
+    13   Light Position                    CC Blobbylize-0012                2D spatial   
+    14   Light Direction                   CC Blobbylize-0013                1D           64
+    15                                     CC Blobbylize-0014                group/none   
+    16   Shading                           CC Blobbylize-0015                group/none   
+    17   Ambient                           CC Blobbylize-0016                1D           64
+    18   Diffuse                           CC Blobbylize-0017                1D           64
+    19   Specular                          CC Blobbylize-0018                1D           64
+    20   Roughness                         CC Blobbylize-0019                1D           
+    21   Metal                             CC Blobbylize-0020                1D           64
+    22                                     CC Blobbylize-0021                group/none   
+    23   Compositing Options               ADBE Effect Built In Params       ?            
+
+### CC Mr. Mercury  {CC Mr. Mercury}
+    idx  name                              matchName                         type         clamps at
+    ---------------------------------------------------------------------------------------------------
+    1    Radius X                          CC Mr. Mercury-0001               1D           64
+    2    Radius Y                          CC Mr. Mercury-0002               1D           64
+    3    Producer                          CC Mr. Mercury-0003               2D spatial   
+    4    Direction                         CC Mr. Mercury-0004               1D           64
+    5    Velocity                          CC Mr. Mercury-0005               1D           64
+    6    Birth Rate                        CC Mr. Mercury-0006               1D           64
+    7    Longevity (sec)                   CC Mr. Mercury-0007               1D           64
+    8    Gravity                           CC Mr. Mercury-0008               1D           64
+    9    Resistance                        CC Mr. Mercury-0009               1D           64
+    10   Extra                             CC Mr. Mercury-0010               1D           64
+    11   Animation                         CC Mr. Mercury-0011               1D           14   <-- dropdown, 14 options
+    12   Blob Influence                    CC Mr. Mercury-0012               1D           1   <-- dropdown, 1 options
+    13   Influence Map                     CC Mr. Mercury-0013               1D           5   <-- dropdown, 5 options
+    14   Blob Birth Size                   CC Mr. Mercury-0014               1D           64
+    15   Blob Death Size                   CC Mr. Mercury-0015               1D           64
+    16   Light                             CC Mr. Mercury-0016               group/none   
+    17   Using                             CC Mr. Mercury-0031               1D           2   <-- dropdown, 2 options
+    18   Light Intensity                   CC Mr. Mercury-0017               1D           64
+    19   Light Color                       CC Mr. Mercury-0018               colour       
+    20   Light Type                        CC Mr. Mercury-0019               1D           2   <-- dropdown, 2 options
+    21   Light Height                      CC Mr. Mercury-0020               1D           64
+    22   Light Position                    CC Mr. Mercury-0021               2D spatial   
+    23   Light Direction                   CC Mr. Mercury-0022               1D           64
+    24                                     CC Mr. Mercury-0023               group/none   
+    25   Shading                           CC Mr. Mercury-0024               group/none   
+    26   Ambient                           CC Mr. Mercury-0025               1D           64
+    27   Diffuse                           CC Mr. Mercury-0026               1D           64
+    28   Specular                          CC Mr. Mercury-0027               1D           64
+    29   Roughness                         CC Mr. Mercury-0028               1D           
+    30   Metal                             CC Mr. Mercury-0029               1D           64
+    31   Material Opacity                  CC Mr. Mercury-0032               1D           64
+    32                                     CC Mr. Mercury-0030               group/none   
+    33   Compositing Options               ADBE Effect Built In Params       ?            
 
 
 === OPTION GRIDS ===

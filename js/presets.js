@@ -26,6 +26,7 @@ const COLOR_ROLES = {
   Tiger:          ['Coat', 'Stripes'],
   Zebra:          ['Coat', 'Stripes'],
   Cow:            ['Coat', 'Patches'],
+  Fur:            ['Undercoat', 'Guard Hair'],
   Leopard:        ['Coat', 'Rosette Ring', 'Rosette Core'],
 
   /* The shaded metals. These four are not a ramp between corners — they are
@@ -109,6 +110,12 @@ const GRADIENT_LIBRARY = [
   { id: 'Zebra', category: 'Animal Prints', label: 'Zebra', cssClass: 'preview-cellular', defaultColors: ['#F5F2EC', '#14110E'] },
   { id: 'Leopard', category: 'Animal Prints', label: 'Leopard', cssClass: 'preview-cellular', defaultColors: ['#E3C078', '#2E1A08', '#A8762E'] },
   { id: 'Cow', category: 'Animal Prints', label: 'Cow', cssClass: 'preview-cellular', defaultColors: ['#F7F5F0', '#191714'] },
+
+  /* Fur is the one that came out of trying to make gold and getting a
+     pelt instead. It is a two-tone coat shredded into filaments by a
+     Turbulent Displace whose noise is finer than the shapes it is
+     pushing — see the note in jsx/main.jsx. */
+  { id: 'Fur', category: 'Animal Prints', label: 'Fur', cssClass: 'preview-cellular', defaultColors: ['#D9A441', '#4A2408'] },
 
   /* PRINT & PATTERN
      Screens, grids and cells. Repeating structure you can count. */

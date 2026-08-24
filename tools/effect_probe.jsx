@@ -54,7 +54,8 @@
            here so that assumption is either confirmed or killed. */
         ['CC Glass',            'CC Glass'],
         ['CC Blobbylize',       'CC Blobbylize'],
-        ['CC Mr. Mercury',      'CC Mr. Mercury']
+        ['CC Mr. Mercury',      'CC Mr. Mercury'],
+        ['CC Plastic',          'CC Plastic']
     ];
 
     /* Grids to render. Each is [comp name, matchName, property, option count,

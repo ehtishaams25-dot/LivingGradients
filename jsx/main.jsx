@@ -64,6 +64,7 @@ var LG = (function () {
         ccToner:           ["CC Toner"],
         ccVectorBlur:      ["CC Vector Blur"],
         ccGlass:           ["CC Glass"],
+        ccPlastic:         ["CC Plastic"],
         ccBlobbylize:      ["CC Blobbylize"],
         ccMrMercury:       ["CC Mr. Mercury"],
         ccParticleWorld:   ["CC Particle World"],
@@ -612,6 +613,7 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'Zebra':
         case 'Leopard':
         case 'Cow':
+        case 'Fur':
             buildAnimalPrint(comp, c, controls, w, h, dur, type);
             break;
         case 'Sunburst':
@@ -2062,7 +2064,7 @@ function updateGradientLive(paramsStr) {
         /* Animal prints share one tuner, so they are registered by loop
            rather than five near-identical lines. */
         (function () {
-            var names = ['Giraffe', 'Tiger', 'Zebra', 'Leopard', 'Cow'], i;
+            var names = ['Giraffe', 'Tiger', 'Zebra', 'Leopard', 'Cow', 'Fur'], i;
             for (i = 0; i < names.length; i++) {
                 LIVE_TUNERS[names[i]] = (function (species) {
                     return {
@@ -2107,8 +2109,7 @@ function updateGradientLive(paramsStr) {
             }
             if (metalLayer) {
                 tuneMetalSurface(metalLayer, lcols, lctrl, kind,
-                                 heightLayer ? heightLayer.index : 0,
-                                 realComp.width, realComp.height);
+                                 heightLayer ? heightLayer.index : 0);
             }
             app.endUndoGroup();
             return;
@@ -3149,43 +3150,46 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
 /* ── FROSTED GLASS ────────────────────────────────────────────────────
    A sheet of glass in front of a colour field, and both halves are real.
 
-   WHAT WAS WRONG. The old build was one layer: Fractal Noise with Overflow
-   set to Wrap Back at contrast 260, then a Glow in A & B Colours mode with
-   its threshold pulled down to about 56. Wrap Back folds every value that
-   runs past white back down again, so at that contrast the field is a stack
-   of hard bands with a discontinuity at every fold — and the noise evolves,
-   so those discontinuities sweep across the frame. Then a wide Glow at a low
-   threshold bloomed whatever happened to be bright in each frame. That is the
-   flashing: it is not a glitch, it is the build working exactly as written,
-   and what it was written to do was never glass. Glass is a thing you see
-   *through*, and there was nothing behind it to see.
+   WHAT WAS WRONG THE FIRST TIME. The original build was one layer: Fractal
+   Noise with Overflow on Wrap Back at contrast 260, then a wide Glow at a
+   threshold low enough to catch half the frame. Wrap Back folds every value
+   past white back down, so at that contrast the field is a stack of hard
+   bands with a discontinuity at every fold — and the noise evolves, so those
+   discontinuities sweep across the frame while the Glow blooms whatever is
+   bright in each one. That is the flashing. It was never glass either: glass
+   is a thing you see *through*, and there was nothing behind it to see.
 
-   So there are two layers now.
+   WHAT WAS WRONG THE SECOND TIME. Splitting it into a colour field and a
+   surface was right; the numbers were not. The tile came back as a white
+   trapezoid on black, and the reason is that CC Glass's Displacement pulls
+   pixels in from outside the frame. On a comp-sized layer there is nothing
+   out there to pull, so a displacement of 110 dragged the layer's own edge
+   into the middle of the picture. The layers are 30% oversized now, so there
+   is always more image to pull from — and the colour field itself was so
+   low-frequency (a scale of 420 across the frame) that there was barely any
+   structure to refract in the first place.
 
-     Glass Colour    the field behind the glass. Soft, slow, no hard edges —
-                     it is meant to be refracted, not looked at.
-     Glass Surface   a hidden height field: the shape of the sheet.
-
-   CC Glass does the rest, and it is the right tool because it does both jobs
-   at once from the same normals: it bends what is behind the surface
-   (Displacement) *and* lights the surface itself (Specular, Roughness). Those
-   two agreeing with each other is what the eye reads as glass, and it is
-   exactly what three separate effects guessing at it could never produce.
+   So: a colour field with something in it, a surface with ridges in it, and
+   a displacement that stays inside what the layer can supply. CC Glass does
+   both jobs from the same normals — it bends what is behind the surface and
+   lights the surface itself — and those two agreeing is what the eye reads
+   as glass.
 
    Set Frost to 0 and the same build is clear liquid glass. */
 function buildGlass(comp, c, ctrl, w, h, dur) {
     var fps = comp.frameRate;
+    var OW = lgOversize(w), OH = lgOversize(h);
 
     // 1. The surface, in its own comp so it is finished before it is sampled.
-    var surfComp = app.project.items.addComp('Glass Surface Map', w, h, 1, dur, fps);
-    var surfSolid = surfComp.layers.addSolid([0.5, 0.5, 0.5], 'Surface', w, h, 1, dur);
+    var surfComp = app.project.items.addComp('Glass Surface Map', OW, OH, 1, dur, fps);
+    var surfSolid = surfComp.layers.addSolid([0.5, 0.5, 0.5], 'Surface', OW, OH, 1, dur);
     tuneGlassSurface(surfSolid, ctrl);
 
     var surf = comp.layers.add(surfComp);
     surf.name = 'Glass Surface';
     surf.enabled = false;
 
-    comp.layers.addSolid([0.5, 0.5, 0.5], 'Glass Colour', w, h, 1, dur);
+    comp.layers.addSolid([0.5, 0.5, 0.5], 'Glass Colour', OW, OH, 1, dur);
 
     // 2. Stack is final, so the bump index is safe. See buildMetalTexture.
     var colourNow = null, surfNow = null, i;
@@ -3228,18 +3232,21 @@ function tuneGlassSurface(s, ctrl) {
 /* The colour behind the glass, then the glass over it. */
 function tuneGlass(s, c, ctrl, bumpIndex) {
     if (!s) return;
-    var speed = num(ctrl.speed, 14);
-    var irid  = num(ctrl.iridescence, 22);
+    var speed  = num(ctrl.speed, 14);
+    var irid   = num(ctrl.iridescence, 22);
     var relief = num(ctrl.relief, 45);
 
+    /* Something to refract. A field at scale 420 across a frame is one soft
+       blob and reads as a flat wash once it is behind glass; this is a third
+       of that, so there are edges for the surface to bend. */
     lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Colour Field'), {
         fractalType:  2,
-        contrast:     100,
+        contrast:     130,
         brightness:   0,
         overflow:     2,
-        complexity:   3,
-        scaleWidth:   num(ctrl.scale, 420) * 1.4,
-        scaleHeight:  num(ctrl.scale, 420),
+        complexity:   4,
+        scaleWidth:   num(ctrl.scale, 420) * 0.5,
+        scaleHeight:  num(ctrl.scale, 420) * 0.36,
         subInfluence: 60,
         speed:        speed
     });
@@ -3250,14 +3257,17 @@ function tuneGlass(s, c, ctrl, bumpIndex) {
         lgGlassSurface(glass, bumpIndex, {
             softness:     Math.max(1, relief * 0.2),
             height:       relief,
-            displacement: num(ctrl.refraction, 110)
+            /* Refraction is the headline slider, so it keeps its full 0..300
+               range in the panel — but a third of it is as far as the layer's
+               own 30% overhang can honestly supply. */
+            displacement: num(ctrl.refraction, 110) * 0.34
         });
         lgShadeSet(glass, {
-            intensity:   90 + num(ctrl.specular, 85) * 0.3,
+            intensity:   70 + num(ctrl.specular, 85) * 0.3,
             lightAngle:  num(ctrl.lightAngle, 315),
             lightHeight: 55,
-            ambient:     60,
-            diffuse:     50,
+            ambient:     46,
+            diffuse:     38,
             specular:    num(ctrl.specular, 85),
             roughness:   num(ctrl.roughness, 8),
             metal:       0                 // glass is not metal: white highlights
@@ -3265,7 +3275,7 @@ function tuneGlass(s, c, ctrl, bumpIndex) {
     }
 
     /* Iridescence is a small, high-threshold bloom in two palette colours —
-       a fringe on the brightest edges only. The old build ran this at a
+       a fringe on the brightest edges only. The original ran this at a
        threshold low enough to catch half the frame, which is how a subtle
        chromatic edge became a strobe. */
     var g = lgFxNamed(s, ['ADBE Glo2'], 'Glass Iridescence');
@@ -3555,30 +3565,54 @@ function tuneAnimeCells(s, c, ctrl) {
    index cannot be what actually runs. Re-running tools/effect_probe.jsx will
    confirm them — CC Glass is on its list now. */
 
-/* The light and material half of CC Glass / CC Blobbylize. Identical block,
-   identical names, so one function serves both. */
-function lgShadeSet(fx, o) {
+/* The light and material half of CC Glass. CC Blobbylize and CC Mr. Mercury
+   carry the same block under the same names but at different indices, hence
+   the offset argument — CC Glass has both a Height and a Displacement where
+   Blobbylize has only Cut Away, so everything below Surface sits one later.
+
+   These indices are no longer reasoned from anything. They are the dump in
+   tools/effect_probe_report.txt, taken on this machine, and the guess they
+   replaced was wrong by exactly that one place. */
+function lgShadeSet(fx, o, off) {
     if (!fx) return null;
+    var d = (off === undefined) ? 0 : off;
 
-    LG.set(fx, 'Using',           8,  1);                        // Effect Light
-    LG.set(fx, 'Light Intensity', 9,  num(o.intensity, 100));
-    LG.set(fx, 'Light Color',     10, o.lightColor || [1, 1, 1]);
-    LG.set(fx, 'Light Type',      11, num(o.lightType, 1));      // 1 Distant, 2 Point
-    LG.set(fx, 'Light Height',    12, num(o.lightHeight, 50));
-    LG.set(fx, 'Light Direction', 14, num(o.lightAngle, 315));
+    /* Every one of these is a 0..100 parameter and setValue THROWS past the
+       end rather than clamping. That is not a detail: the first contact sheet
+       came back with "cannot set 'Specular'" on five of the eight metals, all
+       of them the ones asking for more than 100, and a Specular that never
+       landed is a metal with no highlight on it. Clamp here, once, rather
+       than trusting eight preset tables to stay inside the range. */
+    function pc(v, dflt) {
+        v = num(v, dflt);
+        return v < 0 ? 0 : (v > 100 ? 100 : v);
+    }
 
-    LG.set(fx, 'Ambient',   17, num(o.ambient, 50));
-    LG.set(fx, 'Diffuse',   18, num(o.diffuse, 55));
-    LG.set(fx, 'Specular',  19, num(o.specular, 90));
+    LG.set(fx, 'Using',           9 + d,  1);                    // Effect Light
+    LG.set(fx, 'Light Intensity', 10 + d, pc(o.intensity, 100));
+    LG.set(fx, 'Light Color',     11 + d, o.lightColor || [1, 1, 1]);
+    LG.set(fx, 'Light Type',      12 + d, num(o.lightType, 1));  // 1 Distant, 2 Point
+    LG.set(fx, 'Light Height',    13 + d, pc(o.lightHeight, 45));
+    LG.set(fx, 'Light Direction', 15 + d, num(o.lightAngle, 315));
+
+    /* Ambient is how much of the picture comes through unlit, Diffuse is how
+       much the lamp adds. They sum, so an Ambient of 46 with a Diffuse of 55
+       is already at 101% before the specular goes on top — which is why the
+       first sheet came back as white bands with a few dark lines through
+       them. Keeping the pair under about 90 is what leaves headroom for a
+       highlight to read as a highlight. */
+    LG.set(fx, 'Ambient',   18 + d, pc(o.ambient, 40));
+    LG.set(fx, 'Diffuse',   19 + d, pc(o.diffuse, 45));
+    LG.set(fx, 'Specular',  20 + d, pc(o.specular, 80));
 
     /* Roughness is a 0..1 exponent term, not a percentage — the interface
-       shows it as 0.100 and going anywhere near 1 turns the surface to chalk.
+       shows it as 0.100 and the probe confirms it takes no integer clamp.
        The panel's slider is 1..100 because that is a usable range to drag;
        /500 lands it in 0.002 (mirror) to 0.2 (cast iron). */
-    LG.set(fx, 'Roughness', 20, Math.max(0.001, num(o.roughness, 10) / 500));
+    LG.set(fx, 'Roughness', 21 + d, Math.max(0.001, num(o.roughness, 10) / 500));
 
-    /* The whole reason these read as metal. */
-    LG.set(fx, 'Metal',     21, num(o.metal, 100));
+    // The whole reason these read as metal rather than as coloured plastic.
+    LG.set(fx, 'Metal',     22 + d, pc(o.metal, 100));
     return fx;
 }
 
@@ -3588,7 +3622,7 @@ function lgGlassSurface(fx, bumpLayerIndex, o) {
     if (!fx) return null;
     if (bumpLayerIndex) LG.set(fx, 'Bump Map', 2, bumpLayerIndex);
     LG.set(fx, 'Property',     3, 5);                            // Lightness
-    LG.set(fx, 'Softness',     4, num(o.softness, 8));
+    LG.set(fx, 'Softness',     4, Math.max(0, num(o.softness, 8)));
     LG.set(fx, 'Height',       5, num(o.height, 40));
     LG.set(fx, 'Displacement', 6, num(o.displacement, 60));
     return fx;
@@ -3599,74 +3633,92 @@ function lgGlassSurface(fx, bumpLayerIndex, o) {
 
      <kind> Height   a hidden greyscale layer: the tooling. Brushed steel is
                      grain smeared along one axis, hammered is dimples, foil
-                     is deep creases, mercury is blobs. This is the only thing
-                     that differs between the finishes structurally.
+                     is deep creases, mercury is blobs.
 
      <kind> Metal    what the surface reflects, then the shader on top.
 
-   The reflection is a mirrored ramp, not noise, and that matters. A ramp
-   folded by Motion Tile in Mirror Edges mode is an even triangle wave: every
-   tone gets an equal share of the frame, which is both what a reflective
-   surface physically is (a bright-dark-bright environment) and the only way
-   to keep a gradient map from painting the whole frame one colour. Noise has
-   no such guarantee — push its contrast and the histogram piles up at one end
-   — and that is exactly how the old metals turned into a single flat tone.
+   THE ENVIRONMENT IS THE PRESET. The first version of this gave all eight
+   the same reflection — a ramp folded into a triangle wave by Motion Tile —
+   and the sheet showed exactly that: eight tiles of straight vertical bands.
+   Straight bands are what a *plate* reflects. They are not what liquid metal
+   looks like, and liquid metal is what was actually being asked for.
 
-   The height field lives in its own comp rather than on a layer in this one
-   because CC Glass reads its bump layer *before* that layer's own effects in
-   some render orders, and a precomp is the only way to be certain the grain
-   is there when it is sampled. */
+   So there are two environments now, and which one a finish gets is the
+   biggest single thing that separates them:
+
+     flow    Fractal Noise with Overflow on Wrap Back, then twisted. Wrap
+             Back folds every value that runs past white back down again, so
+             the field arrives already banded into closed organic ribbons
+             rather than into stripes — and a twist through it is what makes
+             those ribbons pour. This is chrome, gold, copper, mercury, foil.
+
+     plate   the folded ramp, few wide bands, barely bent. A flat industrial
+             surface reflecting a room. This is brushed steel, gunmetal and
+             hammered — and hammered was the one tile on the first sheet that
+             already looked like metal, so its numbers are left alone.
+
+   The height field lives in its own comp because CC Glass reads its bump
+   layer as a finished image, and a precomp is the only way to be sure the
+   grain is there when it is sampled.
+
+   Both layers are built oversized. CC Glass's Displacement pulls pixels in
+   from outside the frame, and on a frame-sized layer there is nothing out
+   there to pull — which is what turned the first Frosted Glass into a white
+   trapezoid on black. A layer 30% larger than the comp always has more of
+   itself to give. */
 var METAL_SURFACES = {
     Polished: {
-        field: 'noise',
+        env: 'flow', field: 'noise',
         hWidth: 700, hHeight: 620, hContrast: 50, hComplexity: 2,
-        smooth: 6, tilt: 14, metal: 100, ambient: 42, diffuse: 45
+        smooth: 6, tilt: 14, metal: 100, ambient: 34, diffuse: 48
     },
     Brushed: {
         /* Wide and very short: the noise is long horizontal filaments before
            the directional blur ever touches it. Blurring along one axis only
            is the whole difference between brushed and mirrored — it smears
            the reflection down the grain and leaves it sharp across it. */
-        field: 'noise',
+        env: 'plate', field: 'noise',
         hWidth: 1400, hHeight: 3, hContrast: 70, hComplexity: 6,
-        brushDirection: 90, smooth: 1, tilt: 10, metal: 100, ambient: 48, diffuse: 62
+        brushDirection: 90, smooth: 1, tilt: 10, metal: 100, ambient: 44, diffuse: 46
     },
     Gold: {
-        field: 'noise',
+        env: 'flow', field: 'noise',
         hWidth: 420, hHeight: 380, hContrast: 90, hComplexity: 3,
-        smooth: 8, tilt: 18, metal: 100, ambient: 46, diffuse: 52
+        smooth: 8, tilt: 18, metal: 100, ambient: 36, diffuse: 50
     },
     Copper: {
-        field: 'noise',
+        env: 'flow', field: 'noise',
         hWidth: 480, hHeight: 430, hContrast: 80, hComplexity: 3,
-        smooth: 9, tilt: 16, metal: 100, ambient: 44, diffuse: 54
+        smooth: 9, tilt: 16, metal: 100, ambient: 36, diffuse: 50
     },
     Gunmetal: {
         /* Sandblasted: fine isotropic grain, and the only finish here that is
            not trying to be shiny. Low specular, high roughness. */
-        field: 'noise',
+        env: 'plate', field: 'noise',
         hWidth: 90, hHeight: 80, hContrast: 130, hComplexity: 5,
-        smooth: 2, tilt: 12, metal: 85, ambient: 55, diffuse: 70
+        smooth: 2, tilt: 12, metal: 85, ambient: 50, diffuse: 52
     },
     Hammered: {
-        // Dimples, so the height field is cells rather than noise.
-        field: 'cells', pattern: 'Bubbles', cellSize: 90, cellContrast: 150,
-        smooth: 5, tilt: 16, metal: 100, ambient: 44, diffuse: 55
+        /* Dimples. These numbers came back as the one tile on the first
+           contact sheet that already read as a lit metal object, so they are
+           the reference the other seven were pulled towards rather than
+           something to improve. */
+        env: 'plate', field: 'cells', pattern: 'Bubbles',
+        cellSize: 90, cellContrast: 150,
+        smooth: 5, tilt: 16, metal: 100, ambient: 44, diffuse: 50
     },
     Foil: {
         // Creases: mid-scale, very high contrast, then displaced hard.
-        field: 'noise',
+        env: 'flow', field: 'noise',
         hWidth: 150, hHeight: 130, hContrast: 300, hComplexity: 4,
-        smooth: 2, tilt: 22, metal: 100, ambient: 40, diffuse: 48
+        smooth: 2, tilt: 22, metal: 100, ambient: 32, diffuse: 44
     },
     Mercury: {
-        /* Blobs. Wrap Back is what makes them blobs rather than clouds:
-           values that run past white fold back down, so the field arrives
-           already banded into closed rounded contours, and a heavy blur
-           afterwards rounds those contours into droplets. */
-        field: 'noise', overflow: 3,
+        /* Blobs. Wrap Back on the height field too, so the droplets arrive as
+           closed rounded contours, and a heavy blur rounds them off. */
+        env: 'flow', field: 'noise', overflow: 3,
         hWidth: 300, hHeight: 280, hContrast: 200, hComplexity: 2,
-        smooth: 22, tilt: 10, metal: 100, ambient: 38, diffuse: 42
+        smooth: 22, tilt: 10, metal: 100, ambient: 30, diffuse: 46
     }
 };
 
@@ -3729,10 +3781,14 @@ function tuneMetalHeight(s, ctrl, kind) {
 }
 
 /* What the metal reflects, and the shader that lights it. */
-function tuneMetalSurface(s, c, ctrl, kind, bumpIndex, w, h) {
+function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     if (!s) return;
-    if (!w) { try { w = s.width;  } catch (e) { w = 1920; } }
-    if (!h) { try { h = s.height; } catch (e) { h = 1080; } }
+    /* Read the size off the layer rather than taking the comp's. The layer is
+       deliberately larger than the comp (see the note above) so the two are
+       not the same number, and a ramp drawn to the comp's width would stop
+       part-way across it. */
+    var w = 1920, h = 1080;
+    try { w = s.width; h = s.height; } catch (e) { }
 
     var spec   = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
     var o      = lgDefaults(spec, ctrl);
@@ -3740,20 +3796,29 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex, w, h) {
     var bands  = Math.max(1, num(o.bands, 5));
     var relief = num(o.relief, 30);
     var sheen  = num(o.sheen, 20);
+    var flow   = o.env === 'flow';
+    var scale  = num(o.scaleAll, 100) / 100;
 
-    // 1. A uniformly distributed environment.
-    var ramp = lgFx(s, ['ADBE Ramp']);
+    /* 1. The environment.
+
+       Both routes are always on the layer; only one is enabled. Adding and
+       removing effects would change the stack order underneath a live update
+       and the shader below would lose track of which effect it sits after. */
+    var ramp = lgFxNamed(s, ['ADBE Ramp'], 'Metal Ramp');
     if (ramp) {
         LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
         LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
         LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
         LG.set(ramp, 'End Color',     4, [1, 1, 1]);
+        try { ramp.enabled = !flow; } catch (e) { }
     }
 
-    /* 2. Fold it into a triangle wave. Sliding Tile Center rather than Phase:
-          Phase offsets alternate tiles against each other and shears the
-          reflection instead of drifting it. */
-    var tile = lgFx(s, ['ADBE Tile']);
+    /* Motion Tile folds the ramp into a triangle wave: every tone gets an
+       equal share of the frame, which is what keeps a gradient map from
+       painting everything one colour. Sliding Tile Center rather than Phase —
+       Phase offsets alternate tiles against each other and shears the
+       reflection instead of drifting it. */
+    var tile = lgFxNamed(s, ['ADBE Tile'], 'Metal Fold');
     if (tile) {
         LG.set(tile, 'Tile Width',    2, 100 / bands);
         LG.set(tile, 'Tile Height',   3, 100);
@@ -3763,46 +3828,77 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex, w, h) {
         LG.expr(tile, 'Tile Center', 1, speed !== 0
             ? '[value[0] + time * ' + (speed * 6) + ', value[1]]'
             : 'value');
+        try { tile.enabled = !flow; } catch (e) { }
     }
 
-    /* 3. Bend the reflection. A perfectly straight band reads as a printed
-          stripe; a bent one reads as an environment seen in a curved thing. */
+    /* The flow field. Wrap Back is doing the work: contrast decides how many
+       times the field runs past white and folds, so Reflections maps onto
+       contrast here in the same way it maps onto tile count above. */
+    var fn = lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Flow');
+    lgFractalSet(fn, {
+        fractalType:  2,
+        contrast:     70 + bands * 24,
+        brightness:   0,
+        overflow:     3,                       // Wrap Back — this is the fold
+        complexity:   3,
+        scaleWidth:   980 * scale,
+        scaleHeight:  760 * scale,
+        rotation:     num(o.tilt, 14),
+        subInfluence: 65,
+        speed:        speed * 0.8
+    });
+    if (fn) { try { fn.enabled = flow; } catch (e) { } }
+
+    /* 2. Make it pour. A twist is what turns concentric bands into the
+          folded, poured shapes liquid metal actually makes; the turbulent
+          pass after it breaks up the regularity the twist leaves behind. */
+    var twist = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Twist');
+    var twistAmt = flow ? 120 + num(o.warp, 0) * 0.5 : 0;
+    if (twist) {
+        lgTurbSet(twist, { mode: 3, amount: twistAmt, size: 520, speed: speed * -0.25 });
+        try { twist.enabled = twistAmt > 0; } catch (e) { }
+    }
+
     var env = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Environment');
-    var envAmt = num(o.warp, 0) * 0.6;
+    var envAmt = flow ? 60 + num(o.warp, 0) * 0.4 : num(o.warp, 0) * 0.6;
     if (env) {
-        lgTurbSet(env, { mode: 4, amount: envAmt, size: 340, speed: speed * 0.3 });
+        lgTurbSet(env, { mode: 4, amount: envAmt, size: 300, speed: speed * 0.3 });
         try { env.enabled = envAmt > 0; } catch (e) { }
     }
 
-    // 4. The palette, in role order: Shadow, Base Metal, Bright, Highlight.
+    // 3. The palette, in role order: Shadow, Base Metal, Bright, Highlight.
     lgToneColors(lgFx(s, ['CC Toner']), c, true);
 
-    // 5. The shader.
+    // 4. The shader.
     var glass = lgFx(s, ['CC Glass']);
     if (glass) {
         lgGlassSurface(glass, bumpIndex, {
             softness:     Math.max(1, relief * 0.12),
             height:       relief,
-            displacement: relief * 1.4
+            /* Displacement is what bends the reflection over the tooling.
+               Kept well inside the layer's own overhang so it can never pull
+               from beyond the layer and leave a transparent edge. */
+            displacement: relief * 0.8
         });
+        var specular = num(o.specular, 80);
         lgShadeSet(glass, {
-            intensity:   80 + num(o.specular, 90) * 0.4,
+            intensity:   60 + specular * 0.35,
             lightAngle:  num(o.lightAngle, 315),
             lightHeight: num(o.lightHeight, 45),
-            ambient:     num(o.ambient, 46),
-            diffuse:     num(o.diffuse, 55),
-            specular:    num(o.specular, 90),
+            ambient:     num(o.ambient, 40),
+            diffuse:     num(o.diffuse, 45),
+            specular:    specular,
             roughness:   num(o.roughness, 10),
             metal:       num(o.metal, 100)
         });
     }
 
-    // 6. Bloom on the specular, then the optional final soften.
+    // 5. Bloom on the specular, then the optional final soften.
     var g = lgFxNamed(s, ['ADBE Glo2'], 'Metal Bloom');
     if (g) {
-        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - sheen * 0.55));
+        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - sheen * 0.4));
         LG.set(g, 'Glow Radius',    3, 12 + sheen * 0.9);
-        LG.set(g, 'Glow Intensity', 4, sheen / 70);
+        LG.set(g, 'Glow Intensity', 4, sheen / 110);
         LG.set(g, 'Glow Colors',    7, 1);                       // Original Colors
         try { g.enabled = sheen > 0; } catch (e) { }
     }
@@ -3810,12 +3906,17 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex, w, h) {
     lgBlur(s, num(o.softness, 0));
 }
 
+/* Both layers are built 30% larger than the comp so the shader's
+   displacement always has image to pull from. See the note on METAL_SURFACES. */
+function lgOversize(n) { return Math.round(n * 1.3); }
+
 function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
     var fps = comp.frameRate;
+    var OW = lgOversize(w), OH = lgOversize(h);
 
     // 1. The height field, in its own comp.
-    var heightComp = app.project.items.addComp(kind + ' Height Map', w, h, 1, dur, fps);
-    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height', w, h, 1, dur);
+    var heightComp = app.project.items.addComp(kind + ' Height Map', OW, OH, 1, dur, fps);
+    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height', OW, OH, 1, dur);
     tuneMetalHeight(heightSolid, ctrl, kind);
 
     // 2. Both layers into the target comp, height first so it ends up below.
@@ -3823,7 +3924,7 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
     bump.name = kind + ' Height';
     bump.enabled = false;            // a bump source, not a picture
 
-    comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', w, h, 1, dur);
+    comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', OW, OH, 1, dur);
 
     /* 3. Only now is the stack final, so only now is the bump index safe.
 
@@ -3837,7 +3938,7 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
         if (comp.layer(i).name === kind + ' Metal')  metalNow = comp.layer(i);
         else if (comp.layer(i).name === kind + ' Height') bumpNow = comp.layer(i);
     }
-    if (metalNow) tuneMetalSurface(metalNow, c, ctrl, kind, bumpNow ? bumpNow.index : 0, w, h);
+    if (metalNow) tuneMetalSurface(metalNow, c, ctrl, kind, bumpNow ? bumpNow.index : 0);
 }
 
 /* ── ANIMAL PRINTS ────────────────────────────────────────────────────
@@ -3884,9 +3985,17 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
 var ANIMAL_PRINTS = {
     Giraffe: {
         field: 'cells',
-        pattern: 'Static Plates',    // interlocking plates, no gaps
-        size: 150, disperse: 1.0, invert: true,
-        coverage: 62, contrast: 400, warp: 25, warpSize: 200, softness: 5, speed: 5
+        /* Not inverted, and this is the correction the first sheet asked for.
+           Static Plates puts the plate faces high and the seams between them
+           low. Inverting that made the seams the marking and the faces the
+           coat, so the tile came back as a cream frame with thin brown
+           netting on it — the exact photographic negative of a giraffe, whose
+           patches are the large shapes and whose cream is the thin line
+           between them. The cells were also about half the size they should
+           be at 1920 across. */
+        pattern: 'Static Plates', invert: false,
+        size: 320, disperse: 1.0,
+        coverage: 66, contrast: 400, warp: 25, warpSize: 200, softness: 5, speed: 5
     },
     Tiger: {
         field: 'noise',
@@ -3903,21 +4012,42 @@ var ANIMAL_PRINTS = {
     },
     Leopard: {
         field: 'noise', rosette: true,
-        /* Small round features. The rosette is the three-stop mapping, not a
-           second pattern: a blob's shoulder lands in the ring band and its
-           peak lands in the core band, so each spot comes out as a dark ring
-           with a lighter centre — which is what a rosette is. */
-        scaleWidth: 70, scaleHeight: 70, complexity: 4,
-        coverage: 30, contrast: 200, warp: 30, warpSize: 90, softness: 3, speed: 4
+        /* The rosette is the three-stop mapping, not a second pattern: a
+           blob's shoulder lands in the ring band and its peak lands in the
+           core band, so each spot comes out as a dark ring with a lighter
+           centre.
+
+           At a scale of 70 with four octaves the blobs came out as grit —
+           every rosette was a few pixels across and the ring and the core had
+           nowhere to sit. A spot needs to be big enough to have an inside. */
+        scaleWidth: 190, scaleHeight: 175, complexity: 3,
+        coverage: 34, contrast: 170, warp: 30, warpSize: 140, softness: 3, speed: 4
     },
     Cow: {
         field: 'noise',
         // Large and barely thresholded: a few big irregular patches.
         scaleWidth: 300, scaleHeight: 260, complexity: 2,
         coverage: 42, contrast: 400, warp: 40, warpSize: 320, softness: 4, speed: 3
+    },
+    /* FUR — the accident, made deliberate.
+
+       This is Turbulent Displace used the way nothing else in this file uses
+       it: Size down at 3 instead of the usual 150, Amount up at 900 instead
+       of the usual 70. A displacement whose noise is finer than the shapes it
+       is pushing does not bend those shapes, it shreds their edges into
+       filaments — and filaments the length of the Amount, all leaning the way
+       the Twist mode turns them, is fur.
+
+       The base underneath it is an ordinary two-tone print, which is what
+       gives the pelt its darker undercoat showing through. */
+    Fur: {
+        field: 'noise', fur: true,
+        scaleWidth: 260, scaleHeight: 230, complexity: 3,
+        coverage: 45, contrast: 180,
+        warpMode: 3, warp: 900, warpSize: 3,
+        softness: 1, speed: 3
     }
 };
-
 /* Where to sit Fractal Noise's Brightness so that `coverage` per cent of the
    frame ends up above the threshold.
 
@@ -4025,9 +4155,14 @@ function tuneAnimalPrint(s, c, ctrl, species) {
     var warp = num(o.warp, 0);
     var td = lgFx(s, ['ADBE Turbulent Displace']);
     if (td) {
+        /* The size floor is 2, not 20. Fur lives below 20 — that is the whole
+           trick of it — and a floor of 20 would quietly turn every pelt back
+           into a wobble. */
         lgTurbSet(td, {
-            mode: 1, amount: warp, size: Math.max(20, num(o.warpSize, 150) * scale),
-            speed: speed * 0.3
+            mode:   num(o.warpMode, 1),
+            amount: warp,
+            size:   Math.max(2, num(o.warpSize, 150) * scale),
+            speed:  speed * (o.fur ? 0.08 : 0.3)
         });
         try { td.enabled = warp > 0; } catch (e) { }
     }

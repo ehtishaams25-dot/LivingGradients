@@ -105,7 +105,7 @@ const GRADIENT_CONTROLS = {
     { id: 'refraction',  label: 'Refraction',     min: 0,   max: 300, step: 5,  default: 110, type: 'slider' },
     { id: 'relief',      label: 'Relief',         min: 0,   max: 100, step: 1,  default: 45,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',    min: 0,   max: 360, step: 1,  default: 315, type: 'slider' },
-    { id: 'specular',    label: 'Specular',       min: 0,   max: 150, step: 1,  default: 85,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',       min: 0,   max: 100, step: 1,  default: 85,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',      min: 1,   max: 100, step: 1,  default: 8,   type: 'slider' },
     { id: 'iridescence', label: 'Iridescence',    min: 0,   max: 100, step: 1,  default: 22,  type: 'slider' },
     { id: 'softness',    label: 'Frost',          min: 0,   max: 120, step: 1,  default: 10,  type: 'slider' }
@@ -204,6 +204,21 @@ const GRADIENT_CONTROLS = {
     { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100, step: 1, default: 3,   type: 'slider' }
   ],
 
+  /* Fur takes the two sliders that actually define it — how long the
+     filaments are and how fine the noise that cuts them is — instead of the
+     Irregularity slider the flat prints get. Fibre Size is the delicate one:
+     it wants to be far below the shapes it is shredding, and once it climbs
+     past about 20 the pelt turns back into an ordinary wobbled print. */
+  Fur: [
+    { id: 'scaleAll',  label: 'Coat Scale',      min: 20, max: 300,  step: 5,  default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Guard Hair',      min: 5,  max: 95,   step: 1,  default: 45,  type: 'slider' },
+    { id: 'warp',      label: 'Fibre Length',    min: 0,  max: 2000, step: 20, default: 900, type: 'slider' },
+    { id: 'warpSize',  label: 'Fibre Size',      min: 1,  max: 40,   step: 1,  default: 3,   type: 'slider' },
+    { id: 'contrast',  label: 'Coat Mottling',   min: 40, max: 400,  step: 5,  default: 180, type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',   min: 0,  max: 40,   step: 1,  default: 1,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100,  step: 1,  default: 3,   type: 'slider' }
+  ],
+
   /* THE SHADED METALS
      Eight presets, one shader, so a slider means the same thing on every one
      of them. These are not texture sliders any more — they are the inputs a
@@ -225,13 +240,13 @@ const GRADIENT_CONTROLS = {
      reads as a photograph of metal rather than as a living background. */
   Polished: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 12,  type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
     { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 60,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 110, type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 92,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 4,   type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 25,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -245,7 +260,7 @@ const GRADIENT_CONTROLS = {
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 0,   type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 300, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 70,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 70,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 28,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 14,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -253,13 +268,13 @@ const GRADIENT_CONTROLS = {
   ],
   Gold: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 26,  type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 36,  type: 'slider' },
     { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 120, type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 320, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 45,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 120, type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 96,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 8,   type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -267,13 +282,13 @@ const GRADIENT_CONTROLS = {
   ],
   Copper: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
     { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
     { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 90,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 330, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 48,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 105, type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 90,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 10,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -287,7 +302,7 @@ const GRADIENT_CONTROLS = {
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 40,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 290, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 26,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 55,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 45,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -301,7 +316,7 @@ const GRADIENT_CONTROLS = {
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 25,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 310, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 95,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 95,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 14,  type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -315,7 +330,7 @@ const GRADIENT_CONTROLS = {
     { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 240, type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 130, type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 98,  type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 6,   type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
@@ -332,7 +347,7 @@ const GRADIENT_CONTROLS = {
     { id: 'warp',        label: 'Surface Churn', min: 0,  max: 400, step: 5, default: 160, type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 140, type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 100, type: 'slider' },
     { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 2,   type: 'slider' },
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },

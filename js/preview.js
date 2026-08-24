@@ -470,8 +470,23 @@ function pvShade(d, W, H, pal, o) {
       const nl = Math.sqrt(gx * gx + gy * gy + 1);
       const Nx = -gx / nl, Ny = -gy / nl, Nz = 1 / nl;
 
-      // The environment this surface reflects, displaced by its own normals.
-      const u = (nx + ny * (o.tilt || 0.14) + Nx * 0.35 + Ny * 0.2) * bands * 2;
+      /* The environment this surface reflects, displaced by its own
+         normals. Two kinds, and which one a finish gets is the single
+         biggest thing that separates a poured metal from a plate:
+
+           flow    a noise field folded back on itself — closed organic
+                   ribbons, twisted so they pour.
+           plate   a ramp folded by mirrored tiling — straight bands, a
+                   flat surface reflecting a room. */
+      let u;
+      if (o.env === 'flow') {
+        // Twist first, so the ribbons fold rather than just wave.
+        const tx = nx + 0.22 * (pvFbm(nx * 1.1, ny * 1.1, 2, 41) - 0.5);
+        const ty = ny + 0.22 * (pvFbm(nx * 1.1 + 5, ny * 1.1, 2, 41) - 0.5);
+        u = pvFbm(tx * 1.7 + Nx * 0.3, ty * 1.35 + Ny * 0.3, 3, 31) * bands * 1.5;
+      } else {
+        u = (nx + ny * (o.tilt || 0.14) + Nx * 0.35 + Ny * 0.2) * bands * 2;
+      }
       const env = Math.abs(((u % 2) + 2) % 2 - 1);
       const body = pvLut(lut, env);
 
@@ -521,6 +536,35 @@ function pvGlass(d, W, H, pal) {
   }
 }
 
+/* Fur: a two-tone coat, then shredded.
+
+   The displacement noise is deliberately far finer than the shapes it is
+   pushing, which is what turns an edge into filaments instead of bending it —
+   the same trick the builder pulls with a Turbulent Displace at Size 3 and
+   Amount 900. Drawn here by sampling the coat at a coordinate pushed along a
+   high-frequency field. */
+function pvFur(d, W, H, pal) {
+  const under = pal[0];
+  const guard = pal[1 % pal.length];
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      // The shred. High frequency, large amplitude, leaning one way.
+      const fx = nx + 0.075 * (pvFbm(nx * 90, ny * 90, 2, 61) - 0.5)
+                    + 0.02  * (pvFbm(nx * 20, ny * 20, 2, 62) - 0.5);
+      const fy = ny + 0.055 * (pvFbm(nx * 90 + 7, ny * 90, 2, 61) - 0.5);
+      const coat = pvFbm(fx * 5.0, fy * 4.4, 3, 63);
+      let c = pvMix(under, guard, pvClamp((coat - 0.5) * 3.2 + 0.5));
+      // A little sheen along the lie of the hair.
+      const sheen = pvClamp((pvFbm(fx * 90, fy * 90, 1, 61) - 0.55) * 3);
+      c = pvMix(c, [1, 1, 1], sheen * 0.18);
+      pvPut(d, (y * W + x) * 4, c);
+    }
+  }
+}
+
+/* ── Which painter belongs to which gradient ──
 /* ── Which painter belongs to which gradient ────────────────────────── */
 
 /* A shaded metal card is drawn with the metal's own height field and its own
@@ -528,7 +572,7 @@ function pvGlass(d, W, H, pal) {
    cards rather than the same chrome swirl with two labels. */
 function pvMetalCard(kind, o) {
   return (d, W, H, p) => pvShade(d, W, H, p, {
-    kind: kind,
+    kind: kind, env: o.env,
     bands: o.bands, relief: o.relief, shine: o.shine,
     lightAngle: o.lightAngle, lightHeight: o.lightHeight,
     ambient: o.ambient, specular: o.specular, tilt: o.tilt
@@ -550,7 +594,8 @@ const PREVIEW_FAMILY = {
   Giraffe:        pvPlates,
   Tiger:          pvPrintCard({ sx: 22, sy: 1.1, oct: 3, coverage: 0.34, sharp: 70, warp: 0.05, seed: 3 }),
   Zebra:          pvPrintCard({ sx: 13, sy: 0.9, oct: 2, coverage: 0.45, sharp: 90, warp: 0.08, seed: 5 }),
-  Leopard:        pvPrintCard({ sx: 9,  sy: 9,   oct: 4, coverage: 0.30, sharp: 26, warp: 0.03, seed: 9, rosette: true }),
+  Leopard:        pvPrintCard({ sx: 5.5, sy: 5.5, oct: 3, coverage: 0.34, sharp: 18, warp: 0.03, seed: 9, rosette: true }),
+  Fur:            pvFur,
   Cow:            pvPrintCard({ sx: 4.2, sy: 3.6, oct: 2, coverage: 0.42, sharp: 90, warp: 0.04, seed: 4 }),
 
   Sunburst:       pvRays,
@@ -559,14 +604,14 @@ const PREVIEW_FAMILY = {
 
   Metallic:       pvChrome,   // Liquid Chrome is still ribbons, not a plate
 
-  Polished:       pvMetalCard('Polished', { bands: 5, relief: 0.12, shine: 90, lightAngle: 315, lightHeight: 0.55, ambient: 0.5,  specular: 1.0, tilt: 0.14 }),
-  Brushed:        pvMetalCard('Brushed',  { bands: 3, relief: 0.30, shine: 22, lightAngle: 300, lightHeight: 0.32, ambient: 0.55, specular: 0.6, tilt: 0.10 }),
-  Gold:           pvMetalCard('Gold',     { bands: 4, relief: 0.26, shine: 70, lightAngle: 320, lightHeight: 0.45, ambient: 0.5,  specular: 1.1, tilt: 0.18 }),
-  Copper:         pvMetalCard('Copper',   { bands: 4, relief: 0.22, shine: 60, lightAngle: 330, lightHeight: 0.48, ambient: 0.5,  specular: 0.95, tilt: 0.16 }),
-  Gunmetal:       pvMetalCard('Gunmetal', { bands: 6, relief: 0.34, shine: 12, lightAngle: 290, lightHeight: 0.26, ambient: 0.62, specular: 0.4, tilt: 0.12 }),
-  Hammered:       pvMetalCard('Hammered', { bands: 4, relief: 0.55, shine: 55, lightAngle: 310, lightHeight: 0.38, ambient: 0.5,  specular: 0.9, tilt: 0.16 }),
-  Foil:           pvMetalCard('Foil',     { bands: 8, relief: 0.70, shine: 80, lightAngle: 305, lightHeight: 0.30, ambient: 0.45, specular: 1.2, tilt: 0.22 }),
-  Mercury:        pvMetalCard('Mercury',  { bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
+  Polished:       pvMetalCard('Polished', { env: 'flow', bands: 5, relief: 0.12, shine: 90, lightAngle: 315, lightHeight: 0.55, ambient: 0.5,  specular: 1.0, tilt: 0.14 }),
+  Brushed:        pvMetalCard('Brushed',  { env: 'plate', bands: 3, relief: 0.30, shine: 22, lightAngle: 300, lightHeight: 0.32, ambient: 0.55, specular: 0.6, tilt: 0.10 }),
+  Gold:           pvMetalCard('Gold',     { env: 'flow', bands: 4, relief: 0.26, shine: 70, lightAngle: 320, lightHeight: 0.45, ambient: 0.5,  specular: 1.1, tilt: 0.18 }),
+  Copper:         pvMetalCard('Copper',   { env: 'flow', bands: 4, relief: 0.22, shine: 60, lightAngle: 330, lightHeight: 0.48, ambient: 0.5,  specular: 0.95, tilt: 0.16 }),
+  Gunmetal:       pvMetalCard('Gunmetal', { env: 'plate', bands: 6, relief: 0.34, shine: 12, lightAngle: 290, lightHeight: 0.26, ambient: 0.62, specular: 0.4, tilt: 0.12 }),
+  Hammered:       pvMetalCard('Hammered', { env: 'plate', bands: 4, relief: 0.55, shine: 55, lightAngle: 310, lightHeight: 0.38, ambient: 0.5,  specular: 0.9, tilt: 0.16 }),
+  Foil:           pvMetalCard('Foil',     { env: 'flow', bands: 8, relief: 0.70, shine: 80, lightAngle: 305, lightHeight: 0.30, ambient: 0.45, specular: 1.2, tilt: 0.22 }),
+  Mercury:        pvMetalCard('Mercury',  { env: 'flow', bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
 
   AsciiMatrix:    pvGrid,
   StackedSquares: pvGrid,
