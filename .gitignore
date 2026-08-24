@@ -1,0 +1,4 @@
+
+# Contact-sheet renders. The script and its report are versioned; the
+# 11MB image it produces is not — re-run tools/contact_sheet.jsx for it.
+tools/contact_sheet.png

@@ -83,35 +83,32 @@ const GRADIENT_CONTROLS = {
     { id: 'verticalDistort', label: 'Vert Distort', min: -100, max: 100, step: 1, default: -29, type: 'slider' },
     { id: 'star', label: 'Star', options: ['4-Point Star', '5-Point Star', '6-Point Star'], default: '4-Point Star', type: 'select' }
   ],
-  Holographic: [
-    { id: 'speed', label: 'Liquid Speed', min: 1, max: 100, step: 1, default: 50, type: 'slider' },
-    { id: 'blur', label: 'Blur Radius', min: 0, max: 300, step: 5, default: 150, type: 'slider' }
-  ],
-  Grainy: [
-    { id: 'noise', label: 'Grain Amount', min: 1, max: 100, step: 1, default: 25, type: 'slider' },
-    { id: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, default: 120, type: 'slider' }
-  ],
-  Liquid: [
-    { id: 'turbulence', label: 'Turbulence', min: 10, max: 500, step: 10, default: 150, type: 'slider' },
-    { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 30, type: 'slider' }
-  ],
-  Neon: [
-    { id: 'glowRadius', label: 'Glow Radius', min: 5, max: 200, step: 1, default: 80, type: 'slider' },
-    { id: 'intensity', label: 'Intensity', min: 0.1, max: 5, step: 0.1, default: 1.5, type: 'slider' }
-  ],
-  Topographic: [
-    { id: 'lines', label: 'Line Density', min: 10, max: 200, step: 10, default: 80, type: 'slider' },
-    { id: 'thickness', label: 'Line Thickness', min: 1, max: 10, step: 1, default: 2, type: 'slider' },
-    { id: 'speed', label: 'Evolution Speed', min: 10, max: 150, step: 10, default: 50, type: 'slider' }
-  ],
+  /* FROSTED GLASS
+     Now a real refracting surface rather than a coloured field with a bloom
+     on it. There is a colour field, there is a sheet of glass in front of it
+     with a rippled surface, and CC Glass bends the one through the other and
+     lights it. So the sliders are the two halves of that:
+
+       Colour Scale / Flow Speed   the field behind the glass.
+       Surface Scale / Ripple      the shape of the sheet itself.
+       Refraction                  how far the glass bends what is behind it.
+       Relief / Specular / Roughness / Light Angle
+                                   how the sheet catches light.
+       Frost                       the final blur, which is what turns clear
+                                   glass into frosted glass. Take it to 0 and
+                                   you get a clear liquid-glass panel. */
   Glass: [
-    { id: 'speed',       label: 'Flow Speed',       min: 1,   max: 120,  step: 1,  default: 20,  type: 'slider' },
-    { id: 'scale',       label: 'Ribbon Scale',     min: 20,  max: 600,  step: 10, default: 140, type: 'slider' },
-    { id: 'stretch',     label: 'Ribbon Stretch',   min: 100, max: 2000, step: 20, default: 800, type: 'slider' },
-    { id: 'refraction',  label: 'Refraction',       min: 0,   max: 400,  step: 5,  default: 120, type: 'slider' },
-    { id: 'iridescence', label: 'Iridescence',      min: 0,   max: 100,  step: 1,  default: 55,  type: 'slider' },
-    { id: 'contrast',    label: 'Edge Contrast',    min: 50,  max: 500,  step: 10, default: 260, type: 'slider' },
-    { id: 'softness',    label: 'Frosted Softness', min: 0,   max: 120,  step: 1,  default: 12,  type: 'slider' }
+    { id: 'scale',       label: 'Colour Scale',   min: 50,  max: 900, step: 10, default: 420, type: 'slider' },
+    { id: 'speed',       label: 'Flow Speed',     min: 0,   max: 120, step: 1,  default: 14,  type: 'slider' },
+    { id: 'surfaceScale',label: 'Surface Scale',  min: 40,  max: 900, step: 10, default: 260, type: 'slider' },
+    { id: 'ripple',      label: 'Surface Ripple', min: 0,   max: 400, step: 5,  default: 90,  type: 'slider' },
+    { id: 'refraction',  label: 'Refraction',     min: 0,   max: 300, step: 5,  default: 110, type: 'slider' },
+    { id: 'relief',      label: 'Relief',         min: 0,   max: 100, step: 1,  default: 45,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',    min: 0,   max: 360, step: 1,  default: 315, type: 'slider' },
+    { id: 'specular',    label: 'Specular',       min: 0,   max: 150, step: 1,  default: 85,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',      min: 1,   max: 100, step: 1,  default: 8,   type: 'slider' },
+    { id: 'iridescence', label: 'Iridescence',    min: 0,   max: 100, step: 1,  default: 22,  type: 'slider' },
+    { id: 'softness',    label: 'Frost',          min: 0,   max: 120, step: 1,  default: 10,  type: 'slider' }
   ],
   ReededGlass: [
     { id: 'lineSize',    label: 'Flute Width',     min: 6,  max: 200, step: 2,  default: 44,  type: 'slider' },
@@ -122,28 +119,240 @@ const GRADIENT_CONTROLS = {
     { id: 'sheen',       label: 'Edge Sheen',      min: 0,  max: 100, step: 1,  default: 45,  type: 'slider' },
     { id: 'blur',        label: 'Surface Blur',    min: 0,  max: 60,  step: 1,  default: 6,   type: 'slider' }
   ],
+  /* Anime Water runs on the same Cell Pattern engine as Cellular Mosaic, so
+     it takes the same controls — the difference between the two is the
+     defaults, not the machinery. Caustic labels, water numbers. */
   AnimeWater: [
-    { id: 'bubbleAmount', label: 'Bubble Amount', min: 0, max: 300, step: 1, default: 50, type: 'slider' },
-    { id: 'bubbleSpeed', label: 'Bubble Speed', min: 0, max: 10, step: 0.1, default: 1, type: 'slider' },
-    { id: 'speed', label: 'Water Flow Speed', min: 10, max: 200, step: 5, default: 50, type: 'slider' },
-    { id: 'contrast', label: 'Sharpness', min: 50, max: 500, step: 10, default: 250, type: 'slider' }
+    { id: 'pattern',    label: 'Surface Type',
+      options: ['Static Plates', 'Plates', 'Bubbles', 'Crystals', 'Crystallize',
+                'Static Crystals', 'Static Crystallize', 'Mixed Crystals', 'Static Mixed Crystals'],
+      default: 'Static Plates', type: 'select' },
+    { id: 'cells',      label: 'Caustic Density', min: 5, max: 200, step: 1, default: 91,  type: 'slider' },
+    { id: 'dispersion', label: 'Irregularity',    min: 0, max: 100, step: 1, default: 100, type: 'slider' },
+    { id: 'speed',      label: 'Flow Speed',      min: 0, max: 300, step: 5, default: 30,  type: 'slider' },
+    { id: 'contrast',   label: 'Caustic Sharpness', min: 0, max: 400, step: 5, default: 325, type: 'slider' },
+    { id: 'drift',      label: 'Current',         min: 0, max: 400, step: 5, default: 20,  type: 'slider' },
+    { id: 'warp',       label: 'Surface Warp',    min: 0, max: 300, step: 5, default: 20,  type: 'slider' },
+    { id: 'softness',   label: 'Softness',        min: 0, max: 80,  step: 1, default: 0,   type: 'slider' },
+    { id: 'sheen',      label: 'Shimmer',         min: 0, max: 100, step: 1, default: 23,  type: 'slider' },
+    { id: 'invert',     label: 'Light the Veins', options: ['On', 'Off'], default: 'On', type: 'select' },
+    { id: 'shading',    label: 'Shading',         options: ['Blended', 'Flat'], default: 'Blended', type: 'select' }
   ],
-  Wireframe: [
-    { id: 'gridSize', label: 'Grid Size', min: 20, max: 300, step: 10, default: 50, type: 'slider' },
-    { id: 'thickness', label: 'Wire Thickness', min: 1, max: 20, step: 1, default: 3, type: 'slider' },
-    { id: 'rotationX', label: 'Rotate X', min: -180, max: 180, step: 5, default: 45, type: 'slider' },
-    { id: 'rotationY', label: 'Rotate Y', min: -180, max: 180, step: 5, default: -45, type: 'slider' }
+
+  /* Anime Cells is the flat end of the same engine: no drift, no shimmer, no
+     shading, and contrast at the top of the range so each cell is one colour
+     with a drawn line around it. */
+
+  /* THE FIVE ANIMAL PRINTS
+     One builder, five sets of defaults, so a slider means the same thing on
+     each of them.
+
+     Coverage is the new one, and it is the control that was missing. Every
+     one of these prints is a noise field cut at a threshold: below the cut is
+     coat, above it is marking. Coverage *is* that cut, so it is the only
+     honest way to ask for more stripe and less tiger. The old panel had no
+     such slider — it offered "Stripe Weight", which drove Fractal Noise's
+     Contrast, and contrast cannot move a threshold, it can only steepen the
+     edge at whichever threshold you already have. Left at its maximum it
+     drove the whole field past white and every print but the giraffe came out
+     one flat colour.
+
+     Evolution Speed is no longer 0 anywhere. A print that holds perfectly
+     still is a texture; these are meant to be backgrounds. */
+  Giraffe: [
+    { id: 'scaleAll',  label: 'Pattern Scale',   min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Patch Coverage',  min: 5,  max: 95,  step: 1, default: 62,  type: 'slider' },
+    { id: 'contrast',  label: 'Edge Sharpness',  min: 40, max: 400, step: 5, default: 400, type: 'slider' },
+    { id: 'warp',      label: 'Irregularity',    min: 0,  max: 300, step: 5, default: 25,  type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',   min: 0,  max: 40,  step: 1, default: 5,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100, step: 1, default: 5,   type: 'slider' }
   ],
-  FigmaShader: [
-    { id: 'fluidity', label: 'Fluidity (Speed)', min: 10, max: 150, step: 5, default: 60, type: 'slider' },
-    { id: 'distortion', label: 'Distortion (Warp)', min: 50, max: 400, step: 10, default: 200, type: 'slider' },
-    { id: 'glossiness', label: 'Glossiness (Light)', min: 10, max: 150, step: 5, default: 75, type: 'slider' },
-    { id: 'height', label: 'Glass Height (3D)', min: 1, max: 100, step: 1, default: 40, type: 'slider' }
+  Tiger: [
+    { id: 'scaleAll',  label: 'Pattern Scale',   min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Stripe Coverage', min: 5,  max: 95,  step: 1, default: 34,  type: 'slider' },
+    { id: 'contrast',  label: 'Edge Sharpness',  min: 40, max: 400, step: 5, default: 340, type: 'slider' },
+    { id: 'warp',      label: 'Irregularity',    min: 0,  max: 300, step: 5, default: 70,  type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',   min: 0,  max: 40,  step: 1, default: 2,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100, step: 1, default: 6,   type: 'slider' }
   ],
-  Psychedelic: [
-    { id: 'speed', label: 'Trippy Speed', min: 10, max: 200, step: 10, default: 80, type: 'slider' },
-    { id: 'complexity', label: 'Complexity', min: 1, max: 10, step: 1, default: 5, type: 'slider' },
-    { id: 'colorCycle', label: 'Color Cycle Speed', min: 0, max: 360, step: 10, default: 180, type: 'slider' }
+  Zebra: [
+    { id: 'scaleAll',  label: 'Pattern Scale',   min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Stripe Coverage', min: 5,  max: 95,  step: 1, default: 45,  type: 'slider' },
+    { id: 'contrast',  label: 'Edge Sharpness',  min: 40, max: 400, step: 5, default: 400, type: 'slider' },
+    { id: 'warp',      label: 'Irregularity',    min: 0,  max: 300, step: 5, default: 110, type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',   min: 0,  max: 40,  step: 1, default: 2,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100, step: 1, default: 5,   type: 'slider' }
+  ],
+  /* Leopard is the one print with three colours, so Coverage sets where the
+     ring starts and the core lands 20% of the range above it. Push Coverage
+     up and the rosettes join into a single dark coat, which is roughly what
+     happens to a real one. */
+  Leopard: [
+    { id: 'scaleAll',  label: 'Pattern Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Rosette Coverage', min: 5,  max: 95,  step: 1, default: 30,  type: 'slider' },
+    { id: 'contrast',  label: 'Edge Sharpness',   min: 40, max: 400, step: 5, default: 200, type: 'slider' },
+    { id: 'warp',      label: 'Irregularity',     min: 0,  max: 300, step: 5, default: 30,  type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',    min: 0,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed',  min: 0,  max: 100, step: 1, default: 4,   type: 'slider' }
+  ],
+  Cow: [
+    { id: 'scaleAll',  label: 'Pattern Scale',   min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'coverage',  label: 'Patch Coverage',  min: 5,  max: 95,  step: 1, default: 42,  type: 'slider' },
+    { id: 'contrast',  label: 'Edge Sharpness',  min: 40, max: 400, step: 5, default: 400, type: 'slider' },
+    { id: 'warp',      label: 'Irregularity',    min: 0,  max: 300, step: 5, default: 40,  type: 'slider' },
+    { id: 'softness',  label: 'Edge Softness',   min: 0,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100, step: 1, default: 3,   type: 'slider' }
+  ],
+
+  /* THE SHADED METALS
+     Eight presets, one shader, so a slider means the same thing on every one
+     of them. These are not texture sliders any more — they are the inputs a
+     renderer takes:
+
+       Relief       how deep the surface actually is. 0 is a mirror.
+       Reflections  how much environment the metal has to reflect. Few wide
+                    bands is a showroom; many narrow ones is a workshop.
+       Light Angle / Light Height
+                    where the lamp is. Height is elevation: low is raking
+                    light that finds every scratch, high is overhead and
+                    flattens the surface out.
+       Specular / Roughness
+                    the material response. High specular with low roughness
+                    is a polished mirror; drop specular and raise roughness
+                    and the same surface turns to cast iron.
+
+     Drift Speed is never 0 by default. A metal that holds perfectly still
+     reads as a photograph of metal rather than as a living background. */
+  Polished: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 12,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 60,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 110, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 4,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 25,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
+  ],
+  Brushed: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 80,  type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 0,   type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 300, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 70,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 28,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 14,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
+  ],
+  Gold: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 26,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 120, type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 320, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 45,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 120, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 8,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 8,   type: 'slider' }
+  ],
+  Copper: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 90,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 330, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 48,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 105, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 10,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
+  ],
+  Gunmetal: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 20,  type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 40,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 290, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 26,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 55,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 45,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
+  ],
+  Hammered: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 25,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 310, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 95,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 14,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
+  ],
+  Foil: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 70,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 8,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 240, type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 130, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 6,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 10,  type: 'slider' }
+  ],
+  /* Mercury is the same shader with the height field turned into blobs rather
+     than tooling — a liquid, so Relief is high, Roughness near zero, and it
+     moves faster than any of the plates. */
+  Mercury: [
+    { id: 'scaleAll',    label: 'Blob Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 85,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Surface Churn', min: 0,  max: 400, step: 5, default: 160, type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 150, step: 1, default: 140, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 2,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Flow Speed',    min: 0,  max: 60,  step: 1, default: 14,  type: 'slider' }
+  ],
+
+  AnimeCells: [
+    { id: 'pattern',    label: 'Cell Shape',
+      options: ['Static Plates', 'Static Crystals', 'Static Crystallize',
+                'Static Mixed Crystals', 'Plates', 'Crystals'],
+      default: 'Static Plates', type: 'select' },
+    { id: 'cells',      label: 'Cell Density',  min: 5, max: 200, step: 1, default: 120, type: 'slider' },
+    { id: 'dispersion', label: 'Irregularity',  min: 0, max: 100, step: 1, default: 100, type: 'slider' },
+    { id: 'contrast',   label: 'Line Weight',   min: 0, max: 400, step: 5, default: 400, type: 'slider' },
+    { id: 'speed',      label: 'Evolution Speed', min: 0, max: 300, step: 5, default: 0, type: 'slider' },
+    { id: 'drift',      label: 'Drift',         min: 0, max: 400, step: 5, default: 0,  type: 'slider' },
+    { id: 'warp',       label: 'Organic Warp',  min: 0, max: 300, step: 5, default: 0,  type: 'slider' },
+    { id: 'sheen',      label: 'Edge Glow',     min: 0, max: 100, step: 1, default: 0,  type: 'slider' },
+    { id: 'invert',     label: 'Invert Cells',  options: ['On', 'Off'], default: 'On', type: 'select' },
+    { id: 'shading',    label: 'Shading',       options: ['Flat', 'Blended'], default: 'Flat', type: 'select' }
   ],
   Heatmap: [
     { id: 'noiseScale', label: 'Thermal Scale', min: 10, max: 300, step: 10, default: 150, type: 'slider' },
@@ -225,8 +434,9 @@ const GRADIENT_CONTROLS = {
     { id: 'drift',      label: 'Drift',           min: 0, max: 400, step: 5, default: 60,  type: 'slider' },
     { id: 'warp',       label: 'Organic Warp',    min: 0, max: 300, step: 5, default: 30,  type: 'slider' },
     { id: 'softness',   label: 'Softness',        min: 0, max: 80,  step: 1, default: 4,   type: 'slider' },
-    { id: 'sheen',      label: 'Glow',            min: 0, max: 100, step: 1, default: 20,  type: 'slider' },
-    { id: 'invert',     label: 'Invert Cells',    options: ['Off', 'On'], default: 'Off', type: 'select' }
+    { id: 'sheen',      label: 'Cell Glow',       min: 0, max: 100, step: 1, default: 20,  type: 'slider' },
+    { id: 'invert',     label: 'Invert Cells',    options: ['Off', 'On'], default: 'Off', type: 'select' },
+    { id: 'shading',    label: 'Shading',         options: ['Blended', 'Flat'], default: 'Blended', type: 'select' }
   ],
   SonduckLiquid: [
     { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 20, type: 'slider' }
@@ -244,16 +454,6 @@ const GRADIENT_CONTROLS = {
     { id: 'speed', label: 'Speed', min: 10, max: 300, step: 10, default: 100, type: 'slider' },
     { id: 'rayCount', label: 'Ray Density', min: 2, max: 50, step: 1, default: 5, type: 'slider' },
     { id: 'distort', label: 'Distortion', min: 10, max: 500, step: 10, default: 250, type: 'slider' }
-  ],
-  PixelBlast: [
-    { id: 'speed', label: 'Speed', min: 10, max: 200, step: 10, default: 80, type: 'slider' },
-    { id: 'pixelSize', label: 'Pixel Size', min: 5, max: 100, step: 5, default: 40, type: 'slider' },
-    { id: 'complexity', label: 'Complexity', min: 1, max: 10, step: 1, default: 5, type: 'slider' }
-  ],
-  PlasmaWave: [
-    { id: 'speed', label: 'Speed', min: 10, max: 150, step: 10, default: 50, type: 'slider' },
-    { id: 'gooeyness', label: 'Gooeyness', min: 50, max: 500, step: 10, default: 200, type: 'slider' },
-    { id: 'scale', label: 'Wave Scale', min: 50, max: 500, step: 10, default: 250, type: 'slider' }
   ],
   WebThreads: [
     { id: 'speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 0.4, type: 'slider' },
@@ -283,6 +483,9 @@ function paintRange(el) {
   const min = parseFloat(el.min), max = parseFloat(el.max);
   const pct = ((parseFloat(el.value) - min) / (max - min)) * 100;
   el.style.setProperty('--pct', pct + '%');
+  /* The range input is invisible now; the capsule around it draws the fill. */
+  const cap = el.closest('.ctrl-slider');
+  if (cap) cap.style.setProperty('--pct', pct + '%');
 }
 
 function renderControls(type) {
@@ -307,85 +510,70 @@ function renderControls(type) {
     item.className = 'ctrl';
     item.dataset.id = ctrl.id;
 
-    // ── header: label, reset, value ──
-    const head = document.createElement('div');
-    head.className = 'ctrl-head';
-
-    const label = document.createElement('label');
-    label.className = 'ctrl-label';
-    label.setAttribute('for', 'ctrl-' + ctrl.id);
-    label.textContent = ctrl.label;
-    head.appendChild(label);
-
     const reset = document.createElement('button');
     reset.className = 'ctrl-reset';
     reset.type = 'button';
     reset.title = 'Reset to ' + ctrl.default;
     reset.setAttribute('aria-label', 'Reset ' + ctrl.label + ' to default');
     reset.textContent = '⟲';
-    head.appendChild(reset);
 
-    item.appendChild(head);
+    const label = document.createElement('span');
+    label.className = 'ctrl-label';
+    label.textContent = ctrl.label;
 
-    if (ctrl.type === 'select') {
-      const wrap = document.createElement('div');
-      wrap.className = 'select-wrap';
+    if (ctrl.type === 'select' || ctrl.type === 'text') {
+      /* Selects, text fields and sliders share one capsule, so a column of
+         mixed controls still reads as a single list rather than as three
+         different kinds of widget stacked up. */
+      const row = document.createElement('div');
+      row.className = 'ctrl-row' + (ctrl.type === 'select' ? ' has-select' : '');
+      row.appendChild(label);
 
-      const select = document.createElement('select');
-      select.className = 'custom-select';
-      select.id = 'ctrl-' + ctrl.id;
-      ctrl.options.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt;
-        option.textContent = opt;
-        select.appendChild(option);
-      });
-      select.value = ctrl.default;
-
-      select.addEventListener('change', function () {
-        if (ctrl.id === 'shape') syncCustomTextVisibility(this.value);
-        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
-      });
-
-      reset.addEventListener('click', () => {
-        select.value = ctrl.default;
-        select.dispatchEvent(new Event('change'));
-      });
-
-      wrap.appendChild(select);
-      item.appendChild(wrap);
-
-      if (ctrl.id === 'shape') setTimeout(() => syncCustomTextVisibility(select.value), 10);
-
-    } else if (ctrl.type === 'text') {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'custom-input';
-      input.id = 'ctrl-' + ctrl.id;
-      input.value = ctrl.default;
-      input.addEventListener('input', function () {
-        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
-      });
-      reset.addEventListener('click', () => {
+      let input;
+      if (ctrl.type === 'select') {
+        input = document.createElement('select');
+        ctrl.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt;
+          option.textContent = opt;
+          input.appendChild(option);
+        });
         input.value = ctrl.default;
-        input.dispatchEvent(new Event('input'));
-      });
-      item.appendChild(input);
+        input.addEventListener('change', function () {
+          if (ctrl.id === 'shape') syncCustomTextVisibility(this.value);
+          if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+        });
+        reset.addEventListener('click', () => {
+          input.value = ctrl.default;
+          input.dispatchEvent(new Event('change'));
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.value = ctrl.default;
+        input.addEventListener('input', function () {
+          if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+        });
+        reset.addEventListener('click', () => {
+          input.value = ctrl.default;
+          input.dispatchEvent(new Event('input'));
+        });
+      }
+      input.className = 'custom-select';
+      input.id = 'ctrl-' + ctrl.id;
+
+      label.setAttribute('for', input.id);
+      row.appendChild(reset);
+      row.appendChild(input);
+      item.appendChild(row);
+
+      if (ctrl.id === 'shape') setTimeout(() => syncCustomTextVisibility(input.value), 10);
 
     } else {
-      /* Slider plus a number field. Dragging is fine for exploring, but
-         these values get dialled in precisely and copied between presets,
-         so typing has to work too. */
-      const num = document.createElement('input');
-      num.type = 'number';
-      num.className = 'ctrl-num';
-      num.id = 'num-' + ctrl.id;
-      num.min = ctrl.min;
-      num.max = ctrl.max;
-      num.step = ctrl.step;
-      num.value = formatCtrlValue(ctrl, ctrl.default);
-      head.appendChild(num);
-
+      /* The capsule is the slider. The range input is invisible and stretched
+         across everything but the number field, so the drag target is the
+         width of the panel instead of a 4px track, and the fill behind the
+         label carries the value. */
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.className = 'ctrl-range';
@@ -394,6 +582,16 @@ function renderControls(type) {
       slider.max = ctrl.max;
       slider.step = ctrl.step;
       slider.value = ctrl.default;
+      slider.setAttribute('aria-label', ctrl.label);
+
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.className = 'ctrl-num';
+      num.id = 'num-' + ctrl.id;
+      num.min = ctrl.min;
+      num.max = ctrl.max;
+      num.step = ctrl.step;
+      num.value = formatCtrlValue(ctrl, ctrl.default);
 
       const commit = (source) => {
         if (source !== num) num.value = formatCtrlValue(ctrl, slider.value);
@@ -427,7 +625,13 @@ function renderControls(type) {
         commit(num);
       });
 
-      item.appendChild(slider);
+      const cap = document.createElement('div');
+      cap.className = 'ctrl-slider';
+      cap.appendChild(slider);
+      cap.appendChild(label);
+      cap.appendChild(reset);
+      cap.appendChild(num);
+      item.appendChild(cap);
       paintRange(slider);
     }
 

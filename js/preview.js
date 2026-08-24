@@ -297,14 +297,277 @@ function pvThreads(d, W, H, pal) {
   }
 }
 
+/* ── A field to threshold, and a surface to light ───────────────────── */
+
+/* Value noise. Everything below needs a field with the same character as
+   Fractal Noise's Basic type — smooth, symmetric about the middle, and the
+   same every time it is drawn — and there is no such thing in a canvas. */
+function pvHash(a, b, seed) {
+  let n = (a * 1619 + b * 31337 + (seed | 0) * 6971) & 0x7fffffff;
+  n = (n >> 13) ^ n;
+  return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 0x7fffffff;
+}
+
+function pvNoise(x, y, seed) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return pvHash(xi, yi, seed) * (1 - u) * (1 - v)
+       + pvHash(xi + 1, yi, seed) * u * (1 - v)
+       + pvHash(xi, yi + 1, seed) * (1 - u) * v
+       + pvHash(xi + 1, yi + 1, seed) * u * v;
+}
+
+/* Octaves, which is what Fractal Noise calls Complexity. */
+function pvFbm(x, y, oct, seed) {
+  let amp = 0.5, freq = 1, sum = 0, norm = 0;
+  for (let i = 0; i < (oct || 3); i++) {
+    sum += amp * pvNoise(x * freq, y * freq, (seed | 0) + i * 17);
+    norm += amp;
+    amp *= 0.5; freq *= 2;
+  }
+  return sum / norm;
+}
+
+const pvClamp = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/* ── Animal prints ──────────────────────────────────────────────────── */
+
+/* One painter for all five, because there is one builder for all five: a
+   noise field cut at a threshold, and the threshold is where Coverage puts
+   it. The arithmetic is the same as lgPrintBias in jsx/main.jsx — a card that
+   worked out its threshold some other way would be a different picture from
+   the one the button makes, which is the whole failure these previews exist
+   to stop. */
+function pvPrint(d, W, H, pal, o) {
+  const coat = pal[0];
+  const mark = pal[1 % pal.length];
+  const core = pal[2 % pal.length];
+  const thr  = 0.5 + (0.5 - o.coverage) * 0.55;
+  const edge = o.sharp || 60;
+
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      // The wobble, so the markings read as grown rather than printed.
+      const wx = nx + o.warp * (pvFbm(nx * 5, ny * 5, 2, 91) - 0.5);
+      const wy = ny + o.warp * (pvFbm(nx * 5 + 9, ny * 5 + 4, 2, 91) - 0.5);
+      const f  = pvFbm(wx * o.sx, wy * o.sy, o.oct, o.seed || 3);
+
+      let c;
+      if (o.rosette) {
+        // Ring at the blob's shoulder, core at its peak.
+        const ring = pvClamp((f - thr) * edge + 0.5);
+        const cen  = pvClamp((f - thr - 0.13) * edge + 0.5);
+        c = pvMix(pvMix(coat, mark, ring), core, cen);
+      } else {
+        c = pvMix(coat, mark, pvClamp((f - thr) * edge + 0.5));
+      }
+      pvPut(d, (y * W + x) * 4, c);
+    }
+  }
+}
+
+/* Giraffe is the one that tiles rather than thresholds: interlocking plates
+   with a thin coat line between them. Nearest-seed distance gives the plates,
+   the gap between the two nearest gives the line. */
+function pvPlates(d, W, H, pal) {
+  const coat = pal[0], patch = pal[1 % pal.length];
+  const seeds = [];
+  let r = 21;
+  const rnd = () => (r = (r * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let i = 0; i < 22; i++) seeds.push([rnd(), rnd()]);
+
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      const wx = nx + 0.05 * (pvFbm(nx * 6, ny * 6, 2, 7) - 0.5);
+      const wy = ny + 0.05 * (pvFbm(nx * 6 + 3, ny * 6, 2, 7) - 0.5);
+      let d1 = 9, d2 = 9;
+      for (let i = 0; i < seeds.length; i++) {
+        const dx = (wx - seeds[i][0]) * 1.6, dy = wy - seeds[i][1];
+        const dd = dx * dx + dy * dy;
+        if (dd < d1) { d2 = d1; d1 = dd; } else if (dd < d2) { d2 = dd; }
+      }
+      const gap = (Math.sqrt(d2) - Math.sqrt(d1)) * 14;
+      pvPut(d, (y * W + x) * 4, pvMix(coat, patch, pvClamp((gap - 0.45) * 2.5)));
+    }
+  }
+}
+
+/* ── Lit surfaces ───────────────────────────────────────────────────── */
+
+/* The height field, per finish. These are the canvas equivalents of the
+   layers METAL_SURFACES builds: brushed is grain stretched along one axis,
+   hammered is dimples, foil is ridges, mercury is blobs. */
+function pvHeight(kind, x, y) {
+  switch (kind) {
+    case 'Brushed':  return pvFbm(x * 2.5, y * 70, 3, 11);
+    case 'Gunmetal': return pvFbm(x * 26, y * 26, 3, 12);
+    case 'Hammered': {
+      // Dimples on a jittered lattice.
+      const g = 7;
+      const cx = Math.floor(x * g), cy = Math.floor(y * g);
+      let best = 9;
+      for (let j = -1; j <= 1; j++) {
+        for (let i = -1; i <= 1; i++) {
+          const px = (cx + i + pvHash(cx + i, cy + j, 5)) / g;
+          const py = (cy + j + pvHash(cx + i, cy + j, 6)) / g;
+          const dx = x - px, dy = y - py;
+          const dd = dx * dx + dy * dy;
+          if (dd < best) best = dd;
+        }
+      }
+      return pvClamp(Math.sqrt(best) * g * 1.4);
+    }
+    case 'Foil':     return 1 - Math.abs(2 * pvFbm(x * 4.5, y * 4.5, 3, 13) - 1);
+    case 'Mercury':  {
+      const f = pvFbm(x * 2.8, y * 2.8, 2, 14);
+      return pvClamp((f - 0.44) * 5.5);          // rounded droplets
+    }
+    case 'Gold':
+    case 'Copper':   return pvFbm(x * 4.5, y * 4.5, 3, 15);
+    default:         return pvFbm(x * 2.2, y * 2.2, 2, 16);   // Polished
+  }
+}
+
+/* A real, if small, Blinn–Phong pass — the same model CC Glass runs in the
+   comp. Normals come from the height field by finite difference, the
+   environment is a mirrored triangle wave rather than noise (see the note in
+   main.jsx about why that matters), and the specular takes the surface's own
+   colour because Metal is at full. Getting gold to look like gold instead of
+   like a yellow gradient is entirely that last detail. */
+function pvShade(d, W, H, pal, o) {
+  const lut = pvRamp(pal);
+  const bands = o.bands || 5;
+  const relief = o.relief === undefined ? 0.4 : o.relief;
+  const shine = o.shine === undefined ? 40 : o.shine;
+  const eps = 1 / Math.max(W, H);
+
+  // Light: up and to the left, at the elevation the panel's default asks for.
+  const ang = (o.lightAngle === undefined ? 315 : o.lightAngle) * Math.PI / 180;
+  const el = (o.lightHeight === undefined ? 0.5 : o.lightHeight) * (Math.PI / 2);
+  const lx = Math.cos(ang) * Math.cos(el);
+  const ly = Math.sin(ang) * Math.cos(el);
+  const lz = Math.sin(el);
+  // Half-vector against a viewer straight on.
+  const hl = Math.sqrt(lx * lx + ly * ly + (lz + 1) * (lz + 1));
+  const hx = lx / hl, hy = ly / hl, hz = (lz + 1) / hl;
+
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+
+      const h  = pvHeight(o.kind, nx, ny);
+      const hX = pvHeight(o.kind, nx + eps, ny);
+      const hY = pvHeight(o.kind, nx, ny + eps);
+      // Surface normal from the slope of the height field.
+      const gx = (hX - h) / eps * relief * 0.02;
+      const gy = (hY - h) / eps * relief * 0.02;
+      const nl = Math.sqrt(gx * gx + gy * gy + 1);
+      const Nx = -gx / nl, Ny = -gy / nl, Nz = 1 / nl;
+
+      // The environment this surface reflects, displaced by its own normals.
+      const u = (nx + ny * (o.tilt || 0.14) + Nx * 0.35 + Ny * 0.2) * bands * 2;
+      const env = Math.abs(((u % 2) + 2) % 2 - 1);
+      const body = pvLut(lut, env);
+
+      const diff = Math.max(0, Nx * lx + Ny * ly + Nz * lz);
+      const spec = Math.pow(Math.max(0, Nx * hx + Ny * hy + Nz * hz), shine);
+
+      const amb = o.ambient === undefined ? 0.55 : o.ambient;
+      const k = amb + (1 - amb) * diff;
+      const sc = o.metal === false ? [1, 1, 1] : pal[pal.length - 1];
+      const g = spec * (o.specular === undefined ? 0.9 : o.specular);
+      pvPut(d, (y * W + x) * 4, [
+        pvClamp(body[0] * k + sc[0] * g),
+        pvClamp(body[1] * k + sc[1] * g),
+        pvClamp(body[2] * k + sc[2] * g)
+      ]);
+    }
+  }
+}
+
+/* Frosted glass: a soft colour field, bent by the surface in front of it,
+   with a white specular on the ridges. Metal is off, so the highlight is the
+   light's colour rather than the glass's — which is the one-line difference
+   between glass and chrome. */
+function pvGlass(d, W, H, pal) {
+  const lut = pvRamp(pal);
+  const eps = 1 / Math.max(W, H);
+  const surf = (x, y) => pvFbm(x * 3.4, y * 2.2, 3, 23);
+
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      const h = surf(nx, ny);
+      const gx = (surf(nx + eps, ny) - h) / eps;
+      const gy = (surf(nx, ny + eps) - h) / eps;
+
+      // Refraction: sample the field behind the glass, offset by the slope.
+      const field = pvFbm((nx - gx * 0.06) * 2.6, (ny - gy * 0.06) * 2.0, 3, 29);
+      let c = pvLut(lut, pvClamp(field * 1.4 - 0.2));
+
+      const nl = Math.sqrt(gx * gx + gy * gy + 1);
+      const Nz = 1 / nl;
+      const spec = Math.pow(Math.max(0, (-gx / nl) * 0.5 + (-gy / nl) * -0.5 + Nz * 0.7), 26);
+      c = pvMix(c, [1, 1, 1], pvClamp(spec * 0.9));
+      pvPut(d, (y * W + x) * 4, c);
+    }
+  }
+}
+
 /* ── Which painter belongs to which gradient ────────────────────────── */
+
+/* A shaded metal card is drawn with the metal's own height field and its own
+   default light, so Brushed Steel and Hammered Metal are visibly different
+   cards rather than the same chrome swirl with two labels. */
+function pvMetalCard(kind, o) {
+  return (d, W, H, p) => pvShade(d, W, H, p, {
+    kind: kind,
+    bands: o.bands, relief: o.relief, shine: o.shine,
+    lightAngle: o.lightAngle, lightHeight: o.lightHeight,
+    ambient: o.ambient, specular: o.specular, tilt: o.tilt
+  });
+}
+
+/* Coverage, sharpness and warp match each preset's defaults in
+   js/controls.js — the card is the build, at its own settings. */
+function pvPrintCard(o) {
+  return (d, W, H, p) => pvPrint(d, W, H, p, o);
+}
 
 const PREVIEW_FAMILY = {
   Halftone:       pvHalftone,
   CellularMosaic: pvCells,
+  AnimeWater:     pvCells,   // same engine, so the card shows the same shape
+  AnimeCells:     pvCells,
+
+  Giraffe:        pvPlates,
+  Tiger:          pvPrintCard({ sx: 22, sy: 1.1, oct: 3, coverage: 0.34, sharp: 70, warp: 0.05, seed: 3 }),
+  Zebra:          pvPrintCard({ sx: 13, sy: 0.9, oct: 2, coverage: 0.45, sharp: 90, warp: 0.08, seed: 5 }),
+  Leopard:        pvPrintCard({ sx: 9,  sy: 9,   oct: 4, coverage: 0.30, sharp: 26, warp: 0.03, seed: 9, rosette: true }),
+  Cow:            pvPrintCard({ sx: 4.2, sy: 3.6, oct: 2, coverage: 0.42, sharp: 90, warp: 0.04, seed: 4 }),
+
   Sunburst:       pvRays,
   ReededGlass:    pvFluted,
-  Metallic:       pvChrome,
+  Glass:          pvGlass,
+
+  Metallic:       pvChrome,   // Liquid Chrome is still ribbons, not a plate
+
+  Polished:       pvMetalCard('Polished', { bands: 5, relief: 0.12, shine: 90, lightAngle: 315, lightHeight: 0.55, ambient: 0.5,  specular: 1.0, tilt: 0.14 }),
+  Brushed:        pvMetalCard('Brushed',  { bands: 3, relief: 0.30, shine: 22, lightAngle: 300, lightHeight: 0.32, ambient: 0.55, specular: 0.6, tilt: 0.10 }),
+  Gold:           pvMetalCard('Gold',     { bands: 4, relief: 0.26, shine: 70, lightAngle: 320, lightHeight: 0.45, ambient: 0.5,  specular: 1.1, tilt: 0.18 }),
+  Copper:         pvMetalCard('Copper',   { bands: 4, relief: 0.22, shine: 60, lightAngle: 330, lightHeight: 0.48, ambient: 0.5,  specular: 0.95, tilt: 0.16 }),
+  Gunmetal:       pvMetalCard('Gunmetal', { bands: 6, relief: 0.34, shine: 12, lightAngle: 290, lightHeight: 0.26, ambient: 0.62, specular: 0.4, tilt: 0.12 }),
+  Hammered:       pvMetalCard('Hammered', { bands: 4, relief: 0.55, shine: 55, lightAngle: 310, lightHeight: 0.38, ambient: 0.5,  specular: 0.9, tilt: 0.16 }),
+  Foil:           pvMetalCard('Foil',     { bands: 8, relief: 0.70, shine: 80, lightAngle: 305, lightHeight: 0.30, ambient: 0.45, specular: 1.2, tilt: 0.22 }),
+  Mercury:        pvMetalCard('Mercury',  { bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
+
   AsciiMatrix:    pvGrid,
   StackedSquares: pvGrid,
   TrailGradient:  pvThreads,
@@ -312,7 +575,6 @@ const PREVIEW_FAMILY = {
   Waves:          pvThreads,
   Antigravity:    pvThreads,
   LiquidWaves:    (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 2.2, 1.4),
-  Glass:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 2.8, 2.2),
   Heatmap:        (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 1.6, 1.0),
   Fiber:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 4.5, 3.0),
   Prism:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 3.2, 1.8)

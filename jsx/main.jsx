@@ -63,6 +63,9 @@ var LG = (function () {
         ccBubbles:         ["CC Bubbles"],
         ccToner:           ["CC Toner"],
         ccVectorBlur:      ["CC Vector Blur"],
+        ccGlass:           ["CC Glass"],
+        ccBlobbylize:      ["CC Blobbylize"],
+        ccMrMercury:       ["CC Mr. Mercury"],
         ccParticleWorld:   ["CC Particle World"],
         /* Immersive/VR ship with AE but their matchNames carry the Mettle
            SkyBox lineage. Ordered most-likely-first; the resolver settles it. */
@@ -408,61 +411,7 @@ function hexRgb(h) {
     return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
 }
 
-function rgbHsv(r, g, b) {
-    var mx = Math.max(r, g, b),
-        mn = Math.min(r, g, b),
-        d = mx - mn,
-        h = 0,
-        s = mx ? d / mx : 0,
-        v = mx;
-    if (d) {
-        if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-        else if (mx === g) h = ((b - r) / d + 2) / 6;
-        else h = ((r - g) / d + 4) / 6;
-    }
-    return [h, s, v];
-}
 
-function hsvRgb(h, s, v) {
-    var i = Math.floor(h * 6),
-        f = h * 6 - i,
-        p = v * (1 - s),
-        q = v * (1 - f * s),
-        t = v * (1 - (1 - f) * s),
-        r, g, b;
-    switch (i % 6) {
-        case 0:
-            r = v;
-            g = t;
-            b = p;
-            break;
-        case 1:
-            r = q;
-            g = v;
-            b = p;
-            break;
-        case 2:
-            r = p;
-            g = v;
-            b = t;
-            break;
-        case 3:
-            r = p;
-            g = q;
-            b = v;
-            break;
-        case 4:
-            r = t;
-            g = p;
-            b = v;
-            break;
-        default:
-            r = v;
-            g = p;
-            b = q;
-    }
-    return [r, g, b];
-}
 
 /* vibrify() used to sit here, multiplying every picked colour's saturation
    by 1.2 and its value by 1.05 before the build. It was a hidden edit to
@@ -521,14 +470,65 @@ function oklabToRgb(L, a, b) {
     ];
 }
 
+/* Blend two colours without going grey in the middle.
+
+   Oklab on its own does not fix this. Lerping a and b in a straight line is a
+   chord across the colour circle, and for two colours on opposite sides of it
+   that chord passes through the origin — which is grey, by definition. Red to
+   cyan goes red, dull red, grey, dull cyan, cyan. That is the grey band, and
+   it is why a designer's habit is to drop a third colour into the middle by
+   hand: it forces the path to bend outwards instead of through the centre.
+
+   So take the path the designer would take. Convert a and b to chroma and
+   hue, travel around the circle the short way, and carry the chroma across
+   rather than letting it collapse. The midpoint of red and cyan comes out a
+   saturated magenta or yellow depending on which way round is shorter — a
+   colour, which is what was wanted, instead of the absence of one.
+
+   Two colours that genuinely share a hue still interpolate in a straight
+   line, because their hue difference is zero and there is no arc to take. */
 function interpolateOklab(c1, c2, t) {
     var ok1 = rgbToOklab(c1[0], c1[1], c1[2]);
     var ok2 = rgbToOklab(c2[0], c2[1], c2[2]);
-    return oklabToRgb(
-        ok1[0] + (ok2[0] - ok1[0]) * t,
-        ok1[1] + (ok2[1] - ok1[1]) * t,
-        ok1[2] + (ok2[2] - ok1[2]) * t
-    );
+
+    var L = ok1[0] + (ok2[0] - ok1[0]) * t;
+
+    var C1 = Math.sqrt(ok1[1] * ok1[1] + ok1[2] * ok1[2]);
+    var C2 = Math.sqrt(ok2[1] * ok2[1] + ok2[2] * ok2[2]);
+
+    /* A near-neutral has no meaningful hue — its angle is numerical noise —
+       so it inherits the other end's hue rather than dragging the blend
+       somewhere arbitrary. Greys and whites keep behaving as they should. */
+    var FLAT = 0.0005;
+    var h1 = (C1 > FLAT) ? Math.atan2(ok1[2], ok1[1]) : null;
+    var h2 = (C2 > FLAT) ? Math.atan2(ok2[2], ok2[1]) : null;
+
+    var C = C1 + (C2 - C1) * t;
+    var h;
+
+    if (h1 === null && h2 === null) {
+        return oklabToRgb(L, 0, 0);                 // both neutral
+    } else if (h1 === null) {
+        h = h2;
+    } else if (h2 === null) {
+        h = h1;
+    } else {
+        var d = h2 - h1;
+        var TAU = Math.PI * 2;
+        while (d >  Math.PI) d -= TAU;              // the short way round
+        while (d < -Math.PI) d += TAU;
+        h = h1 + d * t;
+
+        /* Directly opposite hues have no short way round, and a straight lerp
+           of chroma would still dip toward grey at the midpoint. Lift the
+           middle back to the brighter of the two ends so the transition keeps
+           its saturation the whole way across. */
+        var lift = 1 + (1 - Math.abs(2 * t - 1)) * (Math.abs(d) / Math.PI);
+        C = C * lift;
+        if (C > Math.max(C1, C2)) C = Math.max(C1, C2);
+    }
+
+    return oklabToRgb(L, Math.cos(h) * C, Math.sin(h) * C);
 }
 // --------------------------------
 
@@ -553,7 +553,7 @@ function getSelectedGradientState() {
    code path as a single build — a second copy of this switch would drift
    the moment a type was added. Returns nothing; throws on an unknown type
    so callers can report it per-item. */
-function dispatchBuild(comp, type, c, controls, w, h, dur, customCode, imagePath) {
+function dispatchBuild(comp, type, c, controls, w, h, dur) {
     switch (type) {
         case 'living':
             buildLiving(comp, c, controls, w, h, dur);
@@ -593,6 +593,26 @@ function dispatchBuild(comp, type, c, controls, w, h, dur, customCode, imagePath
             break;
         case 'AnimeWater':
             buildAnimeWater(comp, c, controls, w, h, dur);
+            break;
+        case 'AnimeCells':
+            buildAnimeCells(comp, c, controls, w, h, dur);
+            break;
+        case 'Polished':
+        case 'Brushed':
+        case 'Gold':
+        case 'Copper':
+        case 'Gunmetal':
+        case 'Hammered':
+        case 'Foil':
+        case 'Mercury':
+            buildMetalTexture(comp, c, controls, w, h, dur, type);
+            break;
+        case 'Giraffe':
+        case 'Tiger':
+        case 'Zebra':
+        case 'Leopard':
+        case 'Cow':
+            buildAnimalPrint(comp, c, controls, w, h, dur, type);
             break;
         case 'Sunburst':
             buildSunburst(comp, c, controls, w, h, dur);
@@ -636,12 +656,6 @@ function dispatchBuild(comp, type, c, controls, w, h, dur, customCode, imagePath
         case 'OklabSmooth':
             buildOklabSmooth(comp, c, controls, w, h, dur);
             break;
-        case 'ai_custom':
-            buildAiCustom(comp, c, w, h, dur, customCode);
-            break;
-        case 'ai_image':
-            buildAiImage(comp, c, w, h, dur, imagePath);
-            break;
         default:
             return 'ERROR: Unknown type: ' + type;
     }
@@ -660,16 +674,14 @@ function generateGradient(paramsStr) {
         for (var i = 0; i < p.colors.length; i++) c.push(hexRgb(p.colors[i]));
 
         LG.reset();
-        applyColorQuality(p.colorQuality !== false);
+        applyColorQuality(p.colorQuality === true);
 
         p.controls = p.controls || {};
-        p.controls.trackingEnabled = p.trackingEnabled;
-        p.controls.trackingLayerName = p.trackingLayerName;
 
         app.beginUndoGroup('Living Gradients');
         var beforeCount = comp.numLayers;
 
-        var unknown = dispatchBuild(comp, p.type, c, p.controls, w, h, dur, p.customCode, p.imagePath);
+        var unknown = dispatchBuild(comp, p.type, c, p.controls, w, h, dur);
         if (unknown) { app.endUndoGroup(); return unknown; }
 
         var afterCount = comp.numLayers;
@@ -678,8 +690,8 @@ function generateGradient(paramsStr) {
         var gradientLayer = groupGeneratedLayers(comp, p, addedLayersCount);
         applyGlobalPolish(comp, p, gradientLayer);
 
-        if (p.trackingEnabled && p.trackingLayerName) {
-            applyTrailTracking(comp, p, gradientLayer);
+        if (p.fluidEnabled && p.fluidLayerName) {
+            applyFluidTrail(comp, gradientLayer, p);
         }
 
         app.endUndoGroup();
@@ -704,16 +716,25 @@ function generateGradient(paramsStr) {
    Both are project-wide, so this never runs silently: whatever it changes
    is reported back to the panel. */
 function applyColorQuality(enabled) {
-    if (!enabled) return;
 
-    try {
-        if (app.project.bitsPerChannel < 16) {
-            app.project.bitsPerChannel = 16;
-            LG.note('project set to 16-bit for smoother ramps');
-        }
-    } catch (e) {
-        LG.warn('could not raise the project bit depth: ' + e.message);
-    }
+    /* Bit depth is the user's decision, not ours.
+
+       This used to raise any project under 16 bits per channel on every
+       single build, with the toggle defaulting to on — so a machine that
+       works in 8-bit on purpose, because 16-bit previews are twice the RAM
+       and slower to scrub, got quietly switched every time a gradient was
+       made. Plenty of people work in 8-bit and only lift it at render, or
+       never. Taking that decision away from them is not a quality feature.
+
+       It is opt-in now, and off unless the user asks for it. The banding it
+       guards against is real but it is theirs to trade against speed.
+
+       Note the `=== true`: an absent flag used to mean yes. */
+    /* Nothing raises the bit depth any more. The toggle that used to is gone
+       from the panel entirely — it was a project-wide setting presented as a
+       per-gradient option, which is the wrong shape for it, and plenty of
+       people work in 8-bit deliberately. AE's own Project Settings is where
+       that decision belongs. */
 
     /* Linear blending used to be forced on here, and it is the reason so many
        of these gradients came out wrong. It does fix the grey midpoint on a
@@ -755,7 +776,7 @@ function generateBatch(paramsStr) {
         if (!p.items || !p.items.length)        return 'ERROR: No gradients selected.';
 
         LG.reset();
-        applyColorQuality(p.colorQuality !== false);
+        applyColorQuality(p.colorQuality === true);
         app.beginUndoGroup('Living Gradients — Batch');
 
         folder = app.project.items.addFolder('Living Gradients');
@@ -777,18 +798,15 @@ function generateBatch(paramsStr) {
 
                 var controls = item.controls || {};
                 var unknown = dispatchBuild(comp, item.type, c, controls,
-                                            src.width, src.height, src.duration,
-                                            item.customCode, item.imagePath);
+                                            src.width, src.height, src.duration);
                 if (unknown) throw new Error('unknown type');
 
-                // Grain, glow and BPM are batch-wide, so they come off the
+                // Grain and glow are batch-wide, so they come off the
                 // envelope rather than the per-item controls.
                 var polish = {
                     type:     item.type,
                     grain:    p.grain,
                     glow:     p.glow,
-                    bpmSync:  p.bpmSync,
-                    bpmValue: p.bpmValue,
                     controls: controls
                 };
                 var layer = groupGeneratedLayers(comp, polish, comp.numLayers);
@@ -859,9 +877,22 @@ function applyGlobalPolish(comp, p, layer) {
     if (p.grain && p.grain > 0) {
         var noise = addFx(layer, ['ADBE Noise']);
         if (noise) {
-            safeSet(noise, 'Amount of Noise',  1, p.grain);
-            safeSet(noise, 'Use Color Noise',  2, false);
-            safeSet(noise, 'Clipping',         3, true);
+            /* Grain is luminance, never colour. Coloured noise reads as a
+               broken video signal rather than film, and it is the single
+               fastest way to make a gradient look cheap.
+
+               The checkbox is labelled "Use Color Noise" in the interface but
+               the DOM calls it "Noise Type" (see tools/effect_probe_report.txt,
+               ADBE Noise property 2). Asking for it by the interface label
+               missed, and the write only landed because LG.find falls back to
+               the index — which is not something to rely on. Ask for it by the
+               name the host actually uses, and keep the index as the fallback
+               it was meant to be. */
+            safeSet(noise, 'Amount of Noise', 1, p.grain);
+            if (!safeSet(noise, 'Noise Type', 2, false)) {
+                LG.warn('grain: could not force monochrome noise');
+            }
+            safeSet(noise, 'Clipping', 3, true);
         }
     }
 
@@ -889,9 +920,6 @@ function applyGlobalPolish(comp, p, layer) {
         }
     }
 
-    if (p.bpmSync && p.bpmValue > 0) {
-        applyBpmCycleToComp(comp, p, 0);
-    }
 }
 
 /* =====================================================================
@@ -916,9 +944,161 @@ function applyGlobalPolish(comp, p, layer) {
    Re-Bake.
    ===================================================================== */
 
-var LG_CTRL_NAME = "LG Track Ctrl";
 
 /* Resolve the tracked layer by name. */
+/* ── FLUID TRAIL ──────────────────────────────────────────────────────
+   A liquid trail that follows a layer, made entirely of native effects, used
+   as a luma matte so the gradient underneath is untouched.
+
+   This is the whole feature, and it is about thirty lines, because the fluid
+   lab settled two things that had been guesses:
+
+   1. Echo applied DIRECTLY to a moving layer trails. It was supposed not to —
+      the usual rule is that effects render before a layer's Transform, so
+      Echo should see the layer standing still — but recipes 2, 3 and 4 of the
+      lab produced identical trails on this host. So no precompose, no
+      adjustment layer, no extra comp. One layer carries the whole thing.
+
+   2. The read that looks like liquid rather than smear is blur-then-reharden.
+      A wide blur merges the echo copies into one body; Levels crushed to a
+      narrow band cuts a firm edge back into it. That pair is what makes the
+      trail pinch and swell and separate the way liquid does. Blur alone —
+      lab recipes 5 and 8 — is just a smudge.
+
+   Everything downstream stays live: the gradient is a normal layer, the matte
+   is a normal layer, and every builder in the library works with it unchanged
+   because none of them know it is there.
+
+   Parameter indices come from tools/fluid_lab_report.txt. */
+var FLUID_DEFAULTS = {
+    length:    60,     // how far back the trail reaches
+    thickness: 100,    // body weight
+    wobble:    45,     // organic distortion
+    softness:  25,     // edge falloff, 0 = hard cut
+    size:      7.5     // emitter diameter, percent of width
+};
+
+/* Everything about the trail except the layer it lives on.
+
+   Split out so that dragging a slider re-runs the same code the build ran,
+   rather than a second copy of it that can drift. lgFx finds the existing
+   effect before adding one, so calling this repeatedly updates in place
+   instead of stacking a new Echo on every frame of a drag. */
+function tuneFluidTrail(m, o, w) {
+    if (!m) return;
+
+    var length = Math.max(1, num(o.length, 60));
+    var echo = lgFx(m, ['ADBE Echo']);
+    if (echo) {
+        /* More, shorter echoes rather than fewer long ones: the lab's stills
+           show visible stepping at -0.035s, and the steps are what give a
+           trail away as a stack of copies. */
+        LG.set(echo, 'Echo Time (seconds)', 1, -0.012);
+        LG.set(echo, 'Number Of Echoes',    2, Math.round(length));
+        LG.set(echo, 'Starting Intensity',  3, 1);
+        LG.set(echo, 'Decay',               4, 0.96);
+        LG.set(echo, 'Echo Operator',       5, 3);      // Maximum
+    }
+
+    // Blur wide, then cut a firm edge back in. This is the liquid.
+    var thickness = num(o.thickness, 100) / 100;
+    var blur = lgFx(m, ['ADBE Box Blur2']);
+    if (blur) {
+        LG.set(blur, 'Blur Radius', 1, w * 0.022 * thickness);
+        LG.set(blur, 'Iterations',  2, 3);
+        LG.set(blur, 'Repeat Edge Pixels', 4, true);
+    }
+
+    var soft = num(o.softness, 25) / 100;
+    var lev = lgFx(m, ['ADBE Easy Levels2']);
+    if (lev) {
+        /* The narrower this band, the harder the surface. Softness widens it,
+           which is the difference between mercury and ink in water. */
+        var mid = 0.38;
+        LG.set(lev, 'Input Black', 3, Math.max(0, mid - 0.02 - soft * 0.22));
+        LG.set(lev, 'Input White', 4, Math.min(1, mid + 0.02 + soft * 0.22));
+    }
+
+    var wob = num(o.wobble, 45);
+    var td = lgFx(m, ['ADBE Turbulent Displace']);
+    if (td) {
+        lgTurbSet(td, { mode: 1, amount: wob, size: w * 0.09, speed: 14 });
+        try { td.enabled = wob > 0; } catch (e) { }
+    }
+
+    // The emitter blob, so size stays live too.
+    try {
+        var el = m.property('Contents').property(1).property('Contents').property(1);
+        var d = w * (num(o.size, 7.5) / 100);
+        el.property('Size').setValue([d, d]);
+    } catch (e) { }
+}
+
+function applyFluidTrail(comp, gradientLayer, p) {
+    if (!gradientLayer) { LG.warn('fluid: no gradient layer'); return; }
+
+    var target = findTrackTarget(comp, p.fluidLayerName);
+    if (!target) {
+        LG.warn("fluid: layer '" + p.fluidLayerName + "' not found");
+        return;
+    }
+    if (target === gradientLayer) {
+        LG.warn('fluid: the target layer is the gradient itself');
+        return;
+    }
+
+    var o = lgDefaults(FLUID_DEFAULTS, p.fluid || {});
+    var w = comp.width, h = comp.height;
+
+    // ── The emitter: one blob, following the target ──────────────────
+    var m = comp.layers.addShape();
+    m.name = 'LG Fluid Matte';
+
+    var gc = m.property('Contents')
+              .addProperty('ADBE Vector Group').property('Contents');
+    var el = gc.addProperty('ADBE Vector Shape - Ellipse');
+    var d  = w * (num(o.size, 7.5) / 100);
+    try { el.property('Size').setValue([d, d]); } catch (e) { LG.warn('fluid: emitter size'); }
+
+    var fill = gc.addProperty('ADBE Vector Graphic - Fill');
+    try { fill.property('Color').setValue([1, 1, 1]); } catch (e) { }
+
+    /* toComp rather than transform.position, for the same reason
+       sampleTargetPath uses it: parenting, 3D and anchor offsets all have to
+       land, or the trail follows a layer that is not where it looks. */
+    try {
+        m.property('Transform').property('Position').expression =
+            'var t = thisComp.layer("' + target.name + '");\n' +
+            'var p = t.toComp(t.anchorPoint);\n' +
+            '[p[0], p[1]]';
+    } catch (e) {
+        LG.warn('fluid: could not follow the target layer');
+    }
+
+    tuneFluidTrail(m, o, w);
+
+    // ── Matte the gradient to it ─────────────────────────────────────
+    try { m.moveBefore(gradientLayer); } catch (e) { }
+
+    var matted = false;
+    try {
+        gradientLayer.setTrackMatte(m, TrackMatteType.LUMA);
+        matted = true;
+    } catch (e) {
+        /* Older hosts have no setTrackMatte; there the matte has to be the
+           layer directly above and the mode is set on the layer itself. */
+        try {
+            gradientLayer.trackMatteType = TrackMatteType.LUMA;
+            matted = true;
+        } catch (e2) {
+            LG.warn('fluid: could not apply the track matte');
+        }
+    }
+    if (matted) LG.note('gradient matted to the fluid trail');
+
+    return m;
+}
+
 function findTrackTarget(comp, layerName) {
     for (var i = 1; i <= comp.numLayers; i++) {
         if (comp.layer(i).name === layerName) return comp.layer(i);
@@ -926,341 +1106,13 @@ function findTrackTarget(comp, layerName) {
     return null;
 }
 
-/* Sample the target's comp-space position once per frame.
 
-   toComp() is used rather than transform.position so that parenting, 3D
-   position and anchor offsets are all accounted for — the position a viewer
-   actually sees, not the layer's local value. */
-function sampleTargetPath(comp, target) {
-    var fps    = comp.frameRate;
-    var frames = Math.round(comp.duration * fps);
 
-    // Guard against a pathological comp length locking up the panel.
-    if (frames > 3600) {
-        frames = 3600;
-        LG.warn("tracking baked for the first " + Math.round(frames / fps) + "s only");
-    }
 
-    var path = [], f, t, pt, anchor;
-    for (f = 0; f <= frames; f++) {
-        t = f / fps;
-        pt = null;
-        try {
-            anchor = target.transform.anchorPoint.valueAtTime(t, false);
-            pt = target.toComp(anchor, t);
-        } catch (e) {
-            try { pt = target.transform.position.valueAtTime(t, false); } catch (e2) { pt = null; }
-        }
-        if (!pt) {
-            LG.warn("could not read the position of '" + target.name + "'");
-            return null;
-        }
-        path.push([pt[0], pt[1]]);
-    }
-    return { fps: fps, frames: frames, pts: path };
-}
 
-/* The simulation.
 
-   Semi-implicit Euler on a damped spring, run at four substeps per frame so
-   that a high tension value stays stable at 24fps. Alongside it, an energy
-   envelope with a fast attack and slow release — this is what makes a quick
-   swipe churn the gradient and then settle, rather than the disturbance
-   vanishing the instant the layer stops.
 
-   Returns per-frame position, energy (0..1) and wake offset. */
-function simulateTracking(sample, opts) {
-    var dt     = 1 / sample.fps;
-    var sub    = 4;
-    var sdt    = dt / sub;
-    var n      = sample.pts.length;
 
-    // Tension and friction arrive 0..100 from the panel.
-    var k = Math.max(0.5, opts.tension * 0.9);    // spring constant
-    var c = Math.max(0.5, opts.friction * 0.35);  // viscous damping
-
-    // Spring state, seeded on the target so frame 0 does not lurch.
-    var px = sample.pts[0][0], py = sample.pts[0][1];
-    var vx = 0, vy = 0;
-
-    // Energy envelope. Attack is immediate; release is a time constant.
-    var releaseTime = Math.max(0.08, opts.settle);        // seconds
-    var releaseK    = Math.exp(-dt / releaseTime);
-    var maxSpeed    = 2200;                               // px/sec ≈ full energy
-    var energy      = 0;
-
-    // Wake displacement: momentum pushed into the medium, bleeding back to rest.
-    var wx = 0, wy = 0;
-    var wakeCoupling = opts.wake * 0.06;
-    var wakeReturn   = 1.8;
-
-    var out = [], i, s, tx, ty, ax, ay, dx, dy, speed, raw;
-
-    for (i = 0; i < n; i++) {
-        tx = sample.pts[i][0];
-        ty = sample.pts[i][1];
-
-        // Target velocity from the sampled path, in px/sec.
-        if (i > 0) {
-            dx = (tx - sample.pts[i - 1][0]) / dt;
-            dy = (ty - sample.pts[i - 1][1]) / dt;
-        } else {
-            dx = 0; dy = 0;
-        }
-        speed = Math.sqrt(dx * dx + dy * dy);
-
-        // Energy: rises instantly with speed, falls on the release constant.
-        raw = speed / maxSpeed;
-        if (raw > 1) raw = 1;
-        energy = (raw > energy) ? raw : (energy * releaseK);
-
-        // Spring integration.
-        for (s = 0; s < sub; s++) {
-            ax = k * (tx - px) - c * vx;
-            ay = k * (ty - py) - c * vy;
-            vx += ax * sdt;
-            vy += ay * sdt;
-            px += vx * sdt;
-            py += vy * sdt;
-        }
-
-        // Wake offset carries the object's momentum and relaxes back to zero.
-        wx += (dx * wakeCoupling - wx * wakeReturn) * dt;
-        wy += (dy * wakeCoupling - wy * wakeReturn) * dt;
-
-        out.push({
-            t:      i / sample.fps,
-            pos:    [px, py],
-            raw:    [tx, ty],
-            energy: energy,
-            wake:   [wx, wy]
-        });
-    }
-    return out;
-}
-
-/* Write the simulation onto a control null.
-
-   Every property gets a key on every frame and every key is set to LINEAR.
-   Bezier interpolation between per-frame keys would round off exactly the
-   sharp velocity changes the simulation just computed. */
-function bakeTrackingNull(comp, sim, opts, mode) {
-    var ctrl = null, i;
-
-    // Reuse the existing null on a re-bake so parenting and manual tweaks survive.
-    for (i = 1; i <= comp.numLayers; i++) {
-        if (comp.layer(i).name === LG_CTRL_NAME) { ctrl = comp.layer(i); break; }
-    }
-    if (!ctrl) {
-        ctrl = comp.layers.addNull(comp.duration);
-        ctrl.name = LG_CTRL_NAME;
-        ctrl.enabled = false;
-        try { ctrl.label = 9; } catch (e) { }
-    }
-
-    var pos = ctrl.transform.position;
-    try { while (pos.numKeys > 0) pos.removeKey(1); } catch (e) { }
-
-    var energyFx = findFx(ctrl, ["Energy"]);
-    if (!energyFx) {
-        energyFx = LG.add(ctrl, ["ADBE Slider Control"], "tracking");
-        if (energyFx) energyFx.name = "Energy";
-    }
-    var energyProp = null;
-    if (energyFx) {
-        try {
-            energyProp = energyFx.property(1);
-            while (energyProp.numKeys > 0) energyProp.removeKey(1);
-        } catch (e) { energyProp = null; }
-    }
-
-    var wakeFx = findFx(ctrl, ["Wake"]);
-    if (!wakeFx) {
-        wakeFx = LG.add(ctrl, ["ADBE Point Control"], "tracking");
-        if (wakeFx) wakeFx.name = "Wake";
-    }
-    var wakeProp = null;
-    if (wakeFx) {
-        try {
-            wakeProp = wakeFx.property(1);
-            while (wakeProp.numKeys > 0) wakeProp.removeKey(1);
-        } catch (e) { wakeProp = null; }
-    }
-
-    // Static parameters the expressions read.
-    function slider(name, value) {
-        var fx = findFx(ctrl, [name]);
-        if (!fx) {
-            fx = LG.add(ctrl, ["ADBE Slider Control"], "tracking");
-            if (fx) fx.name = name;
-        }
-        if (fx) safeSet(fx, "Slider", 1, value, "tracking");
-        return fx;
-    }
-    slider("Radius", opts.radius);
-    slider("Force",  opts.force);
-
-    // Bake.
-    for (i = 0; i < sim.length; i++) {
-        pos.setValueAtTime(sim[i].t, sim[i].pos);
-        if (energyProp) energyProp.setValueAtTime(sim[i].t, sim[i].energy * 100);
-        if (wakeProp)   wakeProp.setValueAtTime(sim[i].t, sim[i].wake);
-    }
-
-    function linearise(prop) {
-        if (!prop) return;
-        try {
-            for (var q = 1; q <= prop.numKeys; q++) {
-                prop.setInterpolationTypeAtKey(q,
-                    KeyframeInterpolationType.LINEAR,
-                    KeyframeInterpolationType.LINEAR);
-            }
-        } catch (e) { LG.warn("could not linearise baked keyframes"); }
-    }
-    linearise(pos);
-    linearise(energyProp);
-    linearise(wakeProp);
-
-    try { ctrl.comment = "LG_TRACK:" + mode; } catch (e) { }
-    return ctrl;
-}
-
-/* Expression fragments that read the control null. All O(1) per frame —
-   a single layer lookup, no valueAtTime walk backwards through the comp. */
-function trackBase() {
-    return 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
-           'var energy = n.effect("Energy")("Slider") / 100;\n' +
-           'var radius = n.effect("Radius")("Slider");\n' +
-           'var force  = n.effect("Force")("Slider");\n';
-}
-
-function trackExpr(what) {
-    var base = 'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n';
-    switch (what) {
-        case 'pos':    return base + 'n.transform.position;';
-        case 'energy': return base + 'n.effect("Energy")("Slider") / 100;';
-        case 'radius': return base + 'n.effect("Radius")("Slider");';
-        case 'force':  return base + 'n.effect("Force")("Slider");';
-        case 'wake':   return base + 'n.effect("Wake")("Point");';
-    }
-    return 'value;';
-}
-
-/* ── Mode: SPRING ──────────────────────────────────────────────────────
-   A blob of the gradient chases the layer with lag and overshoot, and the
-   rest is hidden. This is the cursor-follower look: the reveal is what
-   moves, and the spring is what sells it. */
-function applyTrackSpring(comp, gradientLayer, ctrl, opts) {
-    var matte = comp.layers.addShape();
-    matte.name = "LG Track Matte";
-
-    var grp = matte.property("Contents").addProperty("ADBE Vector Group");
-    var gc  = grp.property("Contents");
-    var ell = gc.addProperty("ADBE Vector Shape - Ellipse");
-    safeSet(ell, "Size", 2, [opts.radius * 2, opts.radius * 2], "tracking");
-    var fill = gc.addProperty("ADBE Vector Graphic - Fill");
-    safeSet(fill, "Color", 4, [1, 1, 1, 1], "tracking");
-
-    // Anchor at the origin so the Transform effect maps 1:1 with comp space.
-    try {
-        matte.property("Transform").property("Anchor Point").setValue([0, 0]);
-        matte.property("Transform").property("Position").setValue([0, 0]);
-    } catch (e) { LG.warn("tracking: could not zero the matte transform"); }
-
-    var xf = LG.add(matte, ["ADBE Geometry2"], "tracking");
-    if (xf) {
-        safeSet(xf, "Anchor Point", null, [0, 0], "tracking");
-        LG.expr(xf, "Position", null, trackExpr('pos'), "tracking");
-    }
-
-    // Echo turns the swept path into a trail. Scaled by energy so a still
-    // layer leaves a clean blob and a fast one leaves a streak.
-    var echo = LG.add(matte, ["ADBE Echo"], "tracking");
-    if (echo) {
-        LG.expr(echo, "Echo Time (seconds)", 1, "-thisComp.frameDuration", "tracking");
-        safeSet(echo, "Number Of Echoes",  2, Math.round(6 + opts.trail * 0.34), "tracking");
-        safeSet(echo, "Starting Intensity", 3, 1.0, "tracking");
-        safeSet(echo, "Decay",              4, 0.88, "tracking");
-        safeSet(echo, "Echo Operator",      5, 2, "tracking");   // Maximum
-    }
-
-    var blur = LG.add(matte, ["ADBE Box Blur2"], "tracking");
-    if (blur) {
-        LG.expr(blur, "Blur Radius", 1,
-                trackBase() + '20 + energy * 60;', "tracking");
-        safeSet(blur, "Iterations", 2, 3, "tracking");
-        safeSet(blur, "Repeat Edge Pixels", 4, true, "tracking");
-    }
-
-    var choke = LG.add(matte, ["ADBE Simple Choker"], "tracking");
-    if (choke) safeSet(choke, "Choke Matte", 2, -8, "tracking");
-
-    matte.moveBefore(gradientLayer);
-    matte.enabled = false;
-    setTrackMatteSafely(gradientLayer, matte, "ALPHA");
-    return matte;
-}
-
-/* ── Mode: WAKE ────────────────────────────────────────────────────────
-   The layer shoves the gradient aside. Turbulence amount rides the energy
-   envelope, and the turbulence offset carries the baked momentum, so a fast
-   pass carves a channel that keeps churning after the layer has gone. */
-function applyTrackWake(comp, gradientLayer, ctrl, opts) {
-    var turb = LG.add(gradientLayer, ["ADBE Turbulent Displace"], "tracking");
-    if (turb) {
-        safeSet(turb, "Displacement", 1, 1, "tracking");       // Turbulent
-        LG.expr(turb, "Amount", 2,
-                trackBase() + 'energy * force * 2;', "tracking");
-        LG.expr(turb, "Size", 3,
-                trackBase() + 'Math.max(4, radius * 0.18);', "tracking");
-        LG.expr(turb, "Offset (Turbulence)", 4,
-                'var n = thisComp.layer("' + LG_CTRL_NAME + '");\n' +
-                'n.transform.position + n.effect("Wake")("Point");', "tracking");
-        safeSet(turb, "Complexity", 5, 2, "tracking");
-        LG.expr(turb, "Evolution", 6, "time * " + (60 + opts.force) + ";", "tracking");
-    }
-
-    // A local push at the layer itself, so the disturbance has a source.
-    var bulge = LG.add(gradientLayer, ["ADBE Bulge"], "tracking");
-    if (bulge) {
-        LG.expr(bulge, "Horizontal Radius", 1, trackExpr('radius'), "tracking");
-        LG.expr(bulge, "Vertical Radius",   2, trackExpr('radius'), "tracking");
-        LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
-        LG.expr(bulge, "Bulge Height",      4,
-                trackBase() + '-(0.15 + energy * 0.85) * force * 0.014;', "tracking");
-        safeSet(bulge, "Taper Radius", 5, 0.5, "tracking");
-        safeSet(bulge, "Antialiasing", 6, 2, "tracking");
-    }
-    return null;
-}
-
-/* ── Mode: REPEL ───────────────────────────────────────────────────────
-   The gradient is pushed out of the way within a radius and springs back
-   when the layer leaves. No trail — this one reads as pressure, not wake. */
-function applyTrackRepel(comp, gradientLayer, ctrl, opts) {
-    var bulge = LG.add(gradientLayer, ["ADBE Bulge"], "tracking");
-    if (bulge) {
-        LG.expr(bulge, "Horizontal Radius", 1, trackExpr('radius'), "tracking");
-        LG.expr(bulge, "Vertical Radius",   2, trackExpr('radius'), "tracking");
-        LG.expr(bulge, "Bulge Center",      3, trackExpr('pos'), "tracking");
-        // Negative height pushes the imagery outward from the centre.
-        LG.expr(bulge, "Bulge Height",      4,
-                trackBase() + '-force * 0.02;', "tracking");
-        safeSet(bulge, "Taper Radius", 5, 0.6, "tracking");
-        safeSet(bulge, "Antialiasing", 6, 2, "tracking");
-    }
-
-    // A softer, wider counter-push gives the edge somewhere to relax into.
-    var twirl = LG.add(gradientLayer, ["ADBE Twirl"], "tracking");
-    if (twirl) {
-        LG.expr(twirl, "Angle", 1,
-                trackBase() + 'energy * 90;', "tracking");
-        LG.expr(twirl, "Twirl Radius", 2,
-                trackBase() + 'radius * 0.12;', "tracking");
-        LG.expr(twirl, "Twirl Center", 3, trackExpr('pos'), "tracking");
-    }
-    return null;
-}
 
 /* Track mattes moved to a layer-reference API in AE 2023. Try the modern
    call, then the legacy enum. */
@@ -1272,245 +1124,40 @@ function setTrackMatteSafely(layer, matteLayer, kind) {
     return false;
 }
 
-/* Entry point. `gradientLayer` is the single layer produced by
-   groupGeneratedLayers(), so the reaction applies to the finished gradient
-   however many layers the builder happened to create. */
-function applyTrailTracking(comp, p, gradientLayer) {
-    if (!gradientLayer) { LG.warn("tracking: no gradient layer"); return; }
-
-    var target = findTrackTarget(comp, p.trackingLayerName);
-    if (!target) {
-        LG.warn("tracking: layer '" + p.trackingLayerName + "' not found");
-        return;
-    }
-    if (target === gradientLayer) {
-        LG.warn("tracking: the target layer is the gradient itself");
-        return;
-    }
-
-    var opts = trackOptions(p);
-
-    var sample = sampleTargetPath(comp, target);
-    if (!sample) return;
-
-    var sim  = simulateTracking(sample, opts);
-    var null_ = bakeTrackingNull(comp, sim, opts, opts.mode);
-
-    if (opts.mode === 'Spring')      applyTrackSpring(comp, gradientLayer, null_, opts);
-    else if (opts.mode === 'Repel')  applyTrackRepel(comp, gradientLayer, null_, opts);
-    else                             applyTrackWake(comp, gradientLayer, null_, opts);
-
-    // Keep the null at the top so it is easy to find and never renders.
-    try { null_.moveToBeginning(); } catch (e) { }
-}
 
 function num(v, fallback) {
     var n = parseFloat(v);
     return (v === undefined || v === null || isNaN(n)) ? fallback : n;
 }
 
-/* One reader for both the generate path and Re-Bake, so the two can never
-   simulate with different parameters.
 
-   Persistence is a single panel slider standing in for three related
-   quantities: how long the energy envelope takes to release, how much
-   momentum the medium absorbs, and how long the Spring trail runs. They
-   always want to move together, so exposing them separately would be three
-   sliders users have to keep in sync by hand. */
-function trackOptions(p) {
-    var c = p.controls || {};
-    var persistence = num(c.trackPersistence, 50);
-    return {
-        mode:     c.trackMode || 'Wake',
-        radius:   num(c.trackRadius,   300),
-        force:    num(c.trackForce,    100),
-        tension:  num(c.trackTension,   40),
-        friction: num(c.trackFriction,  30),
-        settle:   0.15 + (persistence / 100) * 1.2,   // 0.15s … 1.35s
-        wake:     persistence,
-        trail:    persistence
-    };
-}
 
-/* Re-run the simulation against the current position of the tracked layer,
-   without rebuilding the gradient. Called by the panel's Re-Bake button. */
-function rebakeTracking(paramsStr) {
-    try {
-        var p = JSON.parse(paramsStr);
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) return 'ERROR: No active composition.';
-
-        LG.reset();
-
-        var ctrlLayer = null, i;
-        for (i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === LG_CTRL_NAME) { ctrlLayer = comp.layer(i); break; }
-        }
-        if (!ctrlLayer) return 'ERROR: No tracking rig in this comp. Generate with tracking on first.';
-
-        var target = findTrackTarget(comp, p.trackingLayerName);
-        if (!target) return "ERROR: Layer '" + p.trackingLayerName + "' not found.";
-
-        var opts = trackOptions(p);
-
-        app.beginUndoGroup('Re-Bake Tracking');
-        var sample = sampleTargetPath(comp, target);
-        if (!sample) { app.endUndoGroup(); return 'ERROR: Could not sample the target layer.' + LG.report(); }
-
-        var sim = simulateTracking(sample, opts);
-        bakeTrackingNull(comp, sim, opts, opts.mode);
-        app.endUndoGroup();
-
-        return 'Re-baked ' + sim.length + ' frames' + LG.report();
-    } catch (e) {
-        try { app.endUndoGroup(); } catch (x) { }
-        return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
-    }
-}
-
-function applyBpmCycleToComp(comp, p, depth) {
-    if (depth > 5) return;
-    var cStrs = [];
-    for (var i = 0; i < p.colors.length; i++) {
-        var rgb = hexRgb(p.colors[i]);
-        cStrs.push("[" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",1]");
-    }
-    var arrStr = "[" + cStrs.join(",") + "]";
-    var exprBase = "var cArr = " + arrStr + ";\n" +
-        "var bpm = " + p.bpmValue + ";\n" +
-        "var measureLength = (60 / bpm) * 4;\n";
-
-    for (var i = 1; i <= comp.numLayers; i++) {
-        var layer = comp.layer(i);
-        // check if layer has 4-color gradient
-        var g4 = findFx(layer, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient', 'ADBE 4ColorGradient']);
-        if (g4) {
-            for (var c = 1; c <= 4; c++) {
-                var expr = exprBase + "var t = (time / measureLength) + " + (c - 1) + ";\n" +
-                    "var idx1 = Math.floor(t) % cArr.length;\n" +
-                    "var idx2 = (idx1 + 1) % cArr.length;\n" +
-                    "var amt = t - Math.floor(t);\n" +
-                    "linear(amt, 0, 1, cArr[idx1], cArr[idx2]);";
-                try { g4.property('Color ' + c).expression = expr; } catch (e) { }
-            }
-        }
-
-        // check if layer is a shape layer with a fill
-        try {
-            if (layer instanceof ShapeLayer) {
-                var grps = ["Color", "Circle", "Shape"];
-                for (var gi = 0; gi < grps.length; gi++) {
-                    var fill = null;
-                    try { fill = layer.property("Contents").property(grps[gi]).property("Contents").property("ADBE Vector Graphic - Fill"); } catch (e) { }
-                    if (fill) {
-                        var offset = Math.floor(Math.random() * 4);
-                        var expr = exprBase + "var t = (time / measureLength) + " + offset + ";\n" +
-                            "var idx1 = Math.floor(t) % cArr.length;\n" +
-                            "var idx2 = (idx1 + 1) % cArr.length;\n" +
-                            "var amt = t - Math.floor(t);\n" +
-                            "linear(amt, 0, 1, cArr[idx1], cArr[idx2]);";
-                        try { fill.property("Color").expression = expr; } catch (e) {
-                            try { fill.property(4).expression = expr; } catch (e) { }
-                        }
-                    }
-                }
-            }
-        } catch (e) { }
-
-        // if layer is a precomp, recurse
-        try {
-            if (layer.source && layer.source instanceof CompItem) {
-                applyBpmCycleToComp(layer.source, p, depth + 1);
-            }
-        } catch (e) { }
-    }
-}
 
 // ── 1. OKLAB SMOOTH ──
+/* The first card in the library, and it rendered as a plain white-to-black
+   ramp with none of the palette in it.
+
+   It was building a shape layer and setting the Gradient Fill's "Colors"
+   property from a flat array. That property is CUSTOM_VALUE and setValue does
+   not take an array for it, so every stop was rejected and the fill kept AE's
+   default — which is white to black. The attempt sat inside an empty catch
+   with a comment guessing at version differences, so it never surfaced.
+
+   lgOklabRamp is the way through, and has been in this file all along: a
+   black-to-white Gradient Ramp carries the shape and CC Toner maps five
+   Oklab-interpolated stops onto it, all through properties scripting can
+   actually write. */
 function buildOklabSmooth(comp, c, ctrl, w, h, dur) {
-    var s = comp.layers.addShape();
-    s.name = "Oklab Smooth Gradient";
-    var contents = s.property("Contents");
-    var grp = contents.addProperty("ADBE Vector Group");
-    grp.name = "Gradient";
-    var grpContents = grp.property("Contents");
+    var radial = !!(ctrl.gradientType &&
+                    String(ctrl.gradientType).toLowerCase() === 'radial');
+    var angle  = (num(ctrl.angle, 0) === 90) ? 90 : 0;
 
-    var rect = grpContents.addProperty("ADBE Vector Shape - Rect");
-    try { rect.property("Size").setValue([w, h]); } catch (e) {
-        try { rect.property(2).setValue([w, h]); } catch (e2) { }
-    }
+    // The name is what the live recolour path matches on — keep it.
+    var s = comp.layers.addSolid([0, 0, 0], 'Oklab Smooth Gradient', w, h, 1, dur);
 
-    var gFill = grpContents.addProperty("ADBE Vector Graphic - G-Fill");
-    
-    // Type: 1 = Linear, 2 = Radial
-    var gType = (ctrl.gradientType && ctrl.gradientType.toLowerCase() === 'radial') ? 2 : 1;
-    try { gFill.property("Type").setValue(gType); } catch(e) {
-        try { gFill.property(1).setValue(gType); } catch(e2){}
-    }
+    lgOklabRamp(s, c, w, h, angle, radial);
 
-    var ov = Math.max(w, h) * 0.1;
-    var startPos = ctrl.angle === 90 ? [0, -h/2 + ov] : [-w/2 + ov, 0];
-    var endPos = ctrl.angle === 90 ? [0, h/2 - ov] : [w/2 - ov, 0];
-
-    try { gFill.property("Start Point").setValue(startPos); } catch (e) {
-        try { gFill.property(4).setValue(startPos); } catch (e2) { }
-    }
-    try { gFill.property("End Point").setValue(endPos); } catch (e) {
-        try { gFill.property(5).setValue(endPos); } catch (e2) { }
-    }
-
-    // Generate 15 color stops in Oklab space
-    var numStops = 15;
-    var colorsArray = [];
-    
-    // Multi-color support (if more than 2 colors passed)
-    var numColors = c.length;
-    var segments = numColors > 1 ? numColors - 1 : 1;
-    
-    for (var i = 0; i < numStops; i++) {
-        var t = i / (numStops - 1);
-        colorsArray.push(t); // Position
-
-        var segmentT = t * segments;
-        var segmentIndex = Math.min(Math.floor(segmentT), segments - 1);
-        var localT = segmentT - segmentIndex;
-
-        var c1 = c[segmentIndex % numColors];
-        var c2 = c[(segmentIndex + 1) % numColors];
-
-        // Ensure we handle single color gracefully
-        if (numColors === 1) c2 = c1;
-
-        var rgb = interpolateOklab(c1, c2, localT);
-        colorsArray.push(rgb[0], rgb[1], rgb[2]); // R, G, B
-    }
-
-    // Add 2 opacity stops at ends
-    colorsArray.push(0, 1.0, 1, 1.0); // pos, alpha, pos, alpha
-
-    // Apply colors
-    var colorsProp = null;
-    try { colorsProp = gFill.property("Colors"); } catch (e) {
-        try { colorsProp = gFill.property(9); } catch (e2) { }
-    }
-
-    if (colorsProp) {
-        try {
-            colorsProp.setValue(colorsArray);
-        } catch (e) {
-            // Fallback if the array format doesn't match the specific AE version:
-            // Gradient Fill Colors property can sometimes be tricky.
-        }
-    }
-
-    // Option to add some bezier warping or displacement for "smoothness"
-    if (ctrl.softness && ctrl.softness > 0) {
-        var blur = addFx(s, ["ADBE Fast Box Blur", "Fast Box Blur"]);
-        if (blur) {
-            safeSet(blur, "Blur Radius", 1, ctrl.softness);
-            try { blur.property(4).setValue(true); } catch(e){}
-        }
-    }
+    if (ctrl.softness && ctrl.softness > 0) lgBlur(s, num(ctrl.softness, 0));
 }
 
 // ── 2. LIVING GRADIENT ── 4-Color Gradient + Motion Tile + Turbulent Displace (from Living Gradients.jsx)
@@ -1559,7 +1206,7 @@ function buildLiving(comp, c, ctrl, w, h, dur) {
                 var cp = g4.property('Color ' + (i + 1));
                 if (pt && cp) {
                     pt.setValueAtTime(0, corners[i]);
-                    pt.setValueAtTime(speed, [(Math.random() * (w + ov * 2)) - ov, (Math.random() * (h + ov * 2)) - ov]);
+                    pt.setValueAtTime(lgCycleTime(speed), [(Math.random() * (w + ov * 2)) - ov, (Math.random() * (h + ov * 2)) - ov]);
                     ex(pt, 'loopOut("pingpong")');
                     cp.setValue(c[i % c.length]);
                 }
@@ -2142,7 +1789,7 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
                 var cp = g4.property('Color ' + (i + 1));
                 if (pt && cp) {
                     pt.setValueAtTime(0, corners[i]);
-                    pt.setValueAtTime(speed, [(Math.random() * (w + ov * 2)) - ov, (Math.random() * (h + ov * 2)) - ov]);
+                    pt.setValueAtTime(lgCycleTime(speed), [(Math.random() * (w + ov * 2)) - ov, (Math.random() * (h + ov * 2)) - ov]);
                     ex(pt, 'loopOut("pingpong")');
                     cp.setValue(c[i % c.length]);
                 }
@@ -2159,8 +1806,8 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
         try { twirl.property("Twirl Radius").setValueAtTime(0, 15); } catch(e) {
             try { twirl.property(2).setValueAtTime(0, 15); } catch(e2){}
         }
-        try { twirl.property("Twirl Radius").setValueAtTime(speed, twirlRadius); } catch(e) {
-            try { twirl.property(2).setValueAtTime(speed, twirlRadius); } catch(e2){}
+        try { twirl.property("Twirl Radius").setValueAtTime(lgCycleTime(speed), twirlRadius); } catch(e) {
+            try { twirl.property(2).setValueAtTime(lgCycleTime(speed), twirlRadius); } catch(e2){}
         }
     }
 
@@ -2180,8 +1827,8 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
         try { waveWarp.property("Wave Width").setValueAtTime(0, 460); } catch(e) {
             try { waveWarp.property(3).setValueAtTime(0, 460); } catch(e2){}
         }
-        try { waveWarp.property("Wave Width").setValueAtTime(speed, waveWidth); } catch(e) {
-            try { waveWarp.property(3).setValueAtTime(speed, waveWidth); } catch(e2){}
+        try { waveWarp.property("Wave Width").setValueAtTime(lgCycleTime(speed), waveWidth); } catch(e) {
+            try { waveWarp.property(3).setValueAtTime(lgCycleTime(speed), waveWidth); } catch(e2){}
         }
         safeSet(waveWarp, "Direction", 4, waveDirection);
         safeSet(waveWarp, "Wave Speed", 5, waveSpeed);
@@ -2391,17 +2038,97 @@ function updateGradientLive(paramsStr) {
         /* Types on the shared greyscale-then-colour path. Build and live
            update run the same tune* function, so a slider cannot mean one
            thing when the layer is created and another when it is dragged. */
+        /* The fluid trail is not a property of any one gradient — every
+           gradient can wear it — so it updates before the per-type dispatch
+           below rather than inside it. Without this the sliders did nothing
+           until the gradient was re-applied, which made them useless. */
+        if (ctrl.fluid) {
+            for (var fi = 1; fi <= comp.numLayers; fi++) {
+                if (comp.layer(fi).name === 'LG Fluid Matte') {
+                    tuneFluidTrail(comp.layer(fi), lgDefaults(FLUID_DEFAULTS, ctrl.fluid),
+                                   realComp.width);
+                }
+            }
+        }
+
         var LIVE_TUNERS = {
             LiquidWaves:    { layer: 'Liquid Waves',    fn: tuneLiquidWaves },
             Metallic:       { layer: 'Metallic',        fn: tuneMetallic },
-            Glass:          { layer: 'Glass Ribbons',   fn: tuneGlass },
-            CellularMosaic: { layer: 'Cellular Mosaic', fn: tuneCellularMosaic }
+            CellularMosaic: { layer: 'Cellular Mosaic', fn: tuneCellularMosaic },
+            AnimeWater:     { layer: 'Anime Water',     fn: tuneAnimeWater },
+            AnimeCells:     { layer: 'Anime Cells',     fn: tuneAnimeCells }
         };
+
+        /* Animal prints share one tuner, so they are registered by loop
+           rather than five near-identical lines. */
+        (function () {
+            var names = ['Giraffe', 'Tiger', 'Zebra', 'Leopard', 'Cow'], i;
+            for (i = 0; i < names.length; i++) {
+                LIVE_TUNERS[names[i]] = (function (species) {
+                    return {
+                        layer: species + ' Print',
+                        fn: function (layer, cols, lc) {
+                            tuneAnimalPrint(layer, cols, lc, species);
+                        }
+                    };
+                })(names[i]);
+            }
+        })();
         if (LIVE_TUNERS[ctrl.type]) {
             var tuner = LIVE_TUNERS[ctrl.type];
             app.beginUndoGroup('Update ' + tuner.layer);
             for (var ti = 1; ti <= comp.numLayers; ti++) {
                 if (comp.layer(ti).name === tuner.layer) tuner.fn(comp.layer(ti), lcols, lctrl);
+            }
+            app.endUndoGroup();
+            return;
+        }
+
+        /* The shaded metals and the frosted glass are two layers each, and one
+           of the two lives in a comp of its own, so they cannot ride the
+           single-layer table above. A slider that only ever reached the
+           picture and never the height field would move the colour and leave
+           the surface exactly as it was — Relief, Brush Length and Crumple all
+           live on the map, not on what you can see. */
+        var SHADED = { Polished: 1, Brushed: 1, Gold: 1, Copper: 1,
+                       Gunmetal: 1, Hammered: 1, Foil: 1, Mercury: 1 };
+        if (SHADED[ctrl.type]) {
+            var kind = ctrl.type;
+            app.beginUndoGroup('Update ' + kind);
+            var metalLayer = null, heightLayer = null, mi2;
+            for (mi2 = 1; mi2 <= comp.numLayers; mi2++) {
+                var ml = comp.layer(mi2);
+                if (ml.name === kind + ' Metal')  metalLayer = ml;
+                else if (ml.name === kind + ' Height') heightLayer = ml;
+            }
+            if (heightLayer && heightLayer.source && heightLayer.source instanceof CompItem
+                && heightLayer.source.numLayers > 0) {
+                tuneMetalHeight(heightLayer.source.layer(1), lctrl, kind);
+            }
+            if (metalLayer) {
+                tuneMetalSurface(metalLayer, lcols, lctrl, kind,
+                                 heightLayer ? heightLayer.index : 0,
+                                 realComp.width, realComp.height);
+            }
+            app.endUndoGroup();
+            return;
+        }
+
+        if (ctrl.type === 'Glass') {
+            app.beginUndoGroup('Update Frosted Glass');
+            var glassColour = null, glassSurface = null, gi;
+            for (gi = 1; gi <= comp.numLayers; gi++) {
+                var gl = comp.layer(gi);
+                if (gl.name === 'Glass Colour')  glassColour = gl;
+                else if (gl.name === 'Glass Surface') glassSurface = gl;
+            }
+            if (glassSurface && glassSurface.source && glassSurface.source instanceof CompItem
+                && glassSurface.source.numLayers > 0) {
+                tuneGlassSurface(glassSurface.source.layer(1), lctrl);
+            }
+            if (glassColour) {
+                tuneGlass(glassColour, lcols, lctrl,
+                          glassSurface ? glassSurface.index : 0);
             }
             app.endUndoGroup();
             return;
@@ -2599,32 +2326,6 @@ function updateGradientLive(paramsStr) {
             return;
         }
 
-        if (ctrl.type === "AnimeWater") {
-            var actrl = ctrl.controls || ctrl;
-            app.beginUndoGroup("Update Anime Water Controls");
-            for (var l = 1; l <= comp.numLayers; l++) {
-                var layer = comp.layer(l);
-                if (layer.name === "Anime Water Base" || layer.name === "Anime Water Light") {
-                    var bubbles = findFx(layer, ["CC Bubbles"]);
-                    if (bubbles) {
-                        var multiplier = layer.name === "Anime Water Light" ? 1.5 : 1.0;
-                        var speedMult = layer.name === "Anime Water Light" ? 1.2 : 1.0;
-                        if (actrl.bubbleAmount !== undefined) safeSet(bubbles, "Bubble Amount", 1, parseFloat(actrl.bubbleAmount) * multiplier);
-                        if (actrl.bubbleSpeed !== undefined) safeSet(bubbles, "Bubble Speed", 2, parseFloat(actrl.bubbleSpeed) * speedMult);
-                    }
-                }
-                if (layer.name === "Anime Water Surface" || layer.name === "Anime Water Glow") {
-                    var noise = findFx(layer, ["Fractal Noise", "ADBE FractalNoise"]);
-                    if (noise) {
-                        if (actrl.contrast !== undefined) safeSet(noise, "Contrast", 4, parseFloat(actrl.contrast));
-                        if (actrl.speed !== undefined) safeEx(noise, "Evolution", 10, "time * " + parseFloat(actrl.speed));
-                    }
-                }
-            }
-            app.endUndoGroup();
-            return;
-        }
-
         app.beginUndoGroup("Update SilkFlare Controls");
         for (var i = 1; i <= comp.numLayers; i++) {
             var layer = comp.layer(i);
@@ -2779,35 +2480,11 @@ function updateLayerColors(layer, c, depth) {
         } catch (x) { }
     }
 
+    /* Was re-running the same rejected Gradient Fill write as the builder.
+       The layer is a ramp through CC Toner now, so a palette change is just a
+       re-map of the five stops. */
     if (lname === 'Oklab Smooth Gradient') {
-        try {
-            var gFill = null;
-            try { gFill = layer.property("Contents").property("Gradient").property("Contents").property("ADBE Vector Graphic - G-Fill"); } catch(e){}
-            if (gFill) {
-                var numStops = 15;
-                var colorsArray = [];
-                var numColors = c.length;
-                var segments = numColors > 1 ? numColors - 1 : 1;
-                for (var i = 0; i < numStops; i++) {
-                    var t = i / (numStops - 1);
-                    colorsArray.push(t);
-                    var segmentT = t * segments;
-                    var segmentIndex = Math.min(Math.floor(segmentT), segments - 1);
-                    var localT = segmentT - segmentIndex;
-                    var c1 = c[segmentIndex % numColors];
-                    var c2 = c[(segmentIndex + 1) % numColors];
-                    if (numColors === 1) c2 = c1;
-                    var rgb = interpolateOklab(c1, c2, localT);
-                    colorsArray.push(rgb[0], rgb[1], rgb[2]);
-                }
-                colorsArray.push(0, 1.0, 1, 1.0);
-                var colorsProp = null;
-                try { colorsProp = gFill.property("Colors"); } catch (e) {
-                    try { colorsProp = gFill.property(9); } catch (e2) { }
-                }
-                if (colorsProp) colorsProp.setValue(colorsArray);
-            }
-        } catch (x) { }
+        lgOklabToneStops(layer, c);
     }
 
     if (lname.indexOf('Matte Comp') !== -1) {
@@ -2889,21 +2566,6 @@ function updateLayerColors(layer, c, depth) {
             if (tint) {
                 safeSet(tint, "Map Black To", 1, c[0]);
                 safeSet(tint, "Map White To", 2, c[1]);
-            }
-        } catch (x) { }
-    }
-
-    if (lname.indexOf('Anime Water') !== -1) {
-        try {
-            var ramp = findFx(layer, ['Gradient Ramp', 'ADBE Ramp']);
-            if (ramp) {
-                if (lname === 'Anime Water Base') {
-                    try { ramp.property('Start Color').setValue(c[0] || [1,1,1]); } catch(e){}
-                    try { ramp.property('End Color').setValue(c[1] || [0,0,0]); } catch(e){}
-                } else if (lname === 'Anime Water Light') {
-                    try { ramp.property('Start Color').setValue(c[2] || [1,1,1]); } catch(e){}
-                    try { ramp.property('End Color').setValue(c[3] || [0,0,0]); } catch(e){}
-                }
             }
         } catch (x) { }
     }
@@ -3347,109 +3009,39 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
     // 1. Luma Source Precomp (The 4-Color Gradient map)
     var lumaComp = proj.items.addComp("ASCII Luma Map", w, h, 1, dur, fps);
 
-    if (ctrl.trackingEnabled && ctrl.trackingLayerName) {
-        var trailShape = lumaComp.layers.addShape();
-        trailShape.name = "Trail Source (" + ctrl.trackingLayerName + ")";
-        var contents = trailShape.property("Contents");
-        var grp = contents.addProperty("ADBE Vector Group");
-        var grpContents = grp.property("Contents");
-        var ellipse = grpContents.addProperty("ADBE Vector Shape - Ellipse");
-        try { ellipse.property("Size").setValue([150, 150]); } catch(e) {
-            try { ellipse.property(2).setValue([150, 150]); } catch(e2){}
-        }
-        var fill = grpContents.addProperty("ADBE Vector Graphic - Fill");
-        try { fill.property("Color").setValue([1,1,1]); } catch(e) {
-            try { fill.property(4).setValue([1,1,1]); } catch(e2){}
-        }
-        var expr = "try {\n" +
-                   "  var tgt = comp('" + comp.name + "').layer('" + ctrl.trackingLayerName + "');\n" +
-                   "  if (tgt.hasParent) {\n" + 
-                   "     tgt.toComp(tgt.anchorPoint);\n" +
-                   "  } else {\n" +
-                   "     tgt.transform.position;\n" +
-                   "  }\n" +
-                   "} catch(e) { value; }";
-        try { trailShape.property("Transform").property("Position").expression = expr; } catch(e) {}
-        
-        var echo = addFx(trailShape, ["Echo", "ADBE Echo"]);
-        if (echo) {
-            safeEx(echo, "Echo Time (seconds)", 1, "-thisComp.frameDuration");
-            safeSet(echo, "Number Of Echoes", 2, 40);
-            safeSet(echo, "Starting Intensity", 3, 1.0);
-            safeSet(echo, "Decay", 4, 0.92);
-            safeSet(echo, "Echo Operator", 5, 2); // 2 = Maximum
-        }
-        
-        var blur = addFx(trailShape, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Gaussian Blur 2", "Gaussian Blur"]);
-        if (blur) {
-            safeSet(blur, "Blur Radius", 1, 30);
-            try { blur.property(4).setValue(true); } catch(e) {}
-        }
+    var lumaSolid = lumaComp.layers.addSolid([0, 0, 0], "Fluid Gradient", w, h, 1, dur);
 
-        // --- Fluid Simulation Effect ---
-        var fluidAdj = lumaComp.layers.addSolid([1, 1, 1], "Fluid Dispersion", w, h, 1, dur);
-        fluidAdj.adjustmentLayer = true;
-
-        var turb1 = addFx(fluidAdj, ["Turbulent Displace", "ADBE Turbulent Displace"]);
-        if (turb1) {
-            safeSet(turb1, "Amount", 2, 120);
-            safeSet(turb1, "Size", 3, 200); // Large slow swirls
-            safeEx(turb1, "Evolution", 5, "time * " + (speed * 4));
-        }
-
-        var vecBlur = addFx(fluidAdj, ["CC Vector Blur"]);
-        if (vecBlur) {
-            safeSet(vecBlur, "Amount", 2, 50);
-            safeSet(vecBlur, "Ridge Smoothness", 4, 30);
-        }
-
-        var turb2 = addFx(fluidAdj, ["Turbulent Displace", "ADBE Turbulent Displace"]);
-        if (turb2) {
-            safeSet(turb2, "Amount", 2, 60);
-            safeSet(turb2, "Size", 3, 60); // Small fast ripples
-            safeEx(turb2, "Evolution", 5, "time * " + (speed * 8));
-        }
-
-        var softenBlur = addFx(fluidAdj, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Gaussian Blur 2", "Gaussian Blur"]);
-        if (softenBlur) {
-            safeSet(softenBlur, "Blur Radius", 1, 15);
-            try { softenBlur.property(4).setValue(true); } catch(e) {}
-        }
-    } else {
-        var lumaSolid = lumaComp.layers.addSolid([0, 0, 0], "Fluid Gradient", w, h, 1, dur);
-
-        var grad = addFx(lumaSolid, ["4-Color Gradient", "ADBE 4ColorGradient"]);
-        if (grad) {
-            safeSet(grad, "Point 1", 1, [w * 0.1, h * 0.1]);
-            safeSet(grad, "Point 2", 3, [w * 0.9, h * 0.2]);
-            safeSet(grad, "Point 3", 5, [w * 0.2, h * 0.8]);
-            safeSet(grad, "Point 4", 7, [w * 0.8, h * 0.9]);
-            safeEx(grad, "Point 1", 1, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
-            safeEx(grad, "Point 2", 3, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
-            safeEx(grad, "Point 3", 5, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
-            safeEx(grad, "Point 4", 7, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
-        }
-
-        var turb = addFx(lumaSolid, ["Turbulent Displace", "ADBE Turbulent Displace"]);
-        if (turb) {
-            safeSet(turb, "Amount", 2, 100);
-            safeSet(turb, "Size", 3, 300);
-            safeEx(turb, "Evolution", 5, "time * " + speed * 2);
-        }
-
-        addFx(lumaSolid, ["Tint", "ADBE Tint"]); // Grayscale!
-
-        var noiseSolid = lumaComp.layers.addSolid([1, 1, 1], "Evolving Noise", w, h, 1, dur);
-        var lumaNoise = addFx(noiseSolid, ["Fractal Noise", "ADBE FractalNoise"]);
-        if (lumaNoise) {
-            safeSet(lumaNoise, "Fractal Type", 1, 1);
-            safeSet(lumaNoise, "Noise Type", 2, 4); // Spline
-            safeSet(lumaNoise, "Contrast", 4, 150);
-            safeSet(lumaNoise, "Brightness", 5, 0);
-            safeEx(lumaNoise, "Evolution", 10, "time * " + (speed * 1.5));
-        }
-        try { noiseSolid.blendingMode = BlendingMode.OVERLAY; } catch (e) { }
+    var grad = addFx(lumaSolid, ["4-Color Gradient", "ADBE 4ColorGradient"]);
+    if (grad) {
+        safeSet(grad, "Point 1", 1, [w * 0.1, h * 0.1]);
+        safeSet(grad, "Point 2", 3, [w * 0.9, h * 0.2]);
+        safeSet(grad, "Point 3", 5, [w * 0.2, h * 0.8]);
+        safeSet(grad, "Point 4", 7, [w * 0.8, h * 0.9]);
+        safeEx(grad, "Point 1", 1, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
+        safeEx(grad, "Point 2", 3, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
+        safeEx(grad, "Point 3", 5, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
+        safeEx(grad, "Point 4", 7, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
     }
+
+    var turb = addFx(lumaSolid, ["Turbulent Displace", "ADBE Turbulent Displace"]);
+    if (turb) {
+        safeSet(turb, "Amount", 2, 100);
+        safeSet(turb, "Size", 3, 300);
+        safeEx(turb, "Evolution", 5, "time * " + speed * 2);
+    }
+
+    addFx(lumaSolid, ["Tint", "ADBE Tint"]); // Grayscale!
+
+    var noiseSolid = lumaComp.layers.addSolid([1, 1, 1], "Evolving Noise", w, h, 1, dur);
+    var lumaNoise = addFx(noiseSolid, ["Fractal Noise", "ADBE FractalNoise"]);
+    if (lumaNoise) {
+        safeSet(lumaNoise, "Fractal Type", 1, 1);
+        safeSet(lumaNoise, "Noise Type", 2, 4); // Spline
+        safeSet(lumaNoise, "Contrast", 4, 150);
+        safeSet(lumaNoise, "Brightness", 5, 0);
+        safeEx(lumaNoise, "Evolution", 10, "time * " + (speed * 1.5));
+    }
+    try { noiseSolid.blendingMode = BlendingMode.OVERLAY; } catch (e) { }
 
     // Pixelate it so each grid cell has a uniform luminance
     var adjLayer = lumaComp.layers.addSolid([1, 1, 1], "Pixelate", w, h, 1, dur);
@@ -3552,114 +3144,146 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
     }
 }
 
-function buildAiCustom(comp, c, w, h, dur, customCode) {
-    if (!customCode) throw new Error("No custom code provided by AI.");
-    try {
-        eval(customCode);
-    } catch(e) {
-        throw new Error("AI Code Error: " + e.message + " on line " + e.line);
-    }
-}
 
-function buildAiImage(comp, c, w, h, dur, imagePath) {
-    if (!imagePath) throw new Error("No image path provided.");
-    
-    var file = new File(imagePath);
-    if (!file.exists) throw new Error("Image file does not exist: " + imagePath);
-    
-    var importedItem = null;
-    try {
-        importedItem = app.project.importFile(new ImportOptions(file));
-    } catch(e) {
-        throw new Error("Failed to import image: " + e.message);
-    }
-    
-    var layer = comp.layers.add(importedItem);
-    layer.name = "AI Generated Texture";
-    
-    // Scale to fit comp
-    var sX = (w / layer.width) * 100;
-    var sY = (h / layer.height) * 100;
-    var maxScale = Math.max(sX, sY);
-    try {
-        layer.property("Transform").property("Scale").setValue([maxScale, maxScale]);
-    } catch(e){}
-    
-    // Create a solid on top with 4-Color Gradient set to Color blending mode
-    var s = comp.layers.addSolid([1,1,1], "AI Color Overlay", w, h, 1);
-    try {
-        s.blendingMode = BlendingMode.COLOR;
-    } catch(e) {
-        // Fallback for older AE versions
-        try { s.blendingMode = 4022; } catch(e2){}
-    }
-    
-    var g4 = addFx(s, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient']);
-    if (g4) {
-        var ov = Math.max(w, h) * 0.5;
-        var corners = [[-ov, -ov], [w + ov, -ov], [-ov, h + ov], [w + ov, h + ov]];
-        for (var i = 0; i < 4; i++) {
-            try {
-                g4.property('Point ' + (i + 1)).setValue(corners[i]);
-                g4.property('Color ' + (i + 1)).setValue(c[i % c.length]);
-            } catch (x) { }
-        }
-    }
-}
 
-/* Frosted glass: iridescent ribbons under a bloom, then frosted.
+/* ── FROSTED GLASS ────────────────────────────────────────────────────
+   A sheet of glass in front of a colour field, and both halves are real.
 
-   The reference is the flowing chromatic glass look — stretched bands of
-   colour with a bright specular edge where they fold. That edge is the whole
-   thing, and the old build had no way to produce one: it displaced a smooth
-   four-colour ramp, and a smooth ramp has no edge to catch light on. Here the
-   folds come from wrapped Fractal Noise, and Glow in A & B Colours mode puts
-   the chromatic fringe on them. */
+   WHAT WAS WRONG. The old build was one layer: Fractal Noise with Overflow
+   set to Wrap Back at contrast 260, then a Glow in A & B Colours mode with
+   its threshold pulled down to about 56. Wrap Back folds every value that
+   runs past white back down again, so at that contrast the field is a stack
+   of hard bands with a discontinuity at every fold — and the noise evolves,
+   so those discontinuities sweep across the frame. Then a wide Glow at a low
+   threshold bloomed whatever happened to be bright in each frame. That is the
+   flashing: it is not a glitch, it is the build working exactly as written,
+   and what it was written to do was never glass. Glass is a thing you see
+   *through*, and there was nothing behind it to see.
+
+   So there are two layers now.
+
+     Glass Colour    the field behind the glass. Soft, slow, no hard edges —
+                     it is meant to be refracted, not looked at.
+     Glass Surface   a hidden height field: the shape of the sheet.
+
+   CC Glass does the rest, and it is the right tool because it does both jobs
+   at once from the same normals: it bends what is behind the surface
+   (Displacement) *and* lights the surface itself (Specular, Roughness). Those
+   two agreeing with each other is what the eye reads as glass, and it is
+   exactly what three separate effects guessing at it could never produce.
+
+   Set Frost to 0 and the same build is clear liquid glass. */
 function buildGlass(comp, c, ctrl, w, h, dur) {
-    var s = comp.layers.addSolid([0.5, 0.5, 0.5], 'Glass Ribbons', w, h, 1, dur);
-    tuneGlass(s, c, ctrl);
+    var fps = comp.frameRate;
+
+    // 1. The surface, in its own comp so it is finished before it is sampled.
+    var surfComp = app.project.items.addComp('Glass Surface Map', w, h, 1, dur, fps);
+    var surfSolid = surfComp.layers.addSolid([0.5, 0.5, 0.5], 'Surface', w, h, 1, dur);
+    tuneGlassSurface(surfSolid, ctrl);
+
+    var surf = comp.layers.add(surfComp);
+    surf.name = 'Glass Surface';
+    surf.enabled = false;
+
+    comp.layers.addSolid([0.5, 0.5, 0.5], 'Glass Colour', w, h, 1, dur);
+
+    // 2. Stack is final, so the bump index is safe. See buildMetalTexture.
+    var colourNow = null, surfNow = null, i;
+    for (i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).name === 'Glass Colour')  colourNow = comp.layer(i);
+        else if (comp.layer(i).name === 'Glass Surface') surfNow = comp.layer(i);
+    }
+    if (colourNow) tuneGlass(colourNow, c, ctrl, surfNow ? surfNow.index : 0);
 }
 
-function tuneGlass(s, c, ctrl) {
+/* The shape of the sheet. Soft ridges, not bands — this is a height field, so
+   every hard edge in it arrives in the render as a crease of light. */
+function tuneGlassSurface(s, ctrl) {
     if (!s) return;
-    var speed  = num(ctrl.speed, 20);
-    var scale  = num(ctrl.scale, 140);
-    var irid   = num(ctrl.iridescence, 55);
-    var sorted = lgByLuma(c);
+    var speed = num(ctrl.speed, 14);
+    var scale = num(ctrl.surfaceScale, 260);
 
-    lgFractalSet(lgFx(s, ['ADBE Fractal Noise']), {
+    lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Relief'), {
         fractalType:  2,
-        contrast:     num(ctrl.contrast, 260),
+        contrast:     110,
         brightness:   0,
-        overflow:     3,
-        complexity:   5,
-        scale:        scale,
-        scaleWidth:   num(ctrl.stretch, 800),
-        rotation:     20,
-        subInfluence: 75,
-        speed:        speed
+        overflow:     2,                  // soft clamp — no folds, no flashing
+        complexity:   3,
+        scaleWidth:   scale * 1.6,
+        scaleHeight:  scale,
+        subInfluence: 55,
+        speed:        speed * 0.7
     });
-    lgTurbSet(lgFx(s, ['ADBE Turbulent Displace']), {
-        mode: 6, amount: num(ctrl.refraction, 120), size: 320, speed: speed * 0.4
+
+    var td = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Glass Ripple');
+    var ripple = num(ctrl.ripple, 90);
+    if (td) {
+        lgTurbSet(td, { mode: 4, amount: ripple, size: 300, speed: speed * 0.4 });
+        try { td.enabled = ripple > 0; } catch (e) { }
+    }
+
+    lgBlur(s, 6);                          // normals are a derivative
+}
+
+/* The colour behind the glass, then the glass over it. */
+function tuneGlass(s, c, ctrl, bumpIndex) {
+    if (!s) return;
+    var speed = num(ctrl.speed, 14);
+    var irid  = num(ctrl.iridescence, 22);
+    var relief = num(ctrl.relief, 45);
+
+    lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Colour Field'), {
+        fractalType:  2,
+        contrast:     100,
+        brightness:   0,
+        overflow:     2,
+        complexity:   3,
+        scaleWidth:   num(ctrl.scale, 420) * 1.4,
+        scaleHeight:  num(ctrl.scale, 420),
+        subInfluence: 60,
+        speed:        speed
     });
     lgToneColors(lgFx(s, ['CC Toner']), c, true);
 
-    /* Glow driven from two palette colours rather than the image, so the
-       bloom on each fold shifts hue across it — that is the refraction read. */
-    var g = lgFx(s, ['ADBE Glo2']);
+    var glass = lgFx(s, ['CC Glass']);
+    if (glass) {
+        lgGlassSurface(glass, bumpIndex, {
+            softness:     Math.max(1, relief * 0.2),
+            height:       relief,
+            displacement: num(ctrl.refraction, 110)
+        });
+        lgShadeSet(glass, {
+            intensity:   90 + num(ctrl.specular, 85) * 0.3,
+            lightAngle:  num(ctrl.lightAngle, 315),
+            lightHeight: 55,
+            ambient:     60,
+            diffuse:     50,
+            specular:    num(ctrl.specular, 85),
+            roughness:   num(ctrl.roughness, 8),
+            metal:       0                 // glass is not metal: white highlights
+        });
+    }
+
+    /* Iridescence is a small, high-threshold bloom in two palette colours —
+       a fringe on the brightest edges only. The old build ran this at a
+       threshold low enough to catch half the frame, which is how a subtle
+       chromatic edge became a strobe. */
+    var g = lgFxNamed(s, ['ADBE Glo2'], 'Glass Iridescence');
     if (g) {
-        try { g.name = 'LG Iridescence'; } catch (e) { }
-        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - irid * 0.8));
-        LG.set(g, 'Glow Radius',    3, 30 + irid * 1.2);
-        LG.set(g, 'Glow Intensity', 4, irid / 55);
+        var sorted = lgByLuma(c);
+        LG.set(g, 'Glow Threshold', 2, Math.max(55, 100 - irid * 0.35));
+        LG.set(g, 'Glow Radius',    3, 15 + irid * 0.8);
+        LG.set(g, 'Glow Intensity', 4, irid / 90);
         LG.set(g, 'Glow Colors',    7, 2);                    // A & B Colors
         LG.set(g, 'Color Looping',  8, 3);                    // Triangle A>B>A
         LG.set(g, 'Color Loops',    9, 2);
-        LG.set(g, 'Color A',       12, lgMix(sorted[3 % sorted.length], [1, 1, 1], 0.35));
+        LG.set(g, 'Color A',       12, lgMix(sorted[sorted.length - 1], [1, 1, 1], 0.4));
         LG.set(g, 'Color B',       13, sorted[1 % sorted.length]);
+        try { g.enabled = irid > 0; } catch (e) { }
     }
 
-    lgBlur(s, num(ctrl.softness, 12));
+    // The frost. At 0 this is clear glass.
+    lgBlur(s, num(ctrl.softness, 10));
 }
 
 function buildWavy(comp, c, ctrl, w, h, dur) {
@@ -3763,7 +3387,8 @@ function buildReededGlass(comp, c, ctrl, w, h, dur) {
     // 4. The glass itself.
     var glass = comp.layers.addSolid([1, 1, 1], 'Reeded Glass', w, h, 1, dur);
     glass.adjustmentLayer = true;
-    var disp = addFx(glass, ['ADBE Displacement Map']);
+    // Applied here so it sits below the blur; wired up at step 6.
+    addFx(glass, ['ADBE Displacement Map']);
     var blur = addFx(glass, ['ADBE Box Blur2']);
     if (blur) {
         LG.set(blur, 'Blur Radius', 1, blurAmt);
@@ -3787,14 +3412,31 @@ function buildReededGlass(comp, c, ctrl, w, h, dur) {
         lgBlur(sheenLayer, 2);
     }
 
-    // 6. Only now is the layer stack final, so only now is the source safe.
-    if (disp) {
-        LG.set(disp, 'Displacement Map Layer', 1, mapLayer.index);
+    /* 6. Only now is the layer stack final, so only now is the source safe.
+
+       `disp` and `mapLayer` were fetched before the sheen layer was inserted
+       above them. An ExtendScript layer or effect reference is bound to the
+       index it was taken at, so inserting a layer leaves both pointing at the
+       wrong place — which is exactly what the contact sheet caught: all five
+       writes here failed and the flutes came out flat, with no refraction at
+       all. Re-find both against the finished stack. */
+    var glassNow = null, mapNow = null, li;
+    for (li = 1; li <= comp.numLayers; li++) {
+        var candidate = comp.layer(li);
+        if (candidate.name === 'Reeded Glass') glassNow = candidate;
+        else if (candidate.name === 'Reeded Lines') mapNow = candidate;
+    }
+
+    var dispNow = glassNow ? findFx(glassNow, ['ADBE Displacement Map']) : null;
+    if (dispNow && mapNow) {
+        LG.set(dispNow, 'Displacement Map Layer', 1, mapNow.index);
         // The map is greyscale, so the red channel is the whole signal.
-        LG.set(disp, 'Use For Horizontal Displacement', 2, 1);
-        LG.set(disp, 'Max Horizontal Displacement', 3, vertical ? refraction : 0);
-        LG.set(disp, 'Use For Vertical Displacement', 4, 1);
-        LG.set(disp, 'Max Vertical Displacement', 5, vertical ? 0 : refraction);
+        LG.set(dispNow, 'Use For Horizontal Displacement', 2, 1);
+        LG.set(dispNow, 'Max Horizontal Displacement', 3, vertical ? refraction : 0);
+        LG.set(dispNow, 'Use For Vertical Displacement', 4, 1);
+        LG.set(dispNow, 'Max Vertical Displacement', 5, vertical ? 0 : refraction);
+    } else {
+        LG.warn('Reeded Glass: lost the glass or flute layer before wiring refraction');
     }
 }
 
@@ -3816,110 +3458,596 @@ function tuneReededColour(colour, c, ctrl) {
     lgBlur(colour, 24);
 }
 
+/* Anime water, built on the Cell Pattern engine rather than CC Bubbles.
+
+   The old version stacked two bubble layers, two fractal noise layers and two
+   glows, and rendered as a blank white rectangle — the top layer was a white
+   solid in Add at full opacity, which adds white to every pixel in the frame.
+
+   Caustics genuinely are a cell pattern: light refracted through a moving
+   surface lands as bright veins around dark cells, which is what Cell Pattern
+   inverted gives you directly. So this is the Cellular Mosaic construction
+   with water settings rather than a stack of its own — one engine, tuned two
+   ways, instead of two engines to keep working.
+
+   The defaults are the settings that looked right in the panel: static plates,
+   dense, fully dispersed, high contrast for crisp veins, and inverted so the
+   walls read as the light rather than the cells. */
+var ANIME_WATER_DEFAULTS = {
+    pattern:    'Static Plates',
+    cells:      91,
+    dispersion: 100,
+    speed:      30,
+    contrast:   325,
+    drift:      20,
+    warp:       20,
+    softness:   0,
+    sheen:      23,
+    invert:     'On'
+};
+
+/* The panel's values win wherever it sent one; anything it did not send falls
+   back to the preset's own defaults rather than the mosaic's. */
+function lgDefaults(base, ctrl) {
+    var merged = {}, k;
+    for (k in base) if (base.hasOwnProperty(k)) merged[k] = base[k];
+    if (ctrl) {
+        for (k in ctrl) {
+            if (ctrl.hasOwnProperty(k) && ctrl[k] !== undefined && ctrl[k] !== '') merged[k] = ctrl[k];
+        }
+    }
+    return merged;
+}
+
+function tuneAnimeWater(s, c, ctrl) {
+    if (!s) return;
+    tuneCellularMosaic(s, c, lgDefaults(ANIME_WATER_DEFAULTS, ctrl));
+}
+
+/* The flat, graphic end of the cell engine: poster colour inside each cell
+   and a drawn line around it, no shading. A 2D background rather than a
+   gradient, which is why it lives in the Anime section next to Anime Water
+   instead of with the mosaics. */
+var ANIME_CELLS_DEFAULTS = {
+    pattern:    'Static Plates',
+    cells:      120,
+    dispersion: 100,
+    speed:      0,
+    contrast:   400,
+    drift:      0,
+    warp:       0,
+    softness:   0,
+    sheen:      0,
+    invert:     'On',
+    shading:    'Flat'
+};
+
+function tuneAnimeCells(s, c, ctrl) {
+    if (!s) return;
+    tuneCellularMosaic(s, c, lgDefaults(ANIME_CELLS_DEFAULTS, ctrl));
+}
+
+/* ── THE LIT SURFACE SHADER ───────────────────────────────────────────
+   Everything below this line — every metal, and the frosted glass further
+   down — is one idea: build a greyscale *height field*, then hand it to a
+   real shader and let the shader work out what the surface looks like.
+
+   This is the correction to how the metals were written before. They tried to
+   draw the result: a soft noise field standing in for "where the light is", a
+   second noise field in Overlay standing in for "the tooling", and a Glow
+   standing in for "the specular". None of those three know about each other,
+   so nothing in the frame agreed about where the light was, and the output
+   was noise with a gradient behind it rather than a lit object. Turning the
+   sliders up made it noisier, not shinier, which is the tell.
+
+   CC Glass and CC Blobbylize are both genuine Blinn–Phong shaders that ship
+   with After Effects. They take a bump layer, derive surface normals from it,
+   and light it with an ambient / diffuse / specular model that has a Metal
+   term — and the Metal term is the thing that was missing. At Metal 100 the
+   specular highlight takes the *surface's* colour instead of the light's,
+   which is the entire physical difference between gold and a yellow plastic
+   toy. That is why gold now reads as gold.
+
+   CC Glass is not in tools/effect_probe_report.txt, so the indices below are
+   reasoned from CC Blobbylize's dump in tools/fluid_lab_report.txt, which is
+   the same parameter block in the same order. They are the fallback only:
+   LG.find resolves by display name first and this host is English, so a wrong
+   index cannot be what actually runs. Re-running tools/effect_probe.jsx will
+   confirm them — CC Glass is on its list now. */
+
+/* The light and material half of CC Glass / CC Blobbylize. Identical block,
+   identical names, so one function serves both. */
+function lgShadeSet(fx, o) {
+    if (!fx) return null;
+
+    LG.set(fx, 'Using',           8,  1);                        // Effect Light
+    LG.set(fx, 'Light Intensity', 9,  num(o.intensity, 100));
+    LG.set(fx, 'Light Color',     10, o.lightColor || [1, 1, 1]);
+    LG.set(fx, 'Light Type',      11, num(o.lightType, 1));      // 1 Distant, 2 Point
+    LG.set(fx, 'Light Height',    12, num(o.lightHeight, 50));
+    LG.set(fx, 'Light Direction', 14, num(o.lightAngle, 315));
+
+    LG.set(fx, 'Ambient',   17, num(o.ambient, 50));
+    LG.set(fx, 'Diffuse',   18, num(o.diffuse, 55));
+    LG.set(fx, 'Specular',  19, num(o.specular, 90));
+
+    /* Roughness is a 0..1 exponent term, not a percentage — the interface
+       shows it as 0.100 and going anywhere near 1 turns the surface to chalk.
+       The panel's slider is 1..100 because that is a usable range to drag;
+       /500 lands it in 0.002 (mirror) to 0.2 (cast iron). */
+    LG.set(fx, 'Roughness', 20, Math.max(0.001, num(o.roughness, 10) / 500));
+
+    /* The whole reason these read as metal. */
+    LG.set(fx, 'Metal',     21, num(o.metal, 100));
+    return fx;
+}
+
+/* The surface half of CC Glass: which layer is the height field, how deep it
+   is, and how far it bends what is behind it. */
+function lgGlassSurface(fx, bumpLayerIndex, o) {
+    if (!fx) return null;
+    if (bumpLayerIndex) LG.set(fx, 'Bump Map', 2, bumpLayerIndex);
+    LG.set(fx, 'Property',     3, 5);                            // Lightness
+    LG.set(fx, 'Softness',     4, num(o.softness, 8));
+    LG.set(fx, 'Height',       5, num(o.height, 40));
+    LG.set(fx, 'Displacement', 6, num(o.displacement, 60));
+    return fx;
+}
+
+/* ── METAL ────────────────────────────────────────────────────────────
+   Eight finishes, one builder, two layers each.
+
+     <kind> Height   a hidden greyscale layer: the tooling. Brushed steel is
+                     grain smeared along one axis, hammered is dimples, foil
+                     is deep creases, mercury is blobs. This is the only thing
+                     that differs between the finishes structurally.
+
+     <kind> Metal    what the surface reflects, then the shader on top.
+
+   The reflection is a mirrored ramp, not noise, and that matters. A ramp
+   folded by Motion Tile in Mirror Edges mode is an even triangle wave: every
+   tone gets an equal share of the frame, which is both what a reflective
+   surface physically is (a bright-dark-bright environment) and the only way
+   to keep a gradient map from painting the whole frame one colour. Noise has
+   no such guarantee — push its contrast and the histogram piles up at one end
+   — and that is exactly how the old metals turned into a single flat tone.
+
+   The height field lives in its own comp rather than on a layer in this one
+   because CC Glass reads its bump layer *before* that layer's own effects in
+   some render orders, and a precomp is the only way to be certain the grain
+   is there when it is sampled. */
+var METAL_SURFACES = {
+    Polished: {
+        field: 'noise',
+        hWidth: 700, hHeight: 620, hContrast: 50, hComplexity: 2,
+        smooth: 6, tilt: 14, metal: 100, ambient: 42, diffuse: 45
+    },
+    Brushed: {
+        /* Wide and very short: the noise is long horizontal filaments before
+           the directional blur ever touches it. Blurring along one axis only
+           is the whole difference between brushed and mirrored — it smears
+           the reflection down the grain and leaves it sharp across it. */
+        field: 'noise',
+        hWidth: 1400, hHeight: 3, hContrast: 70, hComplexity: 6,
+        brushDirection: 90, smooth: 1, tilt: 10, metal: 100, ambient: 48, diffuse: 62
+    },
+    Gold: {
+        field: 'noise',
+        hWidth: 420, hHeight: 380, hContrast: 90, hComplexity: 3,
+        smooth: 8, tilt: 18, metal: 100, ambient: 46, diffuse: 52
+    },
+    Copper: {
+        field: 'noise',
+        hWidth: 480, hHeight: 430, hContrast: 80, hComplexity: 3,
+        smooth: 9, tilt: 16, metal: 100, ambient: 44, diffuse: 54
+    },
+    Gunmetal: {
+        /* Sandblasted: fine isotropic grain, and the only finish here that is
+           not trying to be shiny. Low specular, high roughness. */
+        field: 'noise',
+        hWidth: 90, hHeight: 80, hContrast: 130, hComplexity: 5,
+        smooth: 2, tilt: 12, metal: 85, ambient: 55, diffuse: 70
+    },
+    Hammered: {
+        // Dimples, so the height field is cells rather than noise.
+        field: 'cells', pattern: 'Bubbles', cellSize: 90, cellContrast: 150,
+        smooth: 5, tilt: 16, metal: 100, ambient: 44, diffuse: 55
+    },
+    Foil: {
+        // Creases: mid-scale, very high contrast, then displaced hard.
+        field: 'noise',
+        hWidth: 150, hHeight: 130, hContrast: 300, hComplexity: 4,
+        smooth: 2, tilt: 22, metal: 100, ambient: 40, diffuse: 48
+    },
+    Mercury: {
+        /* Blobs. Wrap Back is what makes them blobs rather than clouds:
+           values that run past white fold back down, so the field arrives
+           already banded into closed rounded contours, and a heavy blur
+           afterwards rounds those contours into droplets. */
+        field: 'noise', overflow: 3,
+        hWidth: 300, hHeight: 280, hContrast: 200, hComplexity: 2,
+        smooth: 22, tilt: 10, metal: 100, ambient: 38, diffuse: 42
+    }
+};
+
+/* The height field, inside its own comp. */
+function tuneMetalHeight(s, ctrl, kind) {
+    if (!s) return;
+    var spec  = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
+    var o     = lgDefaults(spec, ctrl);
+    var scale = num(o.scaleAll, 100) / 100;
+    var speed = num(o.speed, 6);
+
+    if (o.field === 'cells') {
+        var cell = lgFx(s, ['ADBE Cell Pattern']);
+        if (cell) {
+            LG.set(cell, 'Cell Pattern', 1, 1);                  // Bubbles
+            LG.set(cell, 'Contrast',     3, num(o.cellContrast, 150));
+            LG.set(cell, 'Disperse',     5, 0.55);
+            LG.set(cell, 'Size',         6, Math.max(6, num(o.cellSize, 90) * scale));
+            LG.expr(cell, 'Evolution', 13, speed !== 0 ? 'time * ' + (speed * 2) : 'value');
+        }
+    } else {
+        lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Grain'), {
+            fractalType: 2,
+            contrast:    num(o.hContrast, 80),
+            brightness:  0,
+            overflow:    num(o.overflow, 2),
+            complexity:  num(o.hComplexity, 3),
+            scaleWidth:  Math.max(1, num(o.hWidth, 500) * scale),
+            scaleHeight: Math.max(1, num(o.hHeight, 500) * scale),
+            speed:       speed
+        });
+    }
+
+    /* Crumple. On mercury this is the churn that keeps the droplets moving
+       into and out of each other. */
+    var warp = num(o.warp, 0);
+    var td = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Crumple');
+    if (td) {
+        lgTurbSet(td, {
+            mode: 4, amount: warp,
+            size: Math.max(20, 180 * scale), speed: speed * 0.6
+        });
+        try { td.enabled = warp > 0; } catch (e) { }
+    }
+
+    /* The brush. Applied to the height field rather than to the picture,
+       because a brushed surface is a surface whose *shape* runs one way —
+       smearing the finished image would only blur the render. */
+    var brushLen = num(o.brushLength, 0);
+    var brush = lgFxNamed(s, ['ADBE Motion Blur'], 'Metal Brush');
+    if (brush) {
+        LG.set(brush, 'Direction',   1, num(o.brushDirection, 90));
+        LG.set(brush, 'Blur Length', 2, brushLen * scale);
+        try { brush.enabled = brushLen > 0; } catch (e) { }
+    }
+
+    /* Normals are a derivative, so any pixel-level noise left in the height
+       field arrives in the shading multiplied. This blur is not cosmetic. */
+    lgBlur(s, Math.max(0.5, num(o.smooth, 5) * scale));
+}
+
+/* What the metal reflects, and the shader that lights it. */
+function tuneMetalSurface(s, c, ctrl, kind, bumpIndex, w, h) {
+    if (!s) return;
+    if (!w) { try { w = s.width;  } catch (e) { w = 1920; } }
+    if (!h) { try { h = s.height; } catch (e) { h = 1080; } }
+
+    var spec   = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
+    var o      = lgDefaults(spec, ctrl);
+    var speed  = num(o.speed, 6);
+    var bands  = Math.max(1, num(o.bands, 5));
+    var relief = num(o.relief, 30);
+    var sheen  = num(o.sheen, 20);
+
+    // 1. A uniformly distributed environment.
+    var ramp = lgFx(s, ['ADBE Ramp']);
+    if (ramp) {
+        LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
+        LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
+        LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
+        LG.set(ramp, 'End Color',     4, [1, 1, 1]);
+    }
+
+    /* 2. Fold it into a triangle wave. Sliding Tile Center rather than Phase:
+          Phase offsets alternate tiles against each other and shears the
+          reflection instead of drifting it. */
+    var tile = lgFx(s, ['ADBE Tile']);
+    if (tile) {
+        LG.set(tile, 'Tile Width',    2, 100 / bands);
+        LG.set(tile, 'Tile Height',   3, 100);
+        LG.set(tile, 'Output Width',  4, 100);
+        LG.set(tile, 'Output Height', 5, 100);
+        LG.set(tile, 'Mirror Edges',  6, true);
+        LG.expr(tile, 'Tile Center', 1, speed !== 0
+            ? '[value[0] + time * ' + (speed * 6) + ', value[1]]'
+            : 'value');
+    }
+
+    /* 3. Bend the reflection. A perfectly straight band reads as a printed
+          stripe; a bent one reads as an environment seen in a curved thing. */
+    var env = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Environment');
+    var envAmt = num(o.warp, 0) * 0.6;
+    if (env) {
+        lgTurbSet(env, { mode: 4, amount: envAmt, size: 340, speed: speed * 0.3 });
+        try { env.enabled = envAmt > 0; } catch (e) { }
+    }
+
+    // 4. The palette, in role order: Shadow, Base Metal, Bright, Highlight.
+    lgToneColors(lgFx(s, ['CC Toner']), c, true);
+
+    // 5. The shader.
+    var glass = lgFx(s, ['CC Glass']);
+    if (glass) {
+        lgGlassSurface(glass, bumpIndex, {
+            softness:     Math.max(1, relief * 0.12),
+            height:       relief,
+            displacement: relief * 1.4
+        });
+        lgShadeSet(glass, {
+            intensity:   80 + num(o.specular, 90) * 0.4,
+            lightAngle:  num(o.lightAngle, 315),
+            lightHeight: num(o.lightHeight, 45),
+            ambient:     num(o.ambient, 46),
+            diffuse:     num(o.diffuse, 55),
+            specular:    num(o.specular, 90),
+            roughness:   num(o.roughness, 10),
+            metal:       num(o.metal, 100)
+        });
+    }
+
+    // 6. Bloom on the specular, then the optional final soften.
+    var g = lgFxNamed(s, ['ADBE Glo2'], 'Metal Bloom');
+    if (g) {
+        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - sheen * 0.55));
+        LG.set(g, 'Glow Radius',    3, 12 + sheen * 0.9);
+        LG.set(g, 'Glow Intensity', 4, sheen / 70);
+        LG.set(g, 'Glow Colors',    7, 1);                       // Original Colors
+        try { g.enabled = sheen > 0; } catch (e) { }
+    }
+
+    lgBlur(s, num(o.softness, 0));
+}
+
+function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
+    var fps = comp.frameRate;
+
+    // 1. The height field, in its own comp.
+    var heightComp = app.project.items.addComp(kind + ' Height Map', w, h, 1, dur, fps);
+    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height', w, h, 1, dur);
+    tuneMetalHeight(heightSolid, ctrl, kind);
+
+    // 2. Both layers into the target comp, height first so it ends up below.
+    var bump = comp.layers.add(heightComp);
+    bump.name = kind + ' Height';
+    bump.enabled = false;            // a bump source, not a picture
+
+    comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', w, h, 1, dur);
+
+    /* 3. Only now is the stack final, so only now is the bump index safe.
+
+       An ExtendScript layer reference is bound to the index it was taken at,
+       and CC Glass stores its Bump Map as an index rather than as a pointer.
+       Reeded Glass lost its refraction to exactly this: the source was
+       assigned before a later layer shifted everything down by one. Re-find
+       both against the finished stack. */
+    var metalNow = null, bumpNow = null, i;
+    for (i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).name === kind + ' Metal')  metalNow = comp.layer(i);
+        else if (comp.layer(i).name === kind + ' Height') bumpNow = comp.layer(i);
+    }
+    if (metalNow) tuneMetalSurface(metalNow, c, ctrl, kind, bumpNow ? bumpNow.index : 0, w, h);
+}
+
+/* ── ANIMAL PRINTS ────────────────────────────────────────────────────
+   Five presets, one builder.
+
+   Every animal print is the same two steps: make a field, then cut it at a
+   threshold so what is below reads as coat and what is above reads as
+   marking. Only the field differs — a tessellation for the giraffe, whose
+   markings tile the whole coat, and stretched or clumped noise for the four
+   whose markings sit on a background.
+
+   WHAT WAS WRONG. Four of the five rendered as a solid dark frame and the
+   giraffe — the one that uses no noise at all — was fine. That split is the
+   clue, and the arithmetic says why.
+
+   Fractal Noise outputs 0.5 + (v - 0.5) * contrast/100 + brightness/100,
+   clipped. With contrast pinned at 400, the value of v at which the output
+   crosses CC Toner's coat/marking switch sits only about 0.03 away from the
+   middle of the field — so the share of the frame that comes out as marking
+   is decided almost entirely by where the field's mean happens to be. Sweep
+   that mean from 0.50 to 0.75 and the old Zebra settings go from 38% marking
+   to 99% marking. 99% marking is a black frame.
+
+   The field was Fractal Type 2, Turbulent Smooth, and the turbulent family is
+   built on folded noise: its mean sits well above mid-grey rather than on it.
+   (That is not a new finding here — it is the same bias already documented in
+   lgFractalSet, where it was diagnosed as the cause of an all-yellow frame.)
+   So the old build was landing in the right-hand end of that sweep.
+
+   Fractal Type 1, Basic, is plain fBm and is symmetric about mid-grey by
+   construction. That is the fix, and it is a structural property rather than
+   a tuned number, which is why it is the one worth relying on.
+
+   It is also why Coverage exists. The threshold is genuinely sensitive at the
+   contrast a hard-edged print needs, so the panel now exposes it directly:
+   Coverage *is* the cut, and one drag corrects anything the field's own
+   statistics do that this file guessed wrong. The slider it replaced —
+   "Stripe Weight" — drove Contrast, and contrast cannot move a threshold. It
+   can only steepen the edge at whichever threshold you already have, which on
+   a frame that is already 99% one colour does nothing at all.
+
+   None of them are static any more either. Every one has an evolution speed
+   above zero by default: these are backgrounds, not swatches. */
+var ANIMAL_PRINTS = {
+    Giraffe: {
+        field: 'cells',
+        pattern: 'Static Plates',    // interlocking plates, no gaps
+        size: 150, disperse: 1.0, invert: true,
+        coverage: 62, contrast: 400, warp: 25, warpSize: 200, softness: 5, speed: 5
+    },
+    Tiger: {
+        field: 'noise',
+        /* Tall and narrow: features stretched hugely in Y and squeezed in X
+           are stripes running down the body. */
+        scaleWidth: 25, scaleHeight: 700, complexity: 3,
+        coverage: 34, contrast: 340, warp: 70, warpSize: 140, softness: 2, speed: 6
+    },
+    Zebra: {
+        field: 'noise',
+        // Same construction, broader bands and a stronger wave through them.
+        scaleWidth: 45, scaleHeight: 900, complexity: 2,
+        coverage: 45, contrast: 400, warp: 110, warpSize: 240, softness: 2, speed: 5
+    },
+    Leopard: {
+        field: 'noise', rosette: true,
+        /* Small round features. The rosette is the three-stop mapping, not a
+           second pattern: a blob's shoulder lands in the ring band and its
+           peak lands in the core band, so each spot comes out as a dark ring
+           with a lighter centre — which is what a rosette is. */
+        scaleWidth: 70, scaleHeight: 70, complexity: 4,
+        coverage: 30, contrast: 200, warp: 30, warpSize: 90, softness: 3, speed: 4
+    },
+    Cow: {
+        field: 'noise',
+        // Large and barely thresholded: a few big irregular patches.
+        scaleWidth: 300, scaleHeight: 260, complexity: 2,
+        coverage: 42, contrast: 400, warp: 40, warpSize: 320, softness: 4, speed: 3
+    }
+};
+
+/* Where to sit Fractal Noise's Brightness so that `coverage` per cent of the
+   frame ends up above the threshold.
+
+   Fractal Noise outputs 0.5 + (v - 0.5) * contrast/100 + brightness/100, so
+   the value of v at which the output crosses a given level is exact
+   arithmetic rather than a guess — which is the point. `mid` is the output
+   level the colour mapping switches at, and the 0.55 is the practical spread
+   of Basic noise: it very rarely reaches the last 20% at either end, so a
+   coverage of 5 or 95 has to land inside that band to do anything at all. */
+function lgPrintBias(coverage, contrast, mid) {
+    var d = (0.5 - num(coverage, 50) / 100) * 0.55;
+    return (mid - 0.5) * 100 - d * num(contrast, 300);
+}
+
+/* CC Toner's five stops, set directly. */
+function lgToneStops(toner, stops) {
+    if (!toner) return null;
+    LG.set(toner, 'Tones',      1, 3);                       // Pentone
+    LG.set(toner, 'Shadows',    6, stops[0]);
+    LG.set(toner, 'Darktones',  5, stops[1]);
+    LG.set(toner, 'Midtones',   4, stops[2]);
+    LG.set(toner, 'Brights',    3, stops[3]);
+    LG.set(toner, 'Highlights', 2, stops[4]);
+    return toner;
+}
+
+function tuneAnimalPrint(s, c, ctrl, species) {
+    if (!s) return;
+    var spec  = ANIMAL_PRINTS[species] || ANIMAL_PRINTS.Giraffe;
+    var o     = lgDefaults(spec, ctrl);
+    var scale = num(o.scaleAll, 100) / 100;      // one slider over the whole print
+    var speed = num(o.speed, 4);
+    var cov   = num(o.coverage, 50);
+    var contrast = num(o.contrast, 300);
+
+    var coat = lgRole(c, 0, [1, 1, 1]);
+    var mark = lgRole(c, 1, [0, 0, 0]);
+
+    if (o.field === 'cells') {
+        var cell = lgFx(s, ['ADBE Cell Pattern']);
+        if (cell) {
+            var patternMap = {
+                'Bubbles': 1, 'Crystals': 2, 'Plates': 3, 'Crystallize': 4,
+                'Static Plates': 7, 'Static Crystals': 8, 'Static Crystallize': 9,
+                'Mixed Crystals': 12, 'Static Mixed Crystals': 13
+            };
+            LG.set(cell, 'Cell Pattern', 1, patternMap[o.pattern] || 7);
+            LG.set(cell, 'Invert',       2, o.invert !== false && o.invert !== 'Off');
+            LG.set(cell, 'Contrast',     3, contrast);
+            LG.set(cell, 'Disperse',     5, num(o.disperse, 1));
+            LG.set(cell, 'Size',         6, Math.max(6, num(o.size, 150) * scale));
+            LG.expr(cell, 'Evolution', 13, speed !== 0 ? 'time * ' + speed : 'value');
+        }
+
+        /* Cell Pattern has no brightness, so coverage cannot bias the field
+           the way it can on noise. It moves the threshold instead, by picking
+           which of the five stops the coat runs out at — coarse, in steps of
+           a fifth, but it is the honest control rather than a decorative
+           one. */
+        var k = Math.round(5 * (1 - cov / 100));
+        if (k < 1) k = 1; else if (k > 4) k = 4;
+        var stops = [], si;
+        for (si = 0; si < 5; si++) stops.push(si < k ? coat : mark);
+        lgToneStops(lgFx(s, ['CC Toner']), stops);
+
+    } else if (o.rosette) {
+        /* Three stops. Coat below, the ring at the blob's shoulder, the core
+           at its peak — so the switch the coverage slider aims at is the
+           lower of the two, at 0.375 of the output range. */
+        var ring = lgRole(c, 1, [0.2, 0.1, 0.03]);
+        var core = lgRole(c, 2, [0.66, 0.46, 0.18]);
+
+        lgFractalSet(lgFx(s, ['ADBE Fractal Noise']), {
+            fractalType: 1,                       // Basic — symmetric about mid
+            contrast:    contrast,
+            brightness:  lgPrintBias(cov, contrast, 0.375),
+            overflow:    1,                       // hard clip; this is a print
+            complexity:  num(o.complexity, 4),
+            scaleWidth:  num(o.scaleWidth, 100) * scale,
+            scaleHeight: num(o.scaleHeight, 100) * scale,
+            speed:       speed
+        });
+        lgToneStops(lgFx(s, ['CC Toner']), [coat, coat, ring, core, core]);
+
+    } else {
+        lgFractalSet(lgFx(s, ['ADBE Fractal Noise']), {
+            fractalType: 1,
+            contrast:    contrast,
+            brightness:  lgPrintBias(cov, contrast, 0.625),
+            overflow:    1,
+            complexity:  num(o.complexity, 3),
+            scaleWidth:  num(o.scaleWidth, 100) * scale,
+            scaleHeight: num(o.scaleHeight, 100) * scale,
+            speed:       speed
+        });
+        lgToneStops(lgFx(s, ['CC Toner']), [coat, coat, coat, mark, mark]);
+    }
+
+    /* The wobble. Markings that follow a perfectly regular field read as
+       printed fabric; a little displacement is what makes them read as grown.
+
+       It sits after the colour rather than before it so that displacing the
+       field cannot drag the threshold around with it — the print is already
+       flat colour by the time this runs, so this only bends the shapes. */
+    var warp = num(o.warp, 0);
+    var td = lgFx(s, ['ADBE Turbulent Displace']);
+    if (td) {
+        lgTurbSet(td, {
+            mode: 1, amount: warp, size: Math.max(20, num(o.warpSize, 150) * scale),
+            speed: speed * 0.3
+        });
+        try { td.enabled = warp > 0; } catch (e) { }
+    }
+
+    lgBlur(s, num(o.softness, 3) * scale);
+}
+
+function buildAnimalPrint(comp, c, ctrl, w, h, dur, species) {
+    var s = comp.layers.addSolid([1, 1, 1], species + ' Print', w, h, 1, dur);
+    tuneAnimalPrint(s, c, ctrl, species);
+}
+
+function buildAnimeCells(comp, c, ctrl, w, h, dur) {
+    var s = comp.layers.addSolid([1, 1, 1], 'Anime Cells', w, h, 1, dur);
+    tuneAnimeCells(s, c, ctrl);
+}
+
 function buildAnimeWater(comp, c, ctrl, w, h, dur) {
-    var maxSize = Math.max(w, h);
-    var bubbleAmount = ctrl.bubbleAmount !== undefined ? parseFloat(ctrl.bubbleAmount) : 50;
-    var bubbleSpeed = ctrl.bubbleSpeed !== undefined ? parseFloat(ctrl.bubbleSpeed) : 1;
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 50;
-    var contrast = ctrl.contrast !== undefined ? parseFloat(ctrl.contrast) : 250;
-
-    // 1. Base Layer (Dark Side)
-    var l1 = comp.layers.addSolid([1,1,1], "Anime Water Base", maxSize, maxSize, 1, dur);
-    try { l1.property("Transform").property("Rotation").setValue(90); } catch(e){}
-    try { l1.property("Transform").property("Scale").setValue([120, 120]); } catch(e){}
-    var g1 = addFx(l1, ["Gradient Ramp", "ADBE Ramp"]);
-    if (g1) {
-        safeSet(g1, "Start of Ramp", 1, [maxSize * 0.1, maxSize / 2]);
-        safeSet(g1, "End of Ramp", 3, [maxSize * 0.9, maxSize / 2]);
-        safeSet(g1, "Start Color", 2, c[0] || [0, 0.4, 0.8]);
-        safeSet(g1, "End Color", 4, c[1] || [0, 0, 0.4]);
-    }
-    var b1 = addFx(l1, ["CC Bubbles"]);
-    if (b1) {
-        safeSet(b1, "Bubble Amount", 1, bubbleAmount);
-        safeSet(b1, "Bubble Speed", 2, bubbleSpeed);
-    }
-
-    // 2. Light Layer
-    var l2 = comp.layers.addSolid([1,1,1], "Anime Water Light", maxSize, maxSize, 1, dur);
-    try { l2.property("Transform").property("Rotation").setValue(90); } catch(e){}
-    try { l2.property("Transform").property("Scale").setValue([120, 120]); } catch(e){}
-    try { l2.blendingMode = BlendingMode.SCREEN; } catch(e) {
-        try { l2.blendingMode = BlendingMode.ADD; } catch(e2) {}
-    }
-    var g2 = addFx(l2, ["Gradient Ramp", "ADBE Ramp"]);
-    if (g2) {
-        safeSet(g2, "Start of Ramp", 1, [maxSize * 0.3, maxSize / 2]);
-        safeSet(g2, "End of Ramp", 3, [maxSize * 0.7, maxSize / 2]);
-        safeSet(g2, "Start Color", 2, c[2] || [0, 0.8, 1]);
-        safeSet(g2, "End Color", 4, c[3] || [0, 0, 0]);
-    }
-    var b2 = addFx(l2, ["CC Bubbles"]);
-    if (b2) {
-        safeSet(b2, "Bubble Amount", 1, bubbleAmount * 1.5);
-        safeSet(b2, "Bubble Speed", 2, bubbleSpeed * 1.2);
-    }
-
-    // 3. Fractal Noise (Water Surface)
-    var l3 = comp.layers.addSolid([1,1,1], "Anime Water Surface", maxSize, maxSize, 1, dur);
-    try { l3.property("Transform").property("Rotation").setValue(90); } catch(e){}
-    try { l3.property("Transform").property("Scale").setValue([120, 120]); } catch(e){}
-    var n3 = addFx(l3, ["Fractal Noise", "ADBE FractalNoise"]);
-    if (n3) {
-        safeSet(n3, "Contrast", 4, contrast);
-        safeSetGroup(n3, "Evolution Options", "Random Seed", null, 70);
-        safeSet(n3, "Complexity", 16, 8.0);
-        safeEx(n3, "Evolution", 24, "time * " + speed);
-        try {
-            var offset3 = LG.find(n3, "Offset Turbulence", 13);
-            if (offset3) {
-                offset3.setValueAtTime(0, [maxSize/2, maxSize/2]);
-                offset3.setValueAtTime(10, [maxSize/2 + 1000, maxSize/2]);
-                offset3.expression = 'loopOut("continue")';
-            }
-        } catch(e) {}
-    }
-    try { l3.blendingMode = BlendingMode.ADD; } catch(e) {}
-    try { l3.opacity.setValue(8); } catch(e) {} // Assuming 8% based on transcript 'opacity ko 8.0'
-
-    // 4. Final Layer (Shine/Sparkle)
-    var l4 = comp.layers.addSolid([1,1,1], "Anime Water Glow", maxSize, maxSize, 1, dur);
-    try { l4.property("Transform").property("Rotation").setValue(90); } catch(e){}
-    try { l4.property("Transform").property("Scale").setValue([120, 120]); } catch(e){}
-    var n4 = addFx(l4, ["Fractal Noise", "ADBE FractalNoise"]);
-    if (n4) {
-        safeSet(n4, "Contrast", 4, contrast);
-        safeSetGroup(n4, "Evolution Options", "Random Seed", null, 0);
-        safeSet(n4, "Complexity", 16, 8.0);
-        safeEx(n4, "Evolution", 24, "time * " + speed);
-        try {
-            var offset4 = LG.find(n4, "Offset Turbulence", 13);
-            if (offset4) {
-                offset4.setValueAtTime(0, [maxSize/2, maxSize/2]);
-                offset4.setValueAtTime(10, [maxSize/2 + 1000, maxSize/2]);
-                offset4.expression = 'loopOut("continue")';
-            }
-        } catch(e) {}
-    }
-    try { l4.blendingMode = BlendingMode.ADD; } catch(e) {}
-    try { l4.opacity.setValue(100); } catch(e) {}
-
-    // Add Glows to Layer 4
-    // Tight core + wide bloom. Stock Glow needs its threshold pulled down or
-    // it barely registers on a mid-grey fractal; the old Deep Glow guard meant
-    // these were never tuned at all when Deep Glow was absent.
-    var gl1 = addFx(l4, ["ADBE Glo2"]);
-    if (gl1) {
-        safeSet(gl1, "Glow Threshold", 2, 45);
-        safeSet(gl1, "Glow Radius",    3, 50);
-        safeSet(gl1, "Glow Intensity", 4, 2);
-    }
-    var gl2 = addFx(l4, ["ADBE Glo2"]);
-    if (gl2) {
-        safeSet(gl2, "Glow Threshold", 2, 60);
-        safeSet(gl2, "Glow Radius",    3, 100);
-        safeSet(gl2, "Glow Intensity", 4, 1);
-    }
+    var s = comp.layers.addSolid([1, 1, 1], 'Anime Water', w, h, 1, dur);
+    tuneAnimeWater(s, c, ctrl);
 }
 
 // ── METALLIC GRADIENT ──
@@ -4083,14 +4211,6 @@ function lgMix(rgb, target, t) {
     return out;
 }
 
-function lgScale(rgb, f) {
-    var out = [], i, v;
-    for (i = 0; i < 3; i++) {
-        v = rgb[i] * f;
-        out.push(v < 0 ? 0 : (v > 1 ? 1 : v));
-    }
-    return out;
-}
 
 /* Darkest first. A palette is four colours picked in whatever order they were
    picked; a gradient map needs them in tonal order or the mapping reads as
@@ -4243,9 +4363,6 @@ function lgFractalSet(fn, o) {
     return fn;
 }
 
-function lgFractal(layer, o) {
-    return lgFractalSet(addFx(layer, ['ADBE Fractal Noise']), o);
-}
 
 /* Displacement modes are 1 Turbulent, 2 Bulge, 3 Twist, 4 Turbulent Smoother,
    5 Bulge Smoother, 6 Twist Smoother. */
@@ -4313,23 +4430,49 @@ function lgOklabRamp(layer, c, w, h, angleDeg, radial) {
         LG.set(ramp, 'Ramp Shape',  5, radial ? 2 : 1);
     }
 
-    var toner = lgFx(layer, ['CC Toner']);
-    if (toner) {
-        var n = c.length, segs = (n > 1) ? n - 1 : 1, i, t, seg, idx, stops = [];
-        for (i = 0; i < 5; i++) {
-            t = i / 4;
-            seg = t * segs;
-            idx = Math.min(Math.floor(seg), segs - 1);
-            stops.push(interpolateOklab(c[idx % n], c[(idx + 1) % n], seg - idx));
-        }
-        LG.set(toner, 'Tones',      1, 3);          // 3 = Pentone
-        LG.set(toner, 'Shadows',    6, stops[0]);
-        LG.set(toner, 'Darktones',  5, stops[1]);
-        LG.set(toner, 'Midtones',   4, stops[2]);
-        LG.set(toner, 'Brights',    3, stops[3]);
-        LG.set(toner, 'Highlights', 2, stops[4]);
-    }
+    lgFx(layer, ['CC Toner']);
+    lgOklabToneStops(layer, c);
     return ramp;
+}
+
+/* The five stops themselves. Split out of lgOklabRamp so that changing the
+   palette on a layer that already exists re-maps the colours without
+   rebuilding the black-to-white ramp carrying them. */
+/* A speed slider is not a number of seconds, and it kept being used as one.
+
+   Several builders wrote `setValueAtTime(speed, ...)` — putting the second
+   keyframe at `speed` seconds. Two things go wrong. At speed 0 that keyframe
+   lands exactly on top of the one at t=0, and `loopOut("pingpong")` across a
+   pair of coincident keys steps instead of moves: that is the flicker. And
+   where it does not collide, the slider runs backwards — a higher "speed"
+   puts the keyframe further away, so the motion is slower.
+
+   One cycle length, derived from the speed, floored so the keys can never
+   coincide and capped so the slowest setting still moves within a normal comp. */
+function lgCycleTime(speed) {
+    var sp = Math.abs(num(speed, 20));
+    if (sp < 0.001) return 8;                 // "stopped" means slow, not broken
+    return Math.max(0.4, Math.min(30, 120 / sp));
+}
+
+function lgOklabToneStops(layer, c) {
+    var toner = layer ? findFx(layer, ['CC Toner']) : null;
+    if (!toner) return null;
+
+    var n = c.length, segs = (n > 1) ? n - 1 : 1, i, t, seg, idx, stops = [];
+    for (i = 0; i < 5; i++) {
+        t = i / 4;
+        seg = t * segs;
+        idx = Math.min(Math.floor(seg), segs - 1);
+        stops.push(interpolateOklab(c[idx % n], c[(idx + 1) % n], seg - idx));
+    }
+    LG.set(toner, 'Tones',      1, 3);          // 3 = Pentone
+    LG.set(toner, 'Shadows',    6, stops[0]);
+    LG.set(toner, 'Darktones',  5, stops[1]);
+    LG.set(toner, 'Midtones',   4, stops[2]);
+    LG.set(toner, 'Brights',    3, stops[3]);
+    LG.set(toner, 'Highlights', 2, stops[4]);
+    return toner;
 }
 
 /* Four colours at the corners, each drifting on its own phase. Corners rather
@@ -4582,7 +4725,10 @@ function tuneCellularMosaic(s, c, ctrl) {
     lgTurbSet(lgFx(s, ['ADBE Turbulent Displace']), {
         mode: 4, amount: num(ctrl.warp, 30), size: 200, speed: speed * 0.3
     });
-    lgToneColors(lgFx(s, ['CC Toner']), c, true);
+    /* Flat maps the palette as five hard steps instead of a ramp, which is
+       what turns this from a shaded mosaic into a flat 2D background — poster
+       colour with a drawn line around each cell, no gradient inside it. */
+    lgToneColors(lgFx(s, ['CC Toner']), c, true, ctrl.shading === 'Flat');
     lgBlur(s, num(ctrl.softness, 4));
     lgGlow(s, num(ctrl.sheen, 20), 1.5);
 }
@@ -4733,22 +4879,24 @@ function buildLavaLamp(comp, c, ctrl, w, h, dur) {
     
     var fn = addFx(s, ['Fractal Noise', 'ADBE FractalNoise']);
     if (fn) {
-        safeSet(fn, 'Noise Type', 2, 1);
-        safeSet(fn, 'Contrast', 4, 200);
-        safeSet(fn, 'Brightness', 5, -30);
-        safeSet(fn, 'Complexity', 8, 1);
-        safeSet(fn, 'Blending Mode', 13, 5);
-        safeSet(fn, 'Blending Mode', 14, 5);
-        
-        var transform = fn.property("Transform");
-        if (transform) {
-            safeSet(transform, "Rotation", null, -35);
-            safeEx(transform, "Rotation", null, "time * " + speed);
-            safeSet(transform, "Uniform Scaling", null, false);
-            safeSet(transform, "Scale Width", null, 1300);
-            safeSet(transform, "Scale Height", null, 600);
-        }
-        safeEx(fn, 'Evolution', 10, 'time * ' + (speed * 10));
+        safeSet(fn, 'Noise Type',    2, 1);
+        safeSet(fn, 'Contrast',      4, 200);
+        safeSet(fn, 'Brightness',    5, -30);
+        safeSet(fn, 'Complexity',   16, 1);
+        safeSet(fn, 'Blending Mode', 31, 5);
+
+        /* Fractal Noise's "Transform" is a topic marker in the DOM, not a
+           group with children — Rotation and the Scale pair are siblings of
+           it at the top level. Reaching through it set nothing at all, which
+           is why this rendered as a flat tiled check instead of a lamp.
+           Indices from tools/effect_probe_report.txt. */
+        safeSet(fn, 'Rotation',        8, -35);
+        safeEx(fn,  'Rotation',        8, 'time * ' + speed);
+        safeSet(fn, 'Uniform Scaling', 9, false);
+        safeSet(fn, 'Scale Width',    11, 1300);
+        safeSet(fn, 'Scale Height',   12, 600);
+
+        safeEx(fn, 'Evolution', 24, 'time * ' + (speed * 10));
     }
     
     var twirl = addFx(s, ["Twirl", "ADBE Twirl"]);
@@ -4800,7 +4948,10 @@ function buildStackedSquares(comp, c, ctrl, w, h, dur) {
         var gc = grp.property("Contents");
         var path = gc.addProperty("ADBE Vector Shape - Rect");
         safeSet(path, "Size", 2, [baseSize, baseSize]);
-        safeSet(path, "Roundness", 3, 50);
+        /* Proportional, not a fixed 50px. At delivery size 50px is a soft
+           corner on a 216px square; at a quarter of that it is a circle, and
+           the shape stops being a square at all. */
+        safeSet(path, "Roundness", 3, baseSize * 0.23);
         var fill = gc.addProperty("ADBE Vector Graphic - Fill");
         safeSet(fill, "Color", 4, [1,1,1]);
         
@@ -4937,37 +5088,47 @@ function buildPrismaticBurst(comp, c, ctrl, w, h, dur) {
         }
     }
 
-    // Top Layer: Rays (Matte)
-    var rayLayer = comp.layers.addSolid([1,1,1], "Prismatic Rays Matte", w, h, 1, dur);
+    /* Top Layer: Rays (Matte)
+
+       Square, and as wide as the frame's diagonal. Rect-to-Polar wraps the
+       layer into a disc inscribed in it, so a frame-sized layer gives a circle
+       of rays floating on black with the corners empty — which is exactly what
+       the contact sheet showed. Sized to the diagonal, the disc covers the
+       frame. */
+    var diag = Math.ceil(Math.sqrt(w * w + h * h));
+    var rayLayer = comp.layers.addSolid([1,1,1], "Prismatic Rays Matte", diag, diag, 1, dur);
     rayLayer.startTime = 0;
+    try {
+        rayLayer.property("Transform").property("Position").setValue([w / 2, h / 2]);
+    } catch (e) { }
     
     var noise = addFx(rayLayer, ["ADBE Fractal Noise", "Fractal Noise"]);
     if (noise) {
-        safeSet(noise, "Fractal Type", null, 1); // Dynamic
-        safeSet(noise, "Noise Type", null, 1); // Block
-        safeSet(noise, "Contrast", null, 300);
-        safeSet(noise, "Brightness", null, 0);
-        safeSet(noise, "Complexity", null, 4);
-        
-        var transformGrp = noise.property("Transform");
-        if (transformGrp) {
-            safeSet(transformGrp, "Uniform Scaling", null, 0); // false
-            safeSet(transformGrp, "Scale Width", null, rayCount * 2); 
-            safeSet(transformGrp, "Scale Height", null, 4000); 
-        }
-        
-        safeEx(noise, "Evolution", null, "time * " + speed);
-        
-        var subSettings = noise.property("Sub Settings");
-        if (subSettings) {
-            safeSet(subSettings, "Sub Influence", null, distort / 5);
-        }
+        safeSet(noise, "Fractal Type", 1, 1); // Dynamic
+        safeSet(noise, "Noise Type",   2, 1); // Block
+        safeSet(noise, "Contrast",     4, 300);
+        safeSet(noise, "Brightness",   5, 0);
+        safeSet(noise, "Complexity",  16, 4);
+
+        /* Same as Lava Lamp: "Transform" and "Sub Settings" are topic markers
+           with no children. The rays are made entirely by the extreme
+           width-to-height ratio below, so reaching through an empty group is
+           the difference between rays and undifferentiated block noise. */
+        safeSet(noise, "Uniform Scaling", 9, false);
+        safeSet(noise, "Scale Width",    11, rayCount * 2);
+        safeSet(noise, "Scale Height",   12, 4000);
+
+        safeEx(noise, "Evolution", 24, "time * " + speed);
+
+        // The parameter is called "Sub Influence (%)" on the host.
+        safeSet(noise, "Sub Influence (%)", 18, distort / 5);
     }
     
     var polar = addFx(rayLayer, ["ADBE Polar Coordinates", "Polar Coordinates"]);
     if (polar) {
-        safeSet(polar, "Interpolation", null, 100);
-        safeSet(polar, "Type of Conversion", null, 1); // Rect to Polar
+        // Interpolation is a checkbox, not a percentage — 100 was rejected.
+        safeSet(polar, "Interpolation", 1, true);
+        safeSet(polar, "Type of Conversion", 2, 1); // Rect to Polar
     }
 
     // Apply Track Matte
@@ -5060,7 +5221,8 @@ function buildWaves(comp, c, ctrl, w, h, dur) {
     
     var turb = addFx(linesLayer, ["ADBE Turbulent Displace", "Turbulent Displace"]);
     if (turb) {
-        safeSet(turb, "Displacement", null, 0); // Turbulent
+        // A dropdown, and its options are 1-based; 0 was out of range.
+        safeSet(turb, "Displacement", 1, 1); // Turbulent
         safeSet(turb, "Amount", null, ampX * 2);
         safeSet(turb, "Size", null, 250);
         safeSet(turb, "Complexity", null, 1.5);

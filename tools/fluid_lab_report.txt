@@ -1,0 +1,288 @@
+Living Gradients — fluid trail lab
+AE 26.0x67   Mon Aug 24 2026 22:25:07 GMT+0530
+recipes built at 1280x720, scaled into 480x270 tiles
+project: 16 bpc
+
+CANDIDATE EFFECTS ON THIS HOST
+-----------------------------------------------------------------------------
+  ok       Echo                  ADBE Echo
+        1    Echo Time (seconds)               type 6417
+        2    Number Of Echoes                  type 6417
+        3    Starting Intensity                type 6417
+        4    Decay                             type 6417
+        5    Echo Operator                     type 6417
+        6    Compositing Options               group
+  ok       CC Mr. Mercury        CC Mr. Mercury
+        1    Radius X                          type 6417
+        2    Radius Y                          type 6417
+        3    Producer                          type 6415
+        4    Direction                         type 6417
+        5    Velocity                          type 6417
+        6    Birth Rate                        type 6417
+        7    Longevity (sec)                   type 6417
+        8    Gravity                           type 6417
+        9    Resistance                        type 6417
+        10   Extra                             type 6417
+        11   Animation                         type 6417
+        12   Blob Influence                    type 6417
+        13   Influence Map                     type 6417
+        14   Blob Birth Size                   type 6417
+        15   Blob Death Size                   type 6417
+        16   Light                             type 6412
+        17   Using                             type 6417
+        18   Light Intensity                   type 6417
+        19   Light Color                       type 6418
+        20   Light Type                        type 6417
+        21   Light Height                      type 6417
+        22   Light Position                    type 6415
+        23   Light Direction                   type 6417
+        24                                     type 6412
+        25   Shading                           type 6412
+        26   Ambient                           type 6417
+        27   Diffuse                           type 6417
+        28   Specular                          type 6417
+        29   Roughness                         type 6417
+        30   Metal                             type 6417
+        31   Material Opacity                  type 6417
+        32                                     type 6412
+        33   Compositing Options               group
+  ok       CC Blobbylize         CC Blobbylize
+        1    Blobbiness                        type 6412
+        2    Blob Layer                        type 6421
+        3    Property                          type 6417
+        4    Softness                          type 6417
+        5    Cut Away                          type 6417
+        6                                      type 6412
+        7    Light                             type 6412
+        8    Using                             type 6417
+        9    Light Intensity                   type 6417
+        10   Light Color                       type 6418
+        11   Light Type                        type 6417
+        12   Light Height                      type 6417
+        13   Light Position                    type 6415
+        14   Light Direction                   type 6417
+        15                                     type 6412
+        16   Shading                           type 6412
+        17   Ambient                           type 6417
+        18   Diffuse                           type 6417
+        19   Specular                          type 6417
+        20   Roughness                         type 6417
+        21   Metal                             type 6417
+        22                                     type 6412
+        23   Compositing Options               group
+  ok       CC Vector Blur        CC Vector Blur
+        1    Type                              type 6417
+        2    Amount                            type 6417
+        3    Angle Offset                      type 6417
+        4    Ridge Smoothness                  type 6417
+        5    Vector Map                        type 6421
+        6    Property                          type 6417
+        7    Map Softness                      type 6417
+        8    Compositing Options               group
+  ok       CC Particle World     CC Particle World
+        1    Grid & Guides                     type 6412
+        2    Position                          type 6417
+        3    Radius                            type 6417
+        4    Motion Path                       type 6417
+        5    Motion Path Frames                type 6417
+        6    Grid                              type 6417
+        7    Grid Position                     type 6417
+        8    Grid Axis                         type 6417
+        9    Grid Subdivisions                 type 6417
+        10   Grid Size                         type 6417
+        11   Horizon                           type 6417
+        12   Axis Box                          type 6417
+        13                                     type 6412
+        14   Birth Rate                        type 6417
+        15   Longevity (sec)                   type 6417
+        16   Producer                          type 6412
+        17   Position X                        type 6417
+        18   Position Y                        type 6417
+        19   Position Z                        type 6417
+        20   Radius X                          type 6417
+        21   Radius Y                          type 6417
+        22   Radius Z                          type 6417
+        23                                     type 6412
+        24   Physics                           type 6412
+        25   Animation                         type 6417
+        26   Velocity                          type 6417
+        27   Inherit Velocity %                type 6417
+        28   Gravity                           type 6417
+        29   Resistance                        type 6417
+        30   Extra                             type 6417
+        31   Extra Angle                       type 6417
+        32   Floor                             type 6412
+        33   Floor Position                    type 6417
+        34   Particle Visibility               type 6417
+        35   Render Animation                  type 6417
+        36   Floor Action                      type 6417
+        37   Bounciness                        type 6417
+        38   Random Bounciness                 type 6417
+        39   Bounce Spread                     type 6417
+        40                                     type 6412
+        41   Direction Axis                    type 6412
+        42   Axis X                            type 6417
+        43   Axis Y                            type 6417
+        44   Axis Z                            type 6417
+        45                                     type 6412
+        46   Gravity Vector                    type 6412
+        47   Gravity X                         type 6417
+        48   Gravity Y                         type 6417
+        49   Gravity Z                         type 6417
+        50                                     type 6412
+        51                                     type 6412
+        52   Particle                          type 6412
+        53   Particle Type                     type 6417
+        54   Texture                           type 6412
+        55   Texture Layer                     type 6421
+        56   Scatter                           type 6417
+        57   Texture Time                      type 6417
+        58   Align To Direction                type 6417
+        59                                     type 6412
+        60   Rotation Speed                    type 6417
+        61   Initial Rotation                  type 6417
+        62   Rotation Axis                     type 6417
+        63   Birth Size                        type 6417
+        64   Death Size                        type 6417
+        65   Size Variation                    type 6417
+        66   Max Opacity                       type 6417
+        67   Opacity Map                       type 6412
+        68   Disabled                          type 6417
+        69   Color Map                         type 6417
+        70   Birth Color                       type 6418
+        71   Death Color                       type 6418
+        72   Custom Color Map                  type 6412
+        73   Color At Birth                    type 6418
+        74   Color At 25%                      type 6418
+        75   Color At 50%                      type 6418
+        76   Color At 75%                      type 6418
+        77   Color At Death                    type 6418
+        78                                     type 6412
+        79   Volume Shade (approx.)            type 6417
+        80   Transfer Mode                     type 6417
+        81                                     type 6412
+        82   Extras                            type 6412
+        83   Effect Camera                     type 6412
+        84   Distance                          type 6417
+        85   Rotation X                        type 6417
+        86   Rotation Y                        type 6417
+        87   Rotation Z                        type 6417
+        88   FOV                               type 6417
+        89                                     type 6412
+        90   Depth Cue                         type 6412
+        91   Type                              type 6417
+        92   Distance                          type 6417
+        93   Fog Color                         type 6418
+        94                                     type 6412
+        95   Light Direction                   type 6412
+        96   Light X                           type 6417
+        97   Light Y                           type 6417
+        98   Light Z                           type 6417
+        99                                     type 6412
+        100  Hold Particle Release             type 6417
+        101  Composite With Original           type 6417
+        102  Random Seed                       type 6417
+        103                                    type 6412
+        104  Compositing Options               group
+  ok       CC Wide Time          CC Wide Time
+        1    Forward Steps                     type 6417
+        2    Backward Steps                    type 6417
+        3    Native Motion Blur                type 6417
+        4    Compositing Options               group
+  MISSING  CC Liquify
+  ok       CC Smear              CC Smear
+        1    From                              type 6415
+        2    To                                type 6415
+        3    Reach                             type 6417
+        4    Radius                            type 6417
+        5    Tip Type                          type 6417
+        6    Compositing Options               group
+  ok       Simple Choker         ADBE Simple Choker
+        1    View                              type 6417
+        2    Choke Matte                       type 6417
+        3    Compositing Options               group
+  ok       Levels                ADBE Easy Levels2
+        1    Channel:                          type 6417
+        2    Histogram                         type 6419
+        3    Input Black                       type 6417
+        4    Input White                       type 6417
+        5    Gamma                             type 6417
+        6    Output Black                      type 6417
+        7    Output White                      type 6417
+        8    Clip To Output Black              type 6417
+        9    Clip To Output White              type 6417
+        10   Compositing Options               group
+  ok       Minimax               ADBE Minimax
+        1    Operation                         type 6417
+        2    Radius                            type 6417
+        3    Channel                           type 6417
+        4    Direction                         type 6417
+        5    Don't Shrink Edges                type 6417
+        6    Compositing Options               group
+  ok       Roughen Edges         ADBE Roughen Edges
+        1    Edge Type                         type 6417
+        2    Edge Color                        type 6418
+        3    Border                            type 6417
+        4    Edge Sharpness                    type 6417
+        5    Fractal Influence                 type 6417
+        6    Scale                             type 6417
+        7    Stretch Width or Height           type 6417
+        8    Offset (Turbulence)               type 6415
+        9    Complexity                        type 6417
+        10   Evolution                         type 6417
+        11   Evolution Options                 type 6412
+        12   Cycle Evolution                   type 6417
+        13   Cycle (in Revolutions)            type 6417
+        14   Random Seed                       type 6417
+        15   Random Seed                       type 6412
+        16   Compositing Options               group
+  ok       Compound Blur         ADBE Compound Blur
+        1    Blur Layer                        type 6421
+        2    Maximum Blur                      type 6417
+        3    If Layer Sizes Differ             type 6417
+        4    Invert Blur                       type 6417
+        5    Compositing Options               group
+  ok       Fast Box Blur         ADBE Box Blur2
+        1    Blur Radius                       type 6417
+        2    Iterations                        type 6417
+        3    Blur Dimensions                   type 6417
+        4    Repeat Edge Pixels                type 6417
+        5    Compositing Options               group
+  ok       Turbulent Displace    ADBE Turbulent Displace
+        1    Displacement                      type 6417
+        2    Amount                            type 6417
+        3    Size                              type 6417
+        4    Offset (Turbulence)               type 6415
+        5    Complexity                        type 6417
+        6    Evolution                         type 6417
+        7    Evolution Options                 type 6412
+        8    Cycle Evolution                   type 6417
+        9    Cycle (in Revolutions)            type 6417
+        10   Random Seed                       type 6417
+        11   Random Seed                       type 6412
+        12   Pinning                           type 6417
+        13   Resize Layer                      type 6417
+        14   Antialiasing for Best Quality     type 6417
+        15   Compositing Options               group
+
+RECIPES
+-----------------------------------------------------------------------------
+  1 Emitter only        
+  2 Echo direct         
+  3 Echo adjustment     
+  4 Echo precomp        
+  5 Goo trail           
+  6 Goo + choke         
+  7 Mr. Mercury         1 warning: cannot set 'Blob Influence'
+  8 Echo + vector blur  
+-----------------------------------------------------------------------------
+
+WHAT TO LOOK FOR
+  Recipe 2 should show no trail at all. If it does show one, then
+  effects do not render before Transform on this host and the whole
+  precompose step below is unnecessary — say so, it makes the real
+  builder much simpler.
+  Between 3 and 4: whichever trails is the cheaper architecture.
+  Between 5, 6 and 8: which one reads as liquid rather than smear.
+  7 is the only one that is a particle system rather than a trail,
+  so it will look different in kind, not just in degree.

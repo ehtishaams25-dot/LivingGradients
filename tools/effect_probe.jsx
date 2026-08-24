@@ -46,7 +46,15 @@
         ['4-Color Gradient',    'ADBE 4ColorGradient'],
         ['Levels',              'ADBE Easy Levels2'],
         ['Noise',               'ADBE Noise'],
-        ['Tint',                'ADBE Tint']
+        ['Tint',                'ADBE Tint'],
+        /* The shaders. CC Glass drives every metal and the frosted glass
+           now, and it was the one effect in the whole stack whose indices
+           had never been dumped — they were reasoned from CC Blobbylize's,
+           which is the same parameter block in the same order. Both are
+           here so that assumption is either confirmed or killed. */
+        ['CC Glass',            'CC Glass'],
+        ['CC Blobbylize',       'CC Blobbylize'],
+        ['CC Mr. Mercury',      'CC Mr. Mercury']
     ];
 
     /* Grids to render. Each is [comp name, matchName, property, option count,

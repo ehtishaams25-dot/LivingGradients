@@ -1,0 +1,62 @@
+Living Gradients — contact sheet
+AE 26.0x67   Mon Aug 24 2026 01:34:50 GMT+0530
+31 gradients, 6 x 6 grid
+project: 16 bpc, linear blending off
+
+ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
+builders : jsx/main.jsx, 218977 bytes, modified Mon Aug 24 2026 01:13:58 GMT+0530
+globals: grain 0, glow 0, posterize off — the panel defaults
+
+Control defaults read from js/controls.js for 41 types. Anything not listed there uses the builder fallbacks.
+
+Read OK with care. Thirteen of these builders never call LG or
+safeSet - living, Oklab Smooth, the seven SilkFlare presets,
+ChromaFlare, Sunburst and Liquid Waves - so a failed property
+write inside them is swallowed by a bare catch and cannot reach
+the WARN column. For those rows the LAYERS count and the picture
+are the only evidence. Re-derive the list with:
+  grep -n "safeSet|LG[.]" jsx/main.jsx, counted per builder.
+
+STATUS  GRADIENT            LAYERS NOTES
+-----------------------------------------------------------------------------------------------
+  OK    Wavy                1      
+  OK    Liquid Waves        1      
+  OK    Liquid Ribbons      2      
+  OK    Waves               2      
+  OK    Fluid Gradient      1      
+  OK    Anime Water         4      
+  OK    Silk                1      
+  OK    Aurora              1      
+  OK    Prism               1      
+  OK    Fiber               1      
+  OK    Veil                1      
+  OK    Pulse               1      
+  OK    Comet               1      
+  OK    Oklab Smooth        1      
+  OK    Living Gradient     1      
+  OK    Trail Gradient      1      
+  OK    Lava Lamp           1      
+  OK    Twirl Shapes        2      
+  OK    Sunburst            3      
+  OK    Prismatic Burst     2      
+  OK    ChromaFlare         1      
+  OK    Heatmap             1      
+  OK    Antigravity         2      
+  OK    Web Threads         2      
+  OK    Halftone            3      
+  OK    ASCII Matrix        14     
+  OK    Cellular Mosaic     1      
+  OK    Stacked Squares     6      
+  OK    Frosted Glass       1      
+  OK    Reeded Glass        4      
+  OK    Metallic            1      
+-----------------------------------------------------------------------------------------------
+built 31   threw 0   warned 0
+
+Single-layer builds. Worth a hard look — a gradient made of one
+layer is usually a builder that gave up early:
+  Wavy, Liquid Waves, Fluid Gradient, Silk, Aurora, Prism, Fiber, Veil, Pulse, Comet, Oklab Smooth, Living Gradient, Trail Gradient, Lava Lamp, ChromaFlare, Heatmap, Cellular Mosaic, Frosted Glass, Metallic
+
+Control blocks in js/controls.js with no gradient in the library.
+Nothing can reach these; they are dead weight:
+  Holographic, Grainy, Liquid, Neon, Topographic, Wireframe, FigmaShader, Psychedelic, PixelBlast, PlasmaWave

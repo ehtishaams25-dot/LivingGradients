@@ -171,293 +171,251 @@
             <canvas id="inspector-preview" class="inspector-preview" width="520" height="150"></canvas>
           </div>
 
-          <!-- COLORS -->
-          <section class="inspector-section">
-            <div class="section-header">COLORS</div>
+          <!-- Two columns above 560px. The left one is sticky: it is short and
+               the right one is tall, so without that it scrolled away and left
+               a column of nothing beside the settings. -->
+          <div class="inspector-col inspector-col-left">
+            <!-- COLORS -->
+            <section class="inspector-section">
+              <div class="section-header">COLORS</div>
 
-            <!-- Built by renderColorSlots(): how many slots, and what each one
-                 is called, is a property of the gradient, not of the panel. -->
-            <div class="color-row" id="color-row"></div>
+              <!-- Built by renderColorSlots(): how many slots, and what each one
+                   is called, is a property of the gradient, not of the panel. -->
+              <div class="color-row" id="color-row"></div>
 
-            <div class="color-tools-row">
-              <input type="file" id="image-upload" accept="image/*" style="display: none;">
+              <div class="color-tools-row">
+                <input type="file" id="image-upload" accept="image/*" style="display: none;">
 
-              <button class="icon-btn tool-btn" id="eyedropper-btn" title="Pick from Screen">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2l-3 3-5-5-2 2 5 5-3 3v2h2l3-3 5 5 2-2-5-5 3-3-2-2z" />
-                  <path d="M15 15l4 4-2 2-4-4" />
-                  <path d="M21 21a2 2 0 0 1-2.83 0" />
-                </svg>
-              </button>
+                <button class="icon-btn tool-btn" id="eyedropper-btn" title="Pick from Screen">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2l-3 3-5-5-2 2 5 5-3 3v2h2l3-3 5 5 2-2-5-5 3-3-2-2z" />
+                    <path d="M15 15l4 4-2 2-4-4" />
+                    <path d="M21 21a2 2 0 0 1-2.83 0" />
+                  </svg>
+                </button>
 
-              <button class="icon-btn tool-btn" id="upload-image-btn" title="Extract from Image">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                  <polyline points="21 15 16 10 5 21"></polyline>
-                </svg>
-              </button>
+                <button class="icon-btn tool-btn" id="upload-image-btn" title="Extract from Image">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
+                </button>
 
 
 
-              <button class="icon-btn tool-btn" id="import-palette-btn" title="Import Palette (Text/URL)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-              </button>
+                <button class="icon-btn tool-btn" id="import-palette-btn" title="Import Palette (Text/URL)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </button>
 
-              <button class="icon-btn tool-btn" id="shuffle-btn" title="Shuffle Colors">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="16 3 21 3 21 8"></polyline>
-                  <line x1="4" y1="20" x2="21" y2="3"></line>
-                  <polyline points="21 16 21 21 16 21"></polyline>
-                  <line x1="15" y1="15" x2="21" y2="21"></line>
-                  <line x1="4" y1="4" x2="9" y2="9"></line>
-                </svg>
-              </button>
-            </div>
-
-            <div class="preset-group">
-              <div class="select-wrap">
-                <select class="custom-select" id="mood-select">
-                  <option value="">— Mood Preset —</option>
-                  <option value="sunset">Sunset Burn</option>
-                  <option value="ocean">Deep Ocean</option>
-                  <option value="neon">Neon City</option>
-                  <option value="aurora">Aurora Borealis</option>
-                  <option value="gold">Liquid Gold</option>
-                  <option value="pastel">Soft Pastel</option>
-                  <option value="void">Void Dark</option>
-                  <option value="fire">Fire &amp; Smoke</option>
-                </select>
-              </div>
-            </div>
-
-          </section>
-
-          <!-- SAVED PRESETS -->
-          <section class="inspector-section">
-            <div class="section-header">SAVED PRESETS</div>
-            <div class="preset-row">
-              <div class="select-wrap" style="flex:1;">
-                <select class="custom-select" id="custom-preset-select">
-                  <option value="">— Select Preset —</option>
-                </select>
-              </div>
-              <button class="icon-btn action-btn" id="load-preset-btn" title="Load Preset">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <polyline points="19 12 12 19 5 12"></polyline>
-                </svg>
-              </button>
-              <button class="icon-btn action-btn danger-btn" id="delete-preset-btn" title="Delete Preset">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div class="preset-row" style="margin-top:8px;">
-              <input type="text" class="custom-input" id="preset-name-input" placeholder="Preset name…" />
-              <button class="icon-btn action-btn" id="save-preset-btn" title="Save Current Colors">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-            </div>
-          </section>
-
-          <!-- TYPE-SPECIFIC CONTROLS -->
-          <section class="inspector-section" id="controls-section">
-            <div class="section-header">SETTINGS</div>
-            <div id="controls-container" class="controls-container">
-              <!-- Dynamically populated per type -->
-            </div>
-
-            <div class="controls-container" style="margin-top: 16px;">
-              <!-- GLOBAL SETTINGS -->
-              <div class="ctrl">
-                <div class="ctrl-head">
-                  <label class="ctrl-label" for="grain-slider">Noise Intensity</label>
-                  <input type="number" class="ctrl-num" id="num-grain" min="0" max="100" step="1" value="0">
-                </div>
-                <input type="range" class="ctrl-range" id="grain-slider" min="0" max="100" step="1" value="0">
+                <button class="icon-btn tool-btn" id="shuffle-btn" title="Shuffle Colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 3 21 3 21 8"></polyline>
+                    <line x1="4" y1="20" x2="21" y2="3"></line>
+                    <polyline points="21 16 21 21 16 21"></polyline>
+                    <line x1="15" y1="15" x2="21" y2="21"></line>
+                    <line x1="4" y1="4" x2="9" y2="9"></line>
+                  </svg>
+                </button>
               </div>
 
-              <div class="ctrl" style="margin-top: 14px;">
-                <div class="ctrl-head">
-                  <label class="ctrl-label" for="glow-slider">Glow</label>
-                  <input type="number" class="ctrl-num" id="num-glow" min="0" max="100" step="1" value="0">
-                </div>
-                <input type="range" class="ctrl-range" id="glow-slider" min="0" max="100" step="1" value="0">
-              </div>
-
-
-
-              <div class="control-item" style="margin-top: 14px;">
-                <div class="toggle-row">
-                  <label class="control-label" for="color-quality-toggle">High Colour Fidelity</label>
-                  <label class="toggle">
-                    <input type="checkbox" id="color-quality-toggle" checked>
-                    <div class="toggle-track"></div>
-                  </label>
-                </div>
-                <p class="ctrl-hint">
-                  Sets the project to 16-bit with linear blending. Stops ramps
-                  banding and keeps saturated colours from greying in the middle.
-                </p>
-              </div>
-
-              <div class="control-item" style="margin-top: 14px;">
-                <div class="toggle-row">
-                  <label class="control-label" for="posterize-toggle">Posterize Time</label>
-                  <label class="toggle">
-                    <input type="checkbox" id="posterize-toggle">
-                    <div class="toggle-track"></div>
-                  </label>
-                </div>
-                <div class="comp-row" id="posterize-input-row" style="display: none; margin-top: 8px;">
-                  <div class="comp-field">
-                    <label>Frames Per Second</label>
-                    <input type="number" id="posterize-fps" value="12" min="1" max="60" step="1" class="custom-input">
-                  </div>
-                </div>
-                <p class="ctrl-hint">
-                  Steps the animation onto a slower frame rate. 12 reads as
-                  stop-motion; 2&ndash;6 gives the chunky, deliberate look.
-                </p>
-              </div>
-
-              <div class="control-item" style="margin-top: 8px;">
-                <div class="toggle-row">
-                  <span class="control-label">BPM Sync (Cycle)</span>
-                  <label class="toggle">
-                    <input type="checkbox" id="bpm-sync-toggle">
-                    <div class="toggle-track"></div>
-                  </label>
-                </div>
-                <div class="comp-row" id="bpm-input-row" style="display: none; margin-top: 8px;">
-                  <div class="comp-field">
-                    <label>BPM Rate</label>
-                    <input type="number" id="bpm-input" value="120" min="1" max="500" class="custom-input">
-                  </div>
+              <div class="preset-group">
+                <div class="select-wrap">
+                  <select class="custom-select" id="mood-select">
+                    <option value="">— Mood Preset —</option>
+                    <option value="sunset">Sunset Burn</option>
+                    <option value="ocean">Deep Ocean</option>
+                    <option value="neon">Neon City</option>
+                    <option value="aurora">Aurora Borealis</option>
+                    <option value="gold">Liquid Gold</option>
+                    <option value="pastel">Soft Pastel</option>
+                    <option value="void">Void Dark</option>
+                    <option value="fire">Fire &amp; Smoke</option>
+                  </select>
                 </div>
               </div>
 
-              <div class="control-item" style="margin-top: 8px;">
-                <div class="toggle-row">
-                  <span class="control-label">Tracking (React to Layer)</span>
-                  <label class="toggle">
-                    <input type="checkbox" id="tracking-toggle">
-                    <div class="toggle-track"></div>
-                  </label>
+            </section>
+
+            <!-- SAVED PRESETS -->
+            <section class="inspector-section">
+              <div class="section-header">SAVED PRESETS</div>
+              <div class="preset-row">
+                <div class="select-wrap" style="flex:1;">
+                  <select class="custom-select" id="custom-preset-select">
+                    <option value="">— Select Preset —</option>
+                  </select>
                 </div>
-                <div class="comp-row" id="tracking-input-row" style="display: none; margin-top: 8px; align-items: flex-end;">
-                  <div class="select-wrap" style="flex:1;">
-                    <label style="font-size: 10px; color: #8a8a93; display: block; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Target Layer</label>
-                    <select class="custom-select" id="tracking-layer-select">
-                      <option value="">— Select Layer —</option>
-                    </select>
+                <button class="icon-btn action-btn" id="load-preset-btn" title="Load Preset">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <polyline points="19 12 12 19 5 12"></polyline>
+                  </svg>
+                </button>
+                <button class="icon-btn action-btn danger-btn" id="delete-preset-btn" title="Delete Preset">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+              <div class="preset-row" style="margin-top:8px;">
+                <input type="text" class="custom-input" id="preset-name-input" placeholder="Preset name…" />
+                <button class="icon-btn action-btn" id="save-preset-btn" title="Save Current Colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <div class="inspector-col inspector-col-right">
+            <section class="inspector-section" id="controls-section">
+              <div class="section-header">SETTINGS</div>
+              <div id="controls-container" class="controls-container">
+                <!-- Dynamically populated per type -->
+              </div>
+
+              <div class="controls-container" style="margin-top: 16px;">
+                <!-- GLOBAL SETTINGS -->
+                <div class="ctrl">
+                  <div class="ctrl-slider">
+                    <input type="range" class="ctrl-range" id="grain-slider" min="0" max="100" step="1" value="0">
+                    <label class="ctrl-label" for="grain-slider">Noise Intensity</label>
+                    <input type="number" class="ctrl-num" id="num-grain" min="0" max="100" step="1" value="0">
                   </div>
-                  <button class="icon-btn action-btn" id="refresh-layers-btn" title="Refresh Layers" style="margin-left: 8px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="23 4 23 10 17 10"></polyline>
-                      <polyline points="1 20 1 14 7 14"></polyline>
-                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                    </svg>
-                  </button>
                 </div>
 
-                <!-- PHYSICS -->
-                <div class="track-physics" id="track-physics">
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackMode">Reaction</label>
-                    </div>
-                    <div class="select-wrap">
-                      <select class="custom-select" id="ctrl-trackMode">
-                        <option value="Wake">Wake — shoves the gradient aside</option>
-                        <option value="Spring">Spring — follows with lag</option>
-                        <option value="Repel">Repel — presses outward</option>
-                      </select>
+                <div class="ctrl" style="margin-top: 14px;">
+                  <div class="ctrl-slider">
+                    <input type="range" class="ctrl-range" id="glow-slider" min="0" max="100" step="1" value="0">
+                    <label class="ctrl-label" for="glow-slider">Glow</label>
+                    <input type="number" class="ctrl-num" id="num-glow" min="0" max="100" step="1" value="0">
+                  </div>
+                </div>
+
+
+
+                <div class="control-item" style="margin-top: 14px;">
+                  <div class="toggle-row">
+                    <label class="control-label" for="posterize-toggle">Posterize Time</label>
+                    <label class="toggle">
+                      <input type="checkbox" id="posterize-toggle">
+                      <div class="toggle-track"></div>
+                    </label>
+                  </div>
+                  <div class="comp-row" id="posterize-input-row" style="display: none; margin-top: 8px;">
+                    <div class="comp-field">
+                      <label>Frames Per Second</label>
+                      <input type="number" id="posterize-fps" value="12" min="1" max="60" step="1" class="custom-input">
                     </div>
                   </div>
-
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackRadius">Radius</label>
-                      <input type="number" class="ctrl-num" id="num-trackRadius" min="50" max="1200" step="10" value="300">
-                    </div>
-                    <input type="range" class="ctrl-range" id="ctrl-trackRadius" min="50" max="1200" step="10" value="300">
-                  </div>
-
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackForce">Force</label>
-                      <input type="number" class="ctrl-num" id="num-trackForce" min="0" max="300" step="5" value="100">
-                    </div>
-                    <input type="range" class="ctrl-range" id="ctrl-trackForce" min="0" max="300" step="5" value="100">
-                  </div>
-
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackTension">Tension</label>
-                      <input type="number" class="ctrl-num" id="num-trackTension" min="1" max="100" step="1" value="40">
-                    </div>
-                    <input type="range" class="ctrl-range" id="ctrl-trackTension" min="1" max="100" step="1" value="40">
-                  </div>
-
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackFriction">Friction</label>
-                      <input type="number" class="ctrl-num" id="num-trackFriction" min="1" max="100" step="1" value="30">
-                    </div>
-                    <input type="range" class="ctrl-range" id="ctrl-trackFriction" min="1" max="100" step="1" value="30">
-                  </div>
-
-                  <div class="ctrl">
-                    <div class="ctrl-head">
-                      <label class="ctrl-label" for="ctrl-trackPersistence">Persistence</label>
-                      <input type="number" class="ctrl-num" id="num-trackPersistence" min="0" max="100" step="1" value="50">
-                    </div>
-                    <input type="range" class="ctrl-range" id="ctrl-trackPersistence" min="0" max="100" step="1" value="50">
-                  </div>
-
-                  <button class="btn-secondary" id="rebake-btn" title="Re-run the simulation against the tracked layer's current animation">
-                    Re-Bake Motion
-                  </button>
-                  <p class="track-note">
-                    The simulation is baked onto the <strong>LG Track Ctrl</strong> null.
-                    Re-animate the tracked layer, then Re-Bake.
+                  <p class="ctrl-hint">
+                    Steps the animation onto a slower frame rate. 12 reads as
+                    stop-motion; 2&ndash;6 gives the chunky, deliberate look.
                   </p>
                 </div>
-              </div>
+
+                <div class="control-item" style="margin-top: 8px;">
+                  <div class="toggle-row">
+                    <span class="control-label">Fluid Trail</span>
+                    <label class="toggle">
+                      <input type="checkbox" id="fluid-toggle">
+                      <div class="toggle-track"></div>
+                    </label>
+                  </div>
+                  <p class="ctrl-hint">
+                    Builds a liquid trail that follows a layer and mattes the
+                    gradient into it. The gradient is untouched, so every one of
+                    its own settings still works.
+                  </p>
+
+                  <div class="fluid-settings" id="fluid-settings">
+                    <div class="comp-row" style="margin-top: 8px; align-items: flex-end;">
+                      <div class="select-wrap" style="flex:1;">
+                        <label style="font-size: 10px; color: #8a8a93; display: block; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Follow Layer</label>
+                        <select class="custom-select" id="fluid-layer-select">
+                          <option value="">— Select Layer —</option>
+                        </select>
+                      </div>
+                      <button class="icon-btn action-btn" id="refresh-layers-btn" title="Refresh Layers" style="margin-left: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="23 4 23 10 17 10"></polyline>
+                          <polyline points="1 20 1 14 7 14"></polyline>
+                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div class="ctrl-group" style="margin-top: 8px;">
+                    <div class="ctrl">
+                      <div class="ctrl-slider">
+                        <input type="range" class="ctrl-range" id="ctrl-fluidLength" min="2" max="200" step="1" value="60">
+                        <label class="ctrl-label" for="ctrl-fluidLength">Trail Length</label>
+                        <input type="number" class="ctrl-num" id="num-fluidLength" min="2" max="200" step="1" value="60">
+                      </div>
+                    </div>
+                    <div class="ctrl">
+                      <div class="ctrl-slider">
+                        <input type="range" class="ctrl-range" id="ctrl-fluidThickness" min="10" max="300" step="5" value="100">
+                        <label class="ctrl-label" for="ctrl-fluidThickness">Thickness</label>
+                        <input type="number" class="ctrl-num" id="num-fluidThickness" min="10" max="300" step="5" value="100">
+                      </div>
+                    </div>
+                    <div class="ctrl">
+                      <div class="ctrl-slider">
+                        <input type="range" class="ctrl-range" id="ctrl-fluidWobble" min="0" max="300" step="5" value="45">
+                        <label class="ctrl-label" for="ctrl-fluidWobble">Wobble</label>
+                        <input type="number" class="ctrl-num" id="num-fluidWobble" min="0" max="300" step="5" value="45">
+                      </div>
+                    </div>
+                    <div class="ctrl">
+                      <div class="ctrl-slider">
+                        <input type="range" class="ctrl-range" id="ctrl-fluidSoftness" min="0" max="100" step="1" value="25">
+                        <label class="ctrl-label" for="ctrl-fluidSoftness">Softness</label>
+                        <input type="number" class="ctrl-num" id="num-fluidSoftness" min="0" max="100" step="1" value="25">
+                      </div>
+                    </div>
+                    <div class="ctrl">
+                      <div class="ctrl-slider">
+                        <input type="range" class="ctrl-range" id="ctrl-fluidSize" min="1" max="40" step="0.5" value="7.5">
+                        <label class="ctrl-label" for="ctrl-fluidSize">Blob Size</label>
+                        <input type="number" class="ctrl-num" id="num-fluidSize" min="1" max="40" step="0.5" value="7.5">
+                      </div>
+                    </div>
+                  </div><!-- /.ctrl-group -->
+                </div><!-- /.fluid-settings -->
+              </div><!-- /.control-item -->
             </div>
-          </section>
+            </section>
+          </div>
 
         </div>
 
         <!-- GENERATE FOOTER -->
         <footer class="inspector-footer">
+          <div class="export-row">
+            <button class="btn-secondary" id="export-css-btn">Copy CSS</button>
+            <button class="btn-secondary" id="export-svg-btn">Copy SVG</button>
+          </div>
+
           <button class="btn-primary btn-generate" id="generate-btn">
             <span class="btn-glow"></span>
             <span class="btn-text">Apply to Composition</span>
           </button>
-
-          <div class="export-row" style="display: flex; gap: 8px; margin-top: 12px;">
-            <button class="btn-secondary" id="export-css-btn" style="flex:1;">Copy CSS</button>
-            <button class="btn-secondary" id="export-svg-btn" style="flex:1;">Copy SVG</button>
-          </div>
 
           <div class="generate-status" id="generate-status"></div>
         </footer>

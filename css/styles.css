@@ -2,54 +2,63 @@
    LIVING GRADIENTS v2 — ULTRA-PREMIUM UI
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── SURFACES ──────────────────────────────────────────────────────
-     A six-step ramp instead of three. Adobe's panel grey is neutral to a
-     fault; these carry a faint cool cast so the warm gradient previews the
-     product generates read as colour against them rather than fighting a
-     dead grey. */
-  --bg-app:      #101114;
-  --bg-sunken:   #0A0B0D;
-  --bg-panel:    #16181C;
-  --bg-raised:   #1C1F24;
-  --bg-hover:    #23272E;
-  --bg-active:   #2A2F37;
-  --bg-input:    #0C0D10;
+  /* ── BRAND ─────────────────────────────────────────────────────────
+     From the portfolio's own variables. These are for accents and buttons
+     only. The panel's surfaces are After Effects' greys, so it reads as part
+     of the application rather than as a website someone embedded in it. */
+  --forest: #204937;
+  --gold:   #DCB558;
+  --beige:  #EFE7D8;
+  --void:   #030604;
 
-  --border-light:  rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --border-accent: rgba(124, 138, 255, 0.45);
+  /* ── SURFACES — After Effects native ───────────────────────────────
+     Neutral, matching the host's default dark UI. Nothing here is tinted:
+     a coloured panel biases every gradient previewed against it. */
+  --bg-app:      #1A1A1A;
+  --bg-sunken:   #131313;
+  --bg-panel:    #232323;
+  --bg-raised:   #2B2B2B;
+  --bg-hover:    #343434;
+  --bg-active:   #3D3D3D;
+  --bg-input:    #141414;
 
-  --text-main:  #EDEEF2;
-  --text-muted: #9098A6;
-  --text-faint: #5A6270;
+  --border-light:  rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.17);
+  --border-accent: rgba(220, 181, 88, 0.45);
 
-  /* ── ACCENT ────────────────────────────────────────────────────────
-     Flat indigo carries every functional state — focus, active tab, slider
-     fill. The gradient is reserved for the primary action and the logo,
-     where the product's own material is the point. */
-  --accent:        #7C8AFF;
-  --accent-hover:  #93A0FF;
-  --accent-press:  #6675F0;
-  --accent-glow:   rgba(124, 138, 255, 0.22);
-  --accent-quiet:  rgba(124, 138, 255, 0.10);
-  --accent-grad:   linear-gradient(135deg, #7C8AFF 0%, #A06BFF 50%, #E45FC4 100%);
+  --text-main:  #D9D9D9;
+  --text-muted: #9A9A9A;
+  --text-faint: #6B6B6B;
+
+  /* ── ACCENT — the brand's gold ─────────────────────────────────────
+     Slider fill, focus ring, active tab, selected card. The forest-to-gold
+     gradient is kept for the primary action and the mark. */
+  --accent:        #DCB558;
+  --accent-hover:  #E8C77A;
+  --accent-press:  #C29E42;
+  --accent-glow:   rgba(220, 181, 88, 0.26);
+  --accent-quiet:  rgba(220, 181, 88, 0.13);
+  --accent-grad:   linear-gradient(100deg, #204937 0%, #3F7B58 45%, #DCB558 100%);
 
   --danger:  #FF5C5C;
   --warning: #FFB340;
   --success: #4ADE94;
 
-  --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 14px;
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --radius-lg: 16px;
   --radius-pill: 999px;
 
-  --font-sans: 'Inter', -apple-system, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-sans:    'Instrument Sans', -apple-system, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  /* The display serif the brand leads with. Names and headings only — it is
+     an editorial face and it does not belong on a slider label. */
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   /* ── TYPE SCALE ────────────────────────────────────────────────────
      The panel previously set almost everything at 10-11px, which reads as
@@ -64,7 +73,7 @@
   --shadow-btn:   0 2px 8px rgba(0,0,0,0.35);
   --shadow-card:  0 4px 14px rgba(0,0,0,0.4);
   --shadow-pop:   0 10px 30px rgba(0,0,0,0.55);
-  --shadow-accent: 0 4px 16px rgba(124, 138, 255, 0.30);
+  --shadow-accent: 0 4px 16px rgba(220, 181, 88, 0.26);
 
   --trans-fast:   0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --trans-smooth: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -166,16 +175,18 @@ html, body {
   box-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.35);
 }
 .header-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+/* A rounded mark rather than a spinning rainbow dot — the brand is one green
+   and one gold, and the animation was the loudest thing in the header. */
 .logo-dot {
-  width: 14px; height: 14px; border-radius: 50%; flex: none;
-  background: conic-gradient(from 0deg, #FF6B35, #E45FC4, #A06BFF, #7C8AFF, #FF6B35);
-  animation: orb-spin 6s linear infinite;
-  box-shadow: 0 0 10px rgba(160, 107, 255, 0.45);
+  width: 18px; height: 18px; border-radius: 6px; flex: none;
+  background: var(--accent-grad);
+  box-shadow: 0 0 12px rgba(220, 181, 88, 0.28), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 .header-title {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.006em;
   color: var(--text-main);
   white-space: nowrap;          /* was wrapping onto two lines */
   overflow: hidden;
@@ -309,14 +320,19 @@ html, body {
 /* ── INSPECTOR HERO ── */
 /* The gradient itself, at the top of the panel it belongs to. The 32px chip in
    the header could not tell one gradient from another. */
+/* Pinned. Scrolling to a slider and losing sight of what it is changing is
+   the one thing a panel like this must not do. */
 .inspector-hero {
-  padding: 14px 14px 0;
-  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding: 14px 16px 12px;
+  background: linear-gradient(to bottom, var(--bg-app) 78%, transparent);
 }
 .inspector-preview {
   display: block;
   width: 100%;
-  height: 108px;
+  height: 96px;
   border-radius: var(--radius-md);
   background: var(--bg-input);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
@@ -342,32 +358,46 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
 }
 .inspector-title {
-  font-size: var(--fs-title);
-  font-weight: 600;
-  letter-spacing: -0.012em;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.004em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .inspector-content { flex: 1; overflow-y: auto; padding: 0; }
 
-/* Docked narrow the panel stays a single column. Given any real width it
-   splits, because "the controls are not accessible all at once" is a layout
-   problem: COLORS, SAVED PRESETS and SETTINGS stacked in one narrow column
-   means the settings are always below the fold. */
+/* Docked narrow the panel is one column. Given real width it splits, because
+   three sections stacked in a narrow column puts the settings permanently
+   below the fold.
+
+   The left column is sticky. It is short and the right one is tall, so on the
+   first attempt it simply scrolled away and left a tall column of nothing
+   beside the settings — which read as more broken than the single column it
+   replaced. */
 @media (min-width: 560px) {
   .inspector-content {
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.15fr);
+    grid-template-columns: minmax(228px, 0.85fr) minmax(268px, 1fr);
     align-content: start;
-    gap: 0;
+    column-gap: 6px;
   }
   .inspector-hero { grid-column: 1 / -1; }
-  /* SETTINGS is the tall one, so it takes the right-hand column on its own. */
-  #controls-section { grid-column: 2; grid-row: 2 / span 3; border-bottom: none; }
-  .inspector-section:not(#controls-section) { grid-column: 1; }
+  .inspector-col-left {
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    background: var(--bg-app);
+  }
+  .inspector-col-right { grid-column: 2; }
 }
-.inspector-section { padding: 16px 14px; border-bottom: 1px solid var(--border-light); }
-.inspector-section:last-child { border-bottom: none; }
+/* No rules between sections. Both references separate content with space and
+   let the eyebrow label carry the hierarchy; the panel had a border under
+   every section, a hairline through every header and a border on every
+   control, which is most of what "fragmented" was describing. */
+.inspector-section { padding: 20px 16px 4px; border-bottom: none; }
+.inspector-section:last-child { padding-bottom: 16px; }
 /* Eyebrow plus a hairline that runs to the chevron — gives each section a
    visible boundary without another border-heavy container. */
 .section-header {
@@ -376,7 +406,7 @@ html, body {
   font-weight: 700;
   color: var(--text-muted);
   letter-spacing: 0.13em;
-  margin-bottom: 12px;
+  margin-bottom: 13px;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -385,12 +415,9 @@ html, body {
   user-select: none;
   transition: color var(--trans-fast);
 }
-.section-header::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border-light);
-}
+/* The chevron sits at the right on its own; the rule that used to run across
+   to meet it is gone. */
+.section-header::after { content: ''; flex: 1; }
 .section-header:hover { color: var(--text-main); }
 /* `transition: all` on a container that is shown and hidden with `display`
    animates nothing — display is not an animatable property, so the section
@@ -409,43 +436,46 @@ html, body {
 }
 .section-header span { transition: transform var(--trans-smooth); }
 
-/* ── COLOR SLOTS ── */
-/* align-items: flex-start so a captioned slot and an uncaptioned one still
-   line their swatches up along the top edge. */
-.color-row { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 12px; }
-.color-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.color-caption {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.color-slot {
-  width: 100%;
-  height: 42px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  position: relative;
+/* ── COLOUR ROWS ──────────────────────────────────────────────────────
+   A list, not a strip of swatches. Four squares side by side had nowhere to
+   put a hex value, needed a caption strip underneath to say what each one was
+   for, and got narrower every time a gradient asked for more of them. */
+.color-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+
+.color-item { padding-right: 6px; }
+
+.color-pick {
+  flex: none;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 3px rgba(0,0,0,0.45);
   transition: transform var(--trans-fast), box-shadow var(--trans-fast);
 }
-.color-slot:hover { transform: translateY(-1px); box-shadow: var(--shadow-card); }
-.color-pick { width: 100%; height: 100%; position: absolute; inset: 0; cursor: pointer; border: none; outline: none; }
-/* Ring radius must match the slot's, or the corners clip and a dark swatch
-   picks up a muddy fringe. */
-.color-slot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16), inset 0 1px 0 rgba(255,255,255,0.10);
-  pointer-events: none;
+.color-pick:hover { transform: scale(1.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.32), 0 2px 6px rgba(0,0,0,0.5); }
+.color-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.color-hex {
+  flex: none;
+  width: 76px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  text-align: right;
+  padding: 0 4px;
+  outline: none;
+  text-transform: uppercase;
 }
-.color-pick:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.color-hex:hover { background: var(--bg-hover); color: var(--text-main); }
+.color-hex:focus { background: var(--bg-hover); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
 .color-tools-row { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 14px; }
 .tool-btn {
@@ -498,127 +528,204 @@ html, body {
 .danger-btn:hover { color: var(--danger); border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.1); }
 
 /* ── CONTROLS (Sliders & Toggles) ── */
-.controls-container { display: flex; flex-direction: column; gap: 8px; }
+.controls-container { display: flex; flex-direction: column; gap: 10px; }
 .control-item { display: flex; flex-direction: column; gap: 6px; }
 
-/* ── CONTROL BLOCK ────────────────────────────────────────────────────
-   Two lines per control: label and value on top, full-width slider below.
-   The panel is ~340px wide, so a single row forced a 75px label column
-   that ellipsised half the names and left a 2px-tall drag target. */
+/* ── CONTROL ROWS ─────────────────────────────────────────────────────
+   One row per control, not two.
 
-.ctrl-group { display: flex; flex-direction: column; gap: 14px; }
+   The old block put the label and value on one line and a full-width slider
+   underneath, which is 44px of panel for every parameter. Cellular Mosaic has
+   ten of them and Halftone eleven, so the settings could never be on screen at
+   once however the panel was arranged — the layout was being asked to solve a
+   problem the control itself was creating.
 
-.ctrl {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
+   The row *is* the slider: the whole capsule is the drag target, the fill
+   shows the value, and the label and number sit on top of it. Same
+   information, 38px, and a target the width of the panel instead of a 4px
+   track. */
 
-.ctrl-head {
+.ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+
+.ctrl { display: block; }
+
+.ctrl-slider {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 20px;
+  height: 38px;
+  padding: 0 8px 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  transition: border-color var(--trans-fast), background var(--trans-fast);
+}
+.ctrl-slider:hover { border-color: var(--border-strong); }
+
+/* The fill. --pct is written by paintRange() as the slider moves. */
+.ctrl-slider::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: var(--pct, 0%);
+  background: var(--accent-quiet);
+  border-right: 1.5px solid var(--accent);
+  pointer-events: none;
+  transition: background var(--trans-fast);
+}
+.ctrl-slider:hover::before { background: rgba(220, 181, 88, 0.19); }
+
+/* Faint ticks, so a capsule still reads as a scale rather than a text field. */
+.ctrl-slider::after {
+  content: '';
+  position: absolute;
+  left: 12%; right: 90px; top: 50%;
+  height: 9px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.16;
+  background: repeating-linear-gradient(to right,
+    var(--text-faint) 0 1px, transparent 1px 12.5%);
+}
+
+/* Invisible, and covering everything but the reset button and number field.
+
+   The 56px here used to be wrong, and it is the overlap bug: the reset is
+   20px plus 2px of margin and the number field is 54px, so 76px of the row is
+   spoken for. Reserving 56px left the drag surface lying across the last 20px
+   of them — the reset button sat under the invisible range, and the number
+   crowded up against it because there was no room left to sit anywhere else.
+
+   Keep this in step with .ctrl-reset and .ctrl-num below: it is their combined
+   width plus a little breathing room, and nothing else. */
+.ctrl-range {
+  position: absolute;
+  left: 0; top: 0; bottom: 0; right: 84px;
+  width: auto; height: auto;
+  margin: 0; padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  z-index: 2;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
 }
 
 .ctrl-label {
+  position: relative;
+  z-index: 1;
   flex: 1 1 auto;
-  font-size: 11px;
+  min-width: 0;
+  /* So a long label ellipses before it reaches the reset rather than sliding
+     underneath it. */
+  padding-right: 8px;
+  font-size: var(--fs-caption);
   font-weight: 500;
   color: var(--text-muted);
-  letter-spacing: 0.2px;
-  cursor: pointer;
+  pointer-events: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ctrl:hover .ctrl-label { color: var(--text-main); }
+.ctrl-slider:hover .ctrl-label { color: var(--text-main); }
 
-/* Reset appears on hover so the row stays quiet at rest. */
-.ctrl-reset {
+.ctrl-num {
+  position: relative;
+  z-index: 3;
   flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
+  /* Four digits and a minus sign have to fit without clipping. */
+  width: 54px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+  padding: 0 4px;
+  outline: none;
+  cursor: text;
+}
+.ctrl-num::-webkit-outer-spin-button,
+.ctrl-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ctrl-num:hover { background: var(--bg-hover); }
+.ctrl-num:focus { background: var(--bg-hover); box-shadow: 0 0 0 1px var(--accent); }
+
+/* Reset only appears when the pointer is on the row it belongs to. */
+.ctrl-reset {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  width: 20px; height: 20px;
+  margin-right: 2px;
+  display: grid;
+  place-items: center;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--trans-fast), color var(--trans-fast), background var(--trans-fast);
+  transition: opacity var(--trans-fast), color var(--trans-fast);
 }
-.ctrl:hover .ctrl-reset,
+.ctrl-slider:hover .ctrl-reset,
+.ctrl-row:hover .ctrl-reset,
 .ctrl-reset:focus-visible { opacity: 1; }
-.ctrl-reset:hover { color: var(--text-main); background: var(--bg-hover); }
+.ctrl-reset:hover { color: var(--accent); background: var(--bg-hover); }
 
-/* Typed value entry. Range dragging alone cannot hit an exact number. */
-.ctrl-num {
-  flex: none;
-  width: 58px;
-  padding: 3px 6px;
+/* A row that holds a select, a text field or a toggle — same capsule, so a
+   column of mixed controls still reads as one list. */
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 8px 0 12px;
+  border-radius: var(--radius-md);
   background: var(--bg-input);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  color: var(--text-main);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  outline: none;
-  transition: border-color var(--trans-fast), box-shadow var(--trans-fast);
-  -moz-appearance: textfield;
+  transition: border-color var(--trans-fast);
 }
-.ctrl-num::-webkit-outer-spin-button,
-.ctrl-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.ctrl-num:hover { border-color: var(--border-strong); }
-.ctrl-num:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.ctrl-row:hover { border-color: var(--border-strong); }
+.ctrl-row .ctrl-label { pointer-events: auto; }
 
-/* ── RANGE ────────────────────────────────────────────────────────────
-   The input itself is 18px tall so there is something to grab; the visible
-   4px track is painted on, and the filled portion comes from --pct, which
-   renderControls keeps in sync. */
-.ctrl-range {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 18px;
-  margin: 0;
-  padding: 0;
+.ctrl-row select,
+.ctrl-row input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  border: none;
   background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  text-align: right;
+  padding: 0 16px 0 0;
   outline: none;
   cursor: pointer;
-  display: block;
-}
-
-.ctrl-range::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    var(--accent) 0 var(--pct, 0%),
-    rgba(255,255,255,0.10) var(--pct, 0%) 100%
-  );
-}
-
-.ctrl-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;                    /* centre on the 4px track */
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.4);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  cursor: grab;
-  transition: transform var(--trans-fast), box-shadow var(--trans-fast);
+  appearance: none;
 }
-.ctrl-range:hover::-webkit-slider-thumb { transform: scale(1.15); }
-.ctrl-range:active::-webkit-slider-thumb { transform: scale(1.05); cursor: grabbing; }
-.ctrl-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px var(--accent-glow), 0 1px 3px rgba(0,0,0,0.5);
+.ctrl-row input[type="text"] { cursor: text; padding-right: 2px; }
+.ctrl-row select:focus, .ctrl-row input[type="text"]:focus { color: var(--accent); }
+.ctrl-row select option { background: var(--bg-panel); color: var(--text-main); }
+
+/* The chevron for a select sitting inside a row. */
+.ctrl-row.has-select { position: relative; }
+.ctrl-row.has-select::after {
+  content: '';
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 9px; height: 6px;
+  pointer-events: none;
+  opacity: 0.55;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat center;
+  background-size: contain;
 }
 
 .ctrl-empty {
@@ -685,7 +792,19 @@ html, body {
 .comp-field label { font-size: 12px; color: var(--text-muted); }
 
 /* ── INSPECTOR FOOTER ── */
-.inspector-footer { padding: 10px 14px; border-top: 1px solid var(--border-light); background: var(--bg-panel); flex-shrink: 0; }
+/* Pinned, and quiet. The two exports sit above the primary action so the
+   thing you press on every build is the one nearest the edge of the panel. */
+.inspector-footer {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-row { display: flex; gap: 8px; }
+.export-row .btn-secondary { flex: 1; padding: 8px 10px; font-size: var(--fs-caption); }
 .btn-generate {
   width: 100%;
   padding: 11px 14px;
@@ -811,7 +930,7 @@ html, body {
 .preview-cellular { background: radial-gradient(circle at 30% 30%, var(--c1), transparent 30%), radial-gradient(circle at 70% 70%, var(--c3), transparent 30%); background-color: var(--c4); background-size: 20px 20px; animation: cellular-pulse 4s infinite alternate; }
 @keyframes cellular-pulse { 0% { background-size: 20px 20px; } 100% { background-size: 30px 30px; filter: hue-rotate(45deg); } }
 
-/* Web Studio Clones */
+/* Light & Energy — see the category of the same name in js/presets.js */
 .preview-prismatic { background: linear-gradient(135deg, var(--c1), var(--c2), var(--c3), var(--c4)); filter: url(#svg-prismatic); background-size: 200% 200%; animation: prismatic-move 5s linear infinite; }
 @keyframes prismatic-move { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }
 
@@ -826,48 +945,17 @@ html, body {
 
 
 
-/* ── Tracking physics ─────────────────────────────────────────────── */
-.track-physics {
-  display: none;                 /* revealed with the tracking input row */
+/* ── Fluid trail ──────────────────────────────────────────────────── */
+.fluid-settings {
+  display: none;                 /* revealed by the Fluid Trail toggle */
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  margin-top: 10px;
   padding: 12px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: rgba(255,255,255,0.02);
 }
-.track-physics.visible { display: flex; }
-
-.track-physics .mini-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-.track-physics .mini-label .val {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-main);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.track-slider { display: flex; flex-direction: column; }
-
-.track-note {
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--text-faint);
-  margin: 2px 0 0;
-}
-.track-note strong { color: var(--text-muted); font-weight: 600; }
-
-#rebake-btn { margin-top: 2px; }
+.fluid-settings.visible { display: flex; }
 
 
 /* ── Batch selection ──────────────────────────────────────────────── */

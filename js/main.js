@@ -30,39 +30,55 @@ function renderColorSlots(type) {
   const roles = (typeof colorRolesFor === 'function') ? colorRolesFor(type) : [null, null, null, null];
   const count = colorCountFor(type);
 
+  /* One row per colour: role on the left, swatch and hex on the right, in the
+     same capsule the sliders use. The four big swatches side by side could not
+     show a hex, could not show a role without a caption strip underneath, and
+     got narrower every time a gradient wanted more of them. */
   row.innerHTML = '';
   for (let i = 0; i < count; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'color-cell';
+    const hex = (state.colors[i] || '#000000').toUpperCase();
 
-    const slot = document.createElement('div');
-    slot.className = 'color-slot';
+    const item = document.createElement('div');
+    item.className = 'ctrl-row color-item';
 
-    const pick = document.createElement('div');
-    pick.className = 'color-pick';
-    pick.id = 'color' + (i + 1);
-    pick.dataset.index = String(i);
-    pick.style.backgroundColor = state.colors[i] || '#000000';
-    pick.title = roles[i] ? roles[i] : ('Colour ' + (i + 1));
+    const label = document.createElement('span');
+    label.className = 'ctrl-label';
+    label.textContent = roles[i] || ('Colour ' + (i + 1));
+    item.appendChild(label);
 
-    slot.appendChild(pick);
-    cell.appendChild(slot);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'color-pick';
+    chip.id = 'color' + (i + 1);
+    chip.dataset.index = String(i);
+    chip.style.backgroundColor = hex;
+    chip.title = 'Pick ' + (roles[i] || ('colour ' + (i + 1)));
+    item.appendChild(chip);
 
-    if (roles[i]) {
-      const caption = document.createElement('div');
-      caption.className = 'color-caption';
-      caption.textContent = roles[i];
-      cell.appendChild(caption);
-    }
+    const field = document.createElement('input');
+    field.type = 'text';
+    field.className = 'color-hex';
+    field.dataset.index = String(i);
+    field.value = hex;
+    field.spellcheck = false;
+    field.maxLength = 7;
+    item.appendChild(field);
 
-    row.appendChild(cell);
+    row.appendChild(item);
   }
 }
 
 /* Replace the palette. Extra values are dropped, missing ones are filled by
    cycling what was given, so a mood preset built for four still reads sensibly
    on a three-slot gradient. */
+/* True once the user has chosen a palette themselves — a swatch, the picker,
+   a mood, a shuffle, an extracted image, a saved preset. Browsing the library
+   must not throw that away; see the card click handler. Reset when they load
+   a gradient's own colours deliberately. */
+let paletteIsCustom = false;
+
 function setColors(colors, count) {
+  paletteIsCustom = true;
   const n = count || state.colors.length || 4;
   const next = [];
   for (let i = 0; i < n; i++) {
@@ -79,6 +95,9 @@ function paintColorSlots() {
   const picks = row.querySelectorAll('.color-pick');
   if (picks.length !== state.colors.length) { renderColorSlots(selectedType); return; }
   picks.forEach((p, i) => { p.style.backgroundColor = state.colors[i]; });
+  row.querySelectorAll('.color-hex').forEach((f, i) => {
+    if (f !== document.activeElement) f.value = (state.colors[i] || '').toUpperCase();
+  });
 }
 
 // ── MOOD PRESETS ──
@@ -233,9 +252,22 @@ function renderLibrary() {
 
         /* Not `=== 4`. Halftone has three slots and Sunburst three, and
            testing for exactly four meant clicking either card loaded no
-           palette at all and left the previous gradient's swatches on screen. */
+           palette at all and left the previous gradient's swatches on screen.
+
+           A palette the user chose themselves survives browsing. Clicking
+           through the library used to overwrite the swatches every single
+           time, so picking colours and then looking for a gradient to put
+           them on — which is the obvious way to work — threw the colours away
+           at the moment of choosing. Their palette is kept whenever the new
+           gradient takes the same number of slots; when it does not, there is
+           nothing sensible to carry over and the preset's own colours load. */
         if (preset.defaultColors && preset.defaultColors.length) {
-          state.colors = [...preset.defaultColors];
+          const keep = paletteIsCustom &&
+                       state.colors.length === preset.defaultColors.length;
+          if (!keep) {
+            state.colors = [...preset.defaultColors];
+            paletteIsCustom = false;
+          }
           renderColorSlots(selectedType);
           if (typeof triggerColorUpdate === 'function') {
             triggerColorUpdate();
@@ -329,12 +361,11 @@ if (batchGenerateBtn) {
       items,
       grain:    parseFloat(document.getElementById('grain-slider')?.value) || 0,
       glow:     parseFloat(document.getElementById('glow-slider')?.value) || 0,
-      colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
       posterize: document.getElementById('posterize-toggle')?.checked || false,
       posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
-    bpmSync:  document.getElementById('bpm-sync-toggle')?.checked || false,
-      bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120
     };
+    /* No fluid on a batch: the trail follows one layer, and a dozen gradients
+       all matted to the same motion is not something anyone wants. */
 
     batchGenerateBtn.disabled = true;
     setStatus(batchStatus, `Building ${items.length} gradients…`, '');
@@ -512,9 +543,31 @@ function applyPolledControls(controls) {
   });
 }
 
+/* How long the poller stays quiet after we write. Comfortably longer than a
+   round trip to After Effects, short enough that a real edit made in AE still
+   shows up promptly. */
+const LIVE_ECHO_QUIET_MS = 1500;
+
 setInterval(() => {
   if (typeof CSInterface === 'undefined') return;
   if (inspectorBusy || liveInFlight || livePending) return;
+
+  /* The seizure.
+
+     Dragging a slider writes to AE continuously. This poller reads the layer
+     back and pushes what it finds into the controls. The `lastSentState`
+     guard below was meant to catch our own echo, but it compares our payload
+     string against the JSON the layer carries, and those are never byte
+     identical — different key order, different number formatting, fields the
+     layer does not store. So the guard never fired, every read looked like an
+     external edit, and the poller kept slamming stale values back into the
+     slider the user was still holding. The slider fought the pointer, and the
+     shaking fed itself.
+
+     Comparing strings was never going to work. Time does: for a moment after
+     we write, anything read back is our own echo by definition, so do not
+     read at all. */
+  if (Date.now() - lastLiveSentAt < LIVE_ECHO_QUIET_MS) return;
   const cs = new CSInterface();
   cs.evalScript('getSelectedGradientState()', (result) => {
     if (inspectorBusy) return;
@@ -528,7 +581,11 @@ setInterval(() => {
           selectedType = stateObj.type;
           
           if (stateObj.colors && stateObj.colors.length) {
+            /* These belong to the layer the user selected in AE, so they are
+               not a custom palette to protect — browsing away from here should
+               load the next gradient's own colours. */
             state.colors = [...stateObj.colors];
+            paletteIsCustom = false;
             if (typeChanged) renderColorSlots(selectedType);
             else paintColorSlots();
             paintPreviewVars();
@@ -654,7 +711,7 @@ function isLiveControl(el) {
 });
 
 
-// ── GLOBAL CONTROLS (GRAIN & BPM) ──
+// ── GLOBAL CONTROLS (GRAIN) ──
 
 /* Two-way bind a range input to a number field and keep the track fill in
    sync. The per-type controls get this from renderControls; these two live
@@ -699,50 +756,51 @@ if (posterizeToggle && posterizeRow) {
   });
 }
 
-const bpmToggle = document.getElementById('bpm-sync-toggle');
-const bpmInputRow = document.getElementById('bpm-input-row');
-if (bpmToggle && bpmInputRow) {
-  bpmToggle.addEventListener('change', (e) => {
-    bpmInputRow.style.display = e.target.checked ? 'flex' : 'none';
+
+/* ── Fluid trail ─────────────────────────────────────────────────────
+   Tracking is gone. It and the fluid trail were the same feature wearing two
+   names — pick a layer, make the gradient react to it — and keeping both
+   meant two target pickers, two sets of physics, and no way for a user to
+   tell which one they wanted. */
+
+const fluidToggle = document.getElementById('fluid-toggle');
+const fluidSettings = document.getElementById('fluid-settings');
+if (fluidToggle && fluidSettings) {
+  const syncFluid = () => {
+    fluidSettings.classList.toggle('visible', fluidToggle.checked);
+    if (fluidToggle.checked) refreshFluidLayers();
+  };
+  fluidToggle.addEventListener('change', () => {
+    syncFluid();
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
   });
+  syncFluid();
 }
 
-const trackingToggle = document.getElementById('tracking-toggle');
-const trackingInputRow = document.getElementById('tracking-input-row');
-const trackPhysics = document.getElementById('track-physics');
-if (trackingToggle && trackingInputRow) {
-  trackingToggle.addEventListener('change', (e) => {
-    trackingInputRow.style.display = e.target.checked ? 'flex' : 'none';
-    if (trackPhysics) trackPhysics.classList.toggle('visible', e.target.checked);
-    if (e.target.checked) refreshTrackingLayers();
-  });
-}
+const FLUID_PARAMS = ['fluidLength', 'fluidThickness', 'fluidWobble',
+                      'fluidSoftness', 'fluidSize'];
 
-/* ── Tracking physics controls ──────────────────────────────────────── */
-
-const TRACK_PARAMS = [
-  'trackMode', 'trackRadius', 'trackForce',
-  'trackTension', 'trackFriction', 'trackPersistence'
-];
-
-// Bind each physics slider to its number field, matching the behaviour
-// renderControls gives the per-type sliders.
-TRACK_PARAMS.forEach(id => {
+/* Same binding the per-type sliders get from renderControls, including the
+   push to After Effects on every move — without that last part the sliders
+   only did something when the gradient was re-applied. */
+FLUID_PARAMS.forEach(id => {
   const range = document.getElementById('ctrl-' + id);
   const num = document.getElementById('num-' + id);
   if (!range) return;
   if (typeof paintRange === 'function') paintRange(range);
-  if (!num) return;
 
-  range.addEventListener('input', () => {
-    num.value = range.value;
+  const push = () => {
     if (typeof paintRange === 'function') paintRange(range);
-  });
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  };
+
+  range.addEventListener('input', () => { if (num) num.value = range.value; push(); });
+  if (!num) return;
   num.addEventListener('input', () => {
     const v = parseFloat(num.value);
     if (isNaN(v)) return;
     range.value = Math.min(parseFloat(range.max), Math.max(parseFloat(range.min), v));
-    if (typeof paintRange === 'function') paintRange(range);
+    push();
   });
   num.addEventListener('blur', () => {
     let v = parseFloat(num.value);
@@ -750,66 +808,40 @@ TRACK_PARAMS.forEach(id => {
     v = Math.min(parseFloat(range.max), Math.max(parseFloat(range.min), v));
     range.value = v;
     num.value = v;
-    if (typeof paintRange === 'function') paintRange(range);
+    push();
   });
 });
 
-/* Read the physics controls into the shape jsx/main.jsx expects — they live
-   under `controls` alongside the per-type sliders, not at the top level. */
-function getTrackingValues() {
-  const out = {};
-  TRACK_PARAMS.forEach(id => {
-    const el = document.getElementById('ctrl-' + id);
-    if (!el) return;
-    out[id] = (el.tagName === 'SELECT') ? el.value : parseFloat(el.value);
-  });
-  return out;
+function fluidValue(id, fallback) {
+  const el = document.getElementById('ctrl-' + id);
+  const v = el ? parseFloat(el.value) : NaN;
+  return isNaN(v) ? fallback : v;
 }
 
-const rebakeBtn = document.getElementById('rebake-btn');
-if (rebakeBtn) {
-  rebakeBtn.addEventListener('click', function () {
-    const statusEl = document.getElementById('generate-status');
-    const layerName = document.getElementById('tracking-layer-select')?.value || '';
-    if (!layerName) {
-      setStatus(statusEl, '✕ Pick a layer to track first.', 'error');
-      return;
+function getFluidParams() {
+  return {
+    fluidEnabled: document.getElementById('fluid-toggle')?.checked || false,
+    fluidLayerName: document.getElementById('fluid-layer-select')?.value || '',
+    fluid: {
+      length:    fluidValue('fluidLength', 60),
+      thickness: fluidValue('fluidThickness', 100),
+      wobble:    fluidValue('fluidWobble', 45),
+      softness:  fluidValue('fluidSoftness', 25),
+      size:      fluidValue('fluidSize', 7.5)
     }
-    if (typeof CSInterface === 'undefined') {
-      setStatus(statusEl, '✓ [Dev mode] Re-bake skipped.', 'success');
-      return;
-    }
-
-    rebakeBtn.disabled = true;
-    setStatus(statusEl, 'Re-running the simulation…', '');
-
-    const payload = { trackingLayerName: layerName, controls: getTrackingValues() };
-    new CSInterface().evalScript(`rebakeTracking(${esArg(payload)})`, function (result) {
-      rebakeBtn.disabled = false;
-      if (!result || result === 'EvalScript error.' || result === 'undefined') {
-        setStatus(statusEl, '✕ Re-bake failed. Check the JSX.', 'error');
-      } else if (result.indexOf('ERROR') !== -1) {
-        setStatus(statusEl, '✕ ' + result.replace('ERROR:', '').trim(), 'error');
-      } else if (result.indexOf('warning') !== -1) {
-        const [done, detail] = result.split(' | ');
-        setStatus(statusEl, '⚠ ' + done + ' — ' + detail, 'warn');
-      } else {
-        setStatus(statusEl, '✓ ' + result, 'success');
-      }
-    });
-  });
+  };
 }
 
 const refreshLayersBtn = document.getElementById('refresh-layers-btn');
 if (refreshLayersBtn) {
-  refreshLayersBtn.addEventListener('click', refreshTrackingLayers);
+  refreshLayersBtn.addEventListener('click', refreshFluidLayers);
 }
 
-function refreshTrackingLayers() {
+function refreshFluidLayers() {
   if (typeof CSInterface !== 'undefined') {
     const cs = new CSInterface();
     cs.evalScript('getCompLayers()', function(result) {
-      const select = document.getElementById('tracking-layer-select');
+      const select = document.getElementById('fluid-layer-select');
       if (!select) return;
       
       // Save current selection
@@ -978,13 +1010,31 @@ if (colorRowEl) {
     });
   });
 
+  /* Typing a hex is often faster than opening the host's picker, and it is the
+     only way to paste a value from somewhere else. */
   colorRowEl.addEventListener('input', function (e) {
-    const picker = e.target.closest('.color-pick');
-    if (!picker) return;
-    const i = parseInt(picker.dataset.index, 10);
+    const field = e.target.closest('.color-hex');
+    if (!field) return;
+    const i = parseInt(field.dataset.index, 10);
     if (isNaN(i)) return;
-    state.colors[i] = e.target.value.toUpperCase();
+
+    let v = field.value.trim();
+    if (v[0] !== '#') v = '#' + v;
+    if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;      // mid-typing
+
+    state.colors[i] = v.toUpperCase();
+    const chip = colorRowEl.querySelector('.color-pick[data-index="' + i + '"]');
+    if (chip) chip.style.backgroundColor = state.colors[i];
     triggerColorUpdate();
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  });
+
+  // Snap a half-typed hex back to the real value when focus leaves.
+  colorRowEl.addEventListener('focusout', function (e) {
+    const field = e.target.closest('.color-hex');
+    if (!field) return;
+    const i = parseInt(field.dataset.index, 10);
+    if (!isNaN(i)) field.value = (state.colors[i] || '').toUpperCase();
   });
 }
 
@@ -1100,8 +1150,7 @@ document.getElementById('mood-select').addEventListener('change', function () {
 /* Serialise an argument for evalScript.
    JSON.stringify twice: the inner pass encodes the payload, the outer pass
    produces a correctly quoted and escaped ExtendScript string literal.
-   Hand-escaping quotes broke on any payload containing a newline — which is
-   every AI Generated build, since customCode is arbitrary source. */
+   Hand-escaping quotes broke on any payload containing a newline. */
 function esArg(value) {
   return JSON.stringify(JSON.stringify(value));
 }
@@ -1114,24 +1163,13 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   const params = {
     type: selectedType,
     colors: state.colors,
-    controls: Object.assign(getControlValues(selectedType), getTrackingValues()),
+    controls: getControlValues(selectedType),
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
     glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
-    colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
     posterize: document.getElementById('posterize-toggle')?.checked || false,
     posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
-    bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
-    bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
-    trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
-    trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
+    ...getFluidParams()
   };
-
-  if (selectedType === 'ai_custom' && window.lastAiCode) {
-    params.customCode = window.lastAiCode;
-  }
-  if (selectedType === 'ai_image' && window.lastAiImagePath) {
-    params.imagePath = window.lastAiImagePath;
-  }
 
   btn.disabled = true;
   setStatus(statusEl, 'Sending to After Effects…', '');
@@ -1192,21 +1230,20 @@ let liveTimer = null;
 /* Exactly what the JSX stamps onto the layer, so the sync poller can tell our
    own write apart from a real edit made in After Effects. */
 let lastSentState = '';
+/* When we last wrote to After Effects. The poller below refuses to read back
+   for a moment afterwards — see the comment there. */
+let lastLiveSentAt = 0;
 
 function collectLiveParams() {
   return {
     type: selectedType,
     colors: state.colors,
-    controls: Object.assign(getControlValues(selectedType), getTrackingValues()),
+    controls: getControlValues(selectedType),
     grain: parseFloat(document.getElementById('grain-slider')?.value) || 0,
     glow: parseFloat(document.getElementById('glow-slider')?.value) || 0,
-    colorQuality: document.getElementById('color-quality-toggle')?.checked !== false,
     posterize: document.getElementById('posterize-toggle')?.checked || false,
     posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
-    bpmSync: document.getElementById('bpm-sync-toggle')?.checked || false,
-    bpmValue: parseFloat(document.getElementById('bpm-input')?.value) || 120,
-    trackingEnabled: document.getElementById('tracking-toggle')?.checked || false,
-    trackingLayerName: document.getElementById('tracking-layer-select')?.value || ''
+    ...getFluidParams()
   };
 }
 
@@ -1220,6 +1257,7 @@ function sendLiveUpdate() {
   liveInFlight = true;
   const payload = collectLiveParams();
   lastSentState = JSON.stringify(payload);
+  lastLiveSentAt = Date.now();
   new CSInterface().evalScript(`updateGradientLive(${esArg(payload)})`, function () {
     liveInFlight = false;
     if (livePending) { livePending = false; sendLiveUpdate(); }
