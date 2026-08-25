@@ -119,7 +119,56 @@ function pvPut(d, i, rgb) {
   d[i + 3] = 255;
 }
 
-/* Soft overlapping blobs — the four-colour-gradient family. */
+/* SaaS: a near-flat backdrop with one big soft bloom off to a side and a
+   quieter second one balancing it.
+
+   Composited the way the real build does -- each bloom laid over what is
+   already there with its own falloff as the alpha -- rather than by
+   interpolating between palette entries. Mixing the blooms with each other
+   in one pass would let two saturated colours meet at a muddy midpoint,
+   which is the failure this whole look is trying to avoid.
+
+   The falloff is smoothstep cubed. Squared still shows an edge on a light
+   backdrop, which is exactly where this gradient is normally used. */
+function pvSaaS(d, W, H, pal) {
+  const bg = pal[0] || [1, 1, 1];
+
+  /* Matches buildSaaS's default pad position and its first offset, so the
+     card is a fair likeness of what applying it actually produces. */
+  const blooms = [
+    { x: 0.30, y: 0.35, r: 0.62, a: 0.85, c: pal[1] || pal[0] },
+    { x: 0.30 + 0.34, y: 0.35 + 0.23, r: 0.45, a: 0.61, c: pal[2] || pal[1] || pal[0] }
+  ];
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const u = x / W, v = y / H;
+
+      let r = bg[0], g = bg[1], b = bg[2];
+
+      for (let k = 0; k < blooms.length; k++) {
+        const s = blooms[k];
+        /* Distance in units of the shorter axis, so the bloom stays round
+           on a 16:9 card instead of stretching with it. */
+        const dx = (u - s.x) * (W / Math.min(W, H));
+        const dy = (v - s.y) * (H / Math.min(W, H));
+        const dist = Math.sqrt(dx * dx + dy * dy) / s.r;
+        if (dist >= 1) continue;
+
+        const t = 1 - dist;
+        const a = t * t * t * s.a;
+        r += (s.c[0] - r) * a;
+        g += (s.c[1] - g) * a;
+        b += (s.c[2] - b) * a;
+      }
+
+      pvPut(d, i, [pvClamp(r), pvClamp(g), pvClamp(b)]);
+    }
+  }
+}
+
+/* Soft overlapping blobs -- the four-colour-gradient family. */
 function pvMesh(d, W, H, pal) {
   const pts = [[0.18, 0.22], [0.84, 0.18], [0.22, 0.82], [0.80, 0.78]];
   const labs = pts.map((_, k) => pvToOklab(pal[k % pal.length]));
@@ -586,6 +635,7 @@ function pvPrintCard(o) {
 }
 
 const PREVIEW_FAMILY = {
+  SaaS:           pvSaaS,
   Halftone:       pvHalftone,
   CellularMosaic: pvCells,
   AnimeWater:     pvCells,   // same engine, so the card shows the same shape
@@ -609,6 +659,7 @@ const PREVIEW_FAMILY = {
   Gold:           pvMetalCard('Gold',     { env: 'flow', bands: 4, relief: 0.26, shine: 70, lightAngle: 320, lightHeight: 0.45, ambient: 0.5,  specular: 1.1, tilt: 0.18 }),
   Copper:         pvMetalCard('Copper',   { env: 'flow', bands: 4, relief: 0.22, shine: 60, lightAngle: 330, lightHeight: 0.48, ambient: 0.5,  specular: 0.95, tilt: 0.16 }),
   Gunmetal:       pvMetalCard('Gunmetal', { env: 'plate', bands: 6, relief: 0.34, shine: 12, lightAngle: 290, lightHeight: 0.26, ambient: 0.62, specular: 0.4, tilt: 0.12 }),
+  Snakeskin:      pvMetalCard('Hammered', { env: 'plate', bands: 3, relief: 0.74, shine: 22, lightAngle: 305, lightHeight: 0.42, ambient: 0.62, specular: 0.38, tilt: 0.30 }),
   Hammered:       pvMetalCard('Hammered', { env: 'plate', bands: 4, relief: 0.55, shine: 55, lightAngle: 310, lightHeight: 0.38, ambient: 0.5,  specular: 0.9, tilt: 0.16 }),
   Foil:           pvMetalCard('Foil',     { env: 'flow', bands: 8, relief: 0.70, shine: 80, lightAngle: 305, lightHeight: 0.30, ambient: 0.45, specular: 1.2, tilt: 0.22 }),
   Mercury:        pvMetalCard('Mercury',  { env: 'flow', bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),

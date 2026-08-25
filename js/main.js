@@ -112,81 +112,18 @@ const MOODS = {
   fire: ['#FF4500', '#FF6B00', '#CC2200', '#440000']
 };
 
-// ── CUSTOM PRESET STORAGE ──
-// Uses localStorage in browser/CEP panel. Persists across sessions.
-const PRESET_STORAGE_KEY = 'livingGradients_colorPresets';
+/* ── CUSTOM PRESET STORAGE ────────────────────────────────────────────
+   Moved out. Presets used to be four hex strings in localStorage, which put
+   them inside the extension's browser cache — so clearing that cache, the
+   standard fix for a panel that opens blank, destroyed every one of them.
 
-function loadCustomPresets() {
-  try {
-    const raw = localStorage.getItem(PRESET_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) { return {}; }
-}
+   They now live on disk in the panel's own data folder, they carry the whole
+   gradient rather than just its colours, and they can be exported, shared and
+   backed up. See js/store.js for the folder, js/library.js for the model and
+   js/shelf.js for the interface. The old localStorage entries are migrated on
+   first run by migrateLegacy() in library.js; nothing anybody saved is lost.
 
-function saveCustomPresets(presets) {
-  try { localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets)); } catch (e) { }
-}
-
-function refreshPresetDropdown() {
-  const select = document.getElementById('custom-preset-select');
-  if (!select) return;
-  const presets = loadCustomPresets();
-  // Clear all but the first placeholder
-  while (select.options.length > 1) select.remove(1);
-  Object.keys(presets).forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-  });
-}
-
-// Init presets dropdown on load
-refreshPresetDropdown();
-
-// ── SAVE PRESET ──
-document.getElementById('save-preset-btn').addEventListener('click', function () {
-  const nameInput = document.getElementById('preset-name-input');
-  const name = (nameInput.value || '').trim();
-  if (!name) { alert('Enter a preset name first.'); return; }
-
-  const presets = loadCustomPresets();
-  presets[name] = state.colors.slice(); // Save current 4 colors
-  saveCustomPresets(presets);
-  refreshPresetDropdown();
-
-  // Select the newly saved item
-  const select = document.getElementById('custom-preset-select');
-  select.value = name;
-  nameInput.value = '';
-});
-
-// ── LOAD PRESET ──
-document.getElementById('load-preset-btn').addEventListener('click', function () {
-  const select = document.getElementById('custom-preset-select');
-  const name = select.value;
-  if (!name) { alert('Select a preset to load.'); return; }
-
-  const presets = loadCustomPresets();
-  const colors = presets[name];
-  if (!colors) { alert('Preset not found.'); return; }
-
-  setColors(colors);
-});
-
-// ── DELETE PRESET ──
-document.getElementById('delete-preset-btn').addEventListener('click', function () {
-  const select = document.getElementById('custom-preset-select');
-  const name = select.value;
-  if (!name) { alert('Select a preset to delete.'); return; }
-
-  if (!confirm('Delete preset "' + name + '"?')) return;
-
-  const presets = loadCustomPresets();
-  delete presets[name];
-  saveCustomPresets(presets);
-  refreshPresetDropdown();
-});
+   The Saved Presets section of the inspector is rebuilt by boot.js. */
 
 // ── GRADIENT CARDS LIBRARY ──
 const gradientGrid = document.getElementById('gradient-grid');
@@ -370,7 +307,7 @@ if (batchGenerateBtn) {
     batchGenerateBtn.disabled = true;
     setStatus(batchStatus, `Building ${items.length} gradients…`, '');
 
-    if (typeof CSInterface === 'undefined') {
+    if (!lgHostReady()) {
       console.log('BATCH PAYLOAD:', payload);
       batchGenerateBtn.disabled = false;
       setStatus(batchStatus, '✓ [Dev mode] Payload logged to console.', 'success');
@@ -434,13 +371,11 @@ let liquidPollInterval = null;
 
 if (tabBrowse && tabEdit) {
   function switchTab(activeTab, activeView) {
-    if (tabBrowse) tabBrowse.classList.remove('active');
-    if (tabEdit) tabEdit.classList.remove('active');
-    if (tabFluid) tabFluid.classList.remove('active');
-    
-    if (viewBrowse) viewBrowse.classList.remove('active');
-    if (viewEdit) viewEdit.classList.remove('active');
-    if (viewFluid) viewFluid.classList.remove('active');
+    /* Query rather than name the three we happened to have. boot.js adds a
+       fourth tab at run time, and a switchTab that only knows about the
+       original three leaves it stuck on while another view is showing. */
+    document.querySelectorAll(".tab-btn").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".view-panel").forEach(v => v.classList.remove("active"));
     
     if (activeTab) activeTab.classList.add('active');
     if (activeView) activeView.classList.add('active');
@@ -454,7 +389,7 @@ if (tabBrowse && tabEdit) {
              window.liquidEtherInst.start();
           }
        }
-       if (!liquidPollInterval && typeof CSInterface !== 'undefined') {
+       if (!liquidPollInterval && lgHostReady()) {
           const cs = new CSInterface();
           liquidPollInterval = setInterval(() => {
              cs.evalScript('getLayerInfo()', (res) => {
@@ -480,6 +415,10 @@ if (tabBrowse && tabEdit) {
        }
     }
   }
+
+  /* boot.js adds the Presets tab after this file has run, so it needs a way
+     to reach the same switcher rather than reimplementing it. */
+  window.lgSwitchTab = switchTab;
 
   tabBrowse.addEventListener('click', () => switchTab(tabBrowse, viewBrowse));
   tabEdit.addEventListener('click', () => switchTab(tabEdit, viewEdit));
@@ -549,7 +488,7 @@ function applyPolledControls(controls) {
 const LIVE_ECHO_QUIET_MS = 1500;
 
 setInterval(() => {
-  if (typeof CSInterface === 'undefined') return;
+  if (!lgHostReady()) return;
   if (inspectorBusy || liveInFlight || livePending) return;
 
   /* The seizure.
@@ -838,7 +777,7 @@ if (refreshLayersBtn) {
 }
 
 function refreshFluidLayers() {
-  if (typeof CSInterface !== 'undefined') {
+  if (lgHostReady()) {
     const cs = new CSInterface();
     cs.evalScript('getCompLayers()', function(result) {
       const select = document.getElementById('fluid-layer-select');
@@ -907,7 +846,7 @@ if (importBtn && importModal) {
       triggerColorUpdate();
       importModal.classList.remove('active');
     } else {
-      alert("No valid hex codes found in text.");
+      LGUI.toast("No hex codes in that text. Paste something like #FF6B35, #FF3366 — or a Coolors URL.", "error");
     }
   });
 }
@@ -916,7 +855,7 @@ if (importBtn && importModal) {
 const eyeBtn = document.getElementById('eyedropper-btn');
 if (eyeBtn) {
   eyeBtn.addEventListener('click', async () => {
-    if (typeof CSInterface !== 'undefined') {
+    if (lgHostReady()) {
       const cs = new CSInterface();
       cs.evalScript(`openNativeColorPicker('#FFFFFF')`, function(res) {
         if (res && res !== "-1") {
@@ -942,7 +881,7 @@ if (eyeBtn) {
         // user canceled
       }
     } else {
-      alert("Eyedropper API not supported in this version. Please use the color pickers.");
+      LGUI.toast("This build of After Effects has no screen eyedropper. Use the swatches instead.", "error");
     }
   });
 }
@@ -978,7 +917,7 @@ document.getElementById('export-svg-btn')?.addEventListener('click', function ()
 
 // Force load main.jsx to bypass AE manifest cache without restarting!
 try {
-  if (typeof CSInterface !== 'undefined') {
+  if (lgHostReady()) {
     const cs = new CSInterface();
     const extPath = cs.getSystemPath("extension").replace(/\\/g, '/');
     cs.evalScript('$.evalFile("' + extPath + '/jsx/main.jsx")');
@@ -995,7 +934,7 @@ const colorRowEl = document.getElementById('color-row');
 if (colorRowEl) {
   colorRowEl.addEventListener('click', function (e) {
     const picker = e.target.closest('.color-pick');
-    if (!picker || typeof CSInterface === 'undefined') return;
+    if (!picker || !lgHostReady()) return;
     e.preventDefault();
     const i = parseInt(picker.dataset.index, 10);
     if (isNaN(i)) return;
@@ -1175,7 +1114,7 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   setStatus(statusEl, 'Sending to After Effects…', '');
 
   try {
-    if (typeof CSInterface !== 'undefined') {
+    if (lgHostReady()) {
       const cs = new CSInterface();
       cs.evalScript(`generateGradient(${esArg(params)})`, function (result) {
         btn.disabled = false;
@@ -1248,7 +1187,7 @@ function collectLiveParams() {
 }
 
 function sendLiveUpdate() {
-  if (typeof CSInterface === 'undefined') {
+  if (!lgHostReady()) {
     console.log('LIVE PARAMS:', collectLiveParams());
     return;
   }
@@ -1294,7 +1233,7 @@ function triggerColorUpdate() {
   paintPreviewVars();
   paintInspectorPreview();
 
-  if (typeof CSInterface !== 'undefined') {
+  if (lgHostReady()) {
     const cs = new CSInterface();
     cs.evalScript(`updateLiveColors(${esArg(state.colors)})`);
   }

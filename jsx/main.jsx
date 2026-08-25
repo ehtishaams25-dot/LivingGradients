@@ -305,69 +305,76 @@ var LG = (function () {
     };
 })();
 
+/* The colour picker.
+
+   WHAT THIS USED TO DO, AND WHY IT TOOK AFTER EFFECTS DOWN WITH IT. The old
+   version opened a comp, added a shape layer called TEMP_COLOR_PICKER, put a
+   Color Control on it, selected the property and fired app.executeCommand(2240)
+   to make After Effects open its own picker on that property -- all inside an
+   app.beginUndoGroup().
+
+   executeCommand(2240) opens a MODAL dialog. Script execution stops dead while
+   it is up, and the undo group opened before it cannot close until the user
+   dismisses it. After Effects notices the mismatch and says so ("Undo group
+   mismatch, will attempt to fix"), and "attempt" is doing real work in that
+   sentence -- the undo stack is left inconsistent and the application is one
+   wrong step from going down. When the script died before reaching its
+   cleanup, the temp layer stayed in the comp too.
+
+   None of that machinery is necessary. ExtendScript ships a colour picker:
+   $.colorPicker() is synchronous, needs no comp, no layer, no undo group and
+   no modal command. It takes and returns a plain 0xRRGGBB integer, or -1 when
+   the user cancels.
+
+   It also means picking a colour is no longer an undoable document edit,
+   which is correct -- choosing a swatch in a panel should never have been on
+   the undo stack in the first place. */
 function openNativeColorPicker(hexStr) {
     try {
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
-            alert("Please activate a Composition before picking a color (click on the timeline or composition viewer).");
-            return "-1";
-        }
+        /* Anything the old implementation stranded gets cleared out the next
+           time the picker is opened, so a user who hit the crash is not left
+           with invisible junk layers in their comp forever. */
+        lgSweepPickerLeftovers();
 
-        app.beginUndoGroup("Color Picker");
-        var tempLayer = comp.layers.addShape();
-        tempLayer.name = "TEMP_COLOR_PICKER";
-        tempLayer.enabled = false;
-        
-        var colorEffect = tempLayer.Effects.addProperty("ADBE Color Control");
-        var colorProp = colorEffect.property("Color");
-        
-        var rgb = hex2rgb(hexStr);
-        if (rgb) {
-            colorProp.setValue([rgb[0], rgb[1], rgb[2], 1]);
-        }
-        
-        var originalSelection = comp.selectedLayers;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            comp.layer(i).selected = false;
-        }
-        
-        tempLayer.selected = true;
-        colorProp.selected = true;
-        
+        var start = 0xFFFFFF;
         try {
-            comp.openInViewer(); // Force comp viewer active
-            app.executeCommand(2240);
-        } catch(cmdErr) {
-            alert("Failed to execute AE Color Picker command: " + cmdErr.toString());
-            tempLayer.remove();
-            app.endUndoGroup();
-            return "-1";
-        }
-        
-        var resultRgb = colorProp.value;
-        
-        tempLayer.remove();
-        
-        for (var i = 0; i < originalSelection.length; i++) {
-            try { originalSelection[i].selected = true; } catch(e) {}
-        }
-        app.endUndoGroup();
+            var rgb = hexRgb(hexStr);
+            start = (Math.round(rgb[0] * 255) << 16) |
+                    (Math.round(rgb[1] * 255) << 8) |
+                     Math.round(rgb[2] * 255);
+        } catch (e) { }
 
-        var r = Math.round(resultRgb[0] * 255).toString(16);
-        var g = Math.round(resultRgb[1] * 255).toString(16);
-        var b = Math.round(resultRgb[2] * 255).toString(16);
-        
-        if (r.length < 2) r = "0" + r;
-        if (g.length < 2) g = "0" + g;
-        if (b.length < 2) b = "0" + b;
-        
-        return "#" + (r + g + b).toUpperCase();
-    } catch(e) {
-        alert("Unexpected Color Picker Error: " + e.toString());
-        try { app.endUndoGroup(); } catch(undoErr){}
+        var picked = $.colorPicker(start);
+        if (picked === null || picked === undefined || picked < 0) return "-1";
+
+        var r = (picked >> 16) & 0xFF;
+        var g = (picked >> 8) & 0xFF;
+        var b = picked & 0xFF;
+
+        return "#" + lgHex2(r) + lgHex2(g) + lgHex2(b);
+    } catch (e) {
         return "-1";
     }
 }
+
+function lgHex2(n) {
+    var h = Math.max(0, Math.min(255, Math.round(n))).toString(16).toUpperCase();
+    return (h.length < 2) ? "0" + h : h;
+}
+
+/* Remove any TEMP_COLOR_PICKER layer the old implementation left behind. */
+function lgSweepPickerLeftovers() {
+    try {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) return;
+        for (var i = comp.numLayers; i >= 1; i--) {
+            if (comp.layer(i).name === 'TEMP_COLOR_PICKER') {
+                try { comp.layer(i).remove(); } catch (e) { }
+            }
+        }
+    } catch (e) { }
+}
+
 /* Legacy shims. Every historical call site keeps working, but the names
    are now canonicalised by LG and failures are reported instead of lost. */
 function addFx(layer, names) {
@@ -407,9 +414,21 @@ function getCompLayers() {
     }
 }
 
+/* Tolerant on purpose. This is called from the colour picker, from preset
+   payloads and from live colour pushes, and a single malformed string used to
+   come back as [NaN, NaN, NaN] -- which After Effects accepts and renders as
+   black, so a typo in one swatch silently blacked out a gradient. Anything
+   unparseable falls back to mid grey and says so. */
 function hexRgb(h) {
-    h = h.replace('#', '');
-    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+    if (h === undefined || h === null) return [0.5, 0.5, 0.5];
+    h = String(h).replace('#', '');
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (h.length < 6) return [0.5, 0.5, 0.5];
+    var r = parseInt(h.slice(0, 2), 16),
+        g = parseInt(h.slice(2, 4), 16),
+        b = parseInt(h.slice(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return [0.5, 0.5, 0.5];
+    return [r / 255, g / 255, b / 255];
 }
 
 
@@ -608,6 +627,12 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'Mercury':
             buildMetalTexture(comp, c, controls, w, h, dur, type);
             break;
+        /* Shares the Hammered height field on purpose — see the note beside
+           this preset in js/presets.js. It is an animal print by palette and
+           lighting, not by geometry. */
+        case 'Snakeskin':
+            buildMetalTexture(comp, c, controls, w, h, dur, 'Hammered');
+            break;
         case 'Giraffe':
         case 'Tiger':
         case 'Zebra':
@@ -654,6 +679,9 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
             break;
         case 'WebThreads':
             buildWebThreads(comp, c, controls, w, h, dur);
+            break;
+        case 'SaaS':
+            buildSaaS(comp, c, controls, w, h, dur);
             break;
         case 'OklabSmooth':
             buildOklabSmooth(comp, c, controls, w, h, dur);
@@ -1160,6 +1188,213 @@ function buildOklabSmooth(comp, c, ctrl, w, h, dur) {
     lgOklabRamp(s, c, w, h, angle, radial);
 
     if (ctrl.softness && ctrl.softness > 0) lgBlur(s, num(ctrl.softness, 0));
+}
+
+// -- SAAS GRADIENT --
+/* The look every landing page has had since about 2021: a mostly empty
+   field with one enormous, very soft bloom of colour pushed off to a side,
+   and maybe a quieter second one balancing it.
+
+   WHY MASKS RATHER THAN A RAMP
+
+   The obvious build is a radial Gradient Ramp, and it is wrong twice over.
+   A radial ramp runs from its start colour to its end colour across a
+   circle, so the falloff is linear and reads as a spotlight with a visible
+   edge, not as light. And it fills the layer, so a second bloom needs a
+   blend mode to hide the first one's background, which drags the whole
+   stack into Add or Screen and breaks on a light-coloured backdrop.
+
+   A solid with a feathered elliptical mask has neither problem. Mask
+   feather falls off smoothly, it is genuinely transparent outside the
+   shape, and it composites in Normal on any background. The bloom is then
+   just a layer, which means it can be moved, and moving it is the point.
+
+   WHY THE DRIFT IS ON POSITION
+
+   A mask path is awkward to animate from script and pointless to animate
+   here anyway. Wiggling the layer's position moves the mask with it, gives
+   the same result, and keeps the shape parameters readable afterwards.
+
+   Colour 1 is the BACKGROUND, not the first stop of a ramp. That is a
+   different role model from every other gradient in this library and it is
+   deliberate: in this look the background is most of what you see, so
+   giving it the first swatch is telling the truth about the design. */
+/* ── SaaS ────────────────────────────────────────────────────────────
+   Clean space with one big soft bloom off to a side. Position is the subject,
+   which is why this is the gradient the XY pad was built for.
+
+   WHY THE LAYERS ARE SHAPED THE WAY THEY ARE. The first version sized each
+   bloom's solid to its own radius and then moved the solid to put the bloom
+   where the pad asked. That builds fine and cannot be tuned: changing the
+   radius needs a bigger solid, and a solid cannot be resized after the fact,
+   so every drag of the pad had to rebuild the whole gradient from scratch.
+
+   So the solid no longer moves and no longer depends on the radius. Every
+   bloom is one fixed-size layer -- the comp plus a margin on all sides -- sat
+   dead centre, and the bloom's *position and size live in the mask* instead.
+   A mask path can be rewritten in place as often as you like. That is what
+   makes the pad track the pointer rather than stutter behind a rebuild.
+
+   The margin is what the drift wiggles into, so nothing has to reach past the
+   layer's own edge. Anything the mask spills beyond it is already well off
+   screen. */
+var SAAS_MARGIN = 420;
+
+/* One place decides what the sliders mean, so the build and the live update
+   cannot drift apart. Returns three entries always -- `on` says which of them
+   this bloom count actually shows. */
+function saasLayout(ctrl, w, h) {
+    var blooms = Math.round(num(ctrl.blooms, 2));
+    if (blooms < 1) blooms = 1;
+    if (blooms > 3) blooms = 3;
+
+    var posX     = num(ctrl.positionX, 30) / 100;
+    var posY     = num(ctrl.positionY, 35) / 100;
+    var size     = num(ctrl.size, 70) / 100;
+    var softness = num(ctrl.softness, 80) / 100;
+    var strength = num(ctrl.intensity, 85);
+    var spread   = num(ctrl.spread, 55) / 100;
+    var drift    = num(ctrl.drift, 30);
+    var speed    = num(ctrl.speed, 12) / 100;
+
+    /* Fixed angles rather than random ones: this look has to be reproducible,
+       and a preset that renders differently every time it is applied is not a
+       preset. */
+    var offsets = [[0, 0], [0.62, 0.42], [-0.48, 0.55]];
+    var shortest = (w < h) ? w : h;
+
+    var out = [], i;
+    for (i = 0; i < 3; i++) {
+        /* Each bloom after the first is quieter and smaller. A row of equally
+           loud blooms reads as a lava lamp; the hierarchy is what makes it
+           read as one light with bounce. */
+        var falloff = (i === 0) ? 1 : (i === 1 ? 0.72 : 0.5);
+        var radius  = size * shortest * 0.75 * falloff;
+        if (radius < 8) radius = 8;
+
+        var feather = radius * softness;
+        if (feather < 1) feather = 1;
+
+        out.push({
+            on:      i < blooms,
+            cx:      posX * w + offsets[i][0] * spread * shortest,
+            cy:      posY * h + offsets[i][1] * spread * shortest,
+            radius:  radius,
+            feather: feather,
+            opacity: strength * falloff,
+            drift:   drift * falloff,
+            speed:   speed
+        });
+    }
+    return out;
+}
+
+/* An ellipse from four bezier vertices. After Effects has no circle primitive
+   for mask paths, and 0.5523 is the standard circular constant -- the handle
+   length that makes four arcs meet as a true circle rather than a rounded
+   diamond. */
+function saasEllipse(lx, ly, radius) {
+    var shape = new Shape();
+    shape.closed = true;
+    var k = radius * 0.5523;
+    shape.vertices = [
+        [lx, ly - radius],
+        [lx + radius, ly],
+        [lx, ly + radius],
+        [lx - radius, ly]
+    ];
+    shape.inTangents  = [[-k, 0], [0, -k], [k, 0], [0, k]];
+    shape.outTangents = [[k, 0], [0, k], [-k, 0], [0, -k]];
+    return shape;
+}
+
+function buildSaaS(comp, c, ctrl, w, h, dur) {
+    var bg = c[0] || [1, 1, 1];
+
+    /* Back to front, so the layer order comes out right without any
+       reordering afterwards. */
+    var back = comp.layers.addSolid(bg, 'SaaS Backdrop', w, h, 1, dur);
+    back.moveToEnd();
+
+    /* All three are always built, and the bloom count switches them on and
+       off. Creating a layer is the one thing a live update genuinely cannot
+       do without rebuilding, so the count stops being a rebuild trigger and
+       becomes just another slider. */
+    var i, bloom;
+    for (i = 0; i < 3; i++) {
+        bloom = comp.layers.addSolid(c[i + 1] || c[c.length - 1] || [0.4, 0.5, 1],
+                                     'SaaS Bloom ' + (i + 1),
+                                     w + SAAS_MARGIN * 2, h + SAAS_MARGIN * 2, 1, dur);
+        /* The mask has to exist before tuneSaaS runs -- it rewrites mask 1 in
+           place and does not create one, because on every later call the mask
+           is already there and adding a second would stack two blooms on one
+           layer. Building it here is the only time it is ever added. */
+        try {
+            bloom.property('Masks').addProperty('Mask');
+        } catch (e) {
+            LG.warn('SaaS: could not add the mask for bloom ' + (i + 1));
+        }
+    }
+
+    tuneSaaS(comp, c, ctrl, w, h);
+}
+
+/* Everything the panel can change, applied in place. */
+function tuneSaaS(comp, c, ctrl, w, h) {
+    var spec = saasLayout(ctrl, w, h), i, l;
+
+    for (i = 1; i <= comp.numLayers; i++) {
+        l = comp.layer(i);
+
+        if (l.name === 'SaaS Backdrop') {
+            try { l.source.mainSource.color = c[0] || [1, 1, 1]; } catch (e) { }
+            continue;
+        }
+
+        var idx = -1;
+        if (l.name === 'SaaS Bloom 1') idx = 0;
+        else if (l.name === 'SaaS Bloom 2') idx = 1;
+        else if (l.name === 'SaaS Bloom 3') idx = 2;
+        if (idx === -1) continue;
+
+        var b = spec[idx];
+        try { l.enabled = b.on; } catch (e) { }
+        if (!b.on) continue;
+
+        try { l.source.mainSource.color = c[idx + 1] || c[c.length - 1] || [0.4, 0.5, 1]; } catch (e) { }
+
+        /* Local coordinates. The layer is centred in the comp and is larger
+           than it by SAAS_MARGIN on every side, so a comp point (cx, cy) sits
+           at (cx + margin, cy + margin) in the layer's own frame. */
+        try {
+            var mask = l.property('Masks').property(1);
+            mask.property('maskShape').setValue(
+                saasEllipse(b.cx + SAAS_MARGIN, b.cy + SAAS_MARGIN, b.radius));
+            mask.property('maskFeather').setValue([b.feather, b.feather]);
+            /* Mask Expansion pulls the hard core back in as feather grows, so
+               raising softness does not also make the bloom bigger. Without
+               this, the softness slider reads as a second size slider. */
+            mask.property('maskExpansion').setValue(-b.feather * 0.35);
+        } catch (e) {
+            LG.warn('SaaS: could not shape bloom ' + (idx + 1));
+        }
+
+        try { l.property('Transform').property('Opacity').setValue(b.opacity); } catch (e) { }
+
+        /* The drift. Slow enough that you cannot catch it moving if you look
+           directly at it, which is the difference between a background and a
+           distraction. Different seeds per bloom, or they all drift in
+           lockstep and the field looks like it is sliding rather than
+           breathing. */
+        try {
+            var pos = l.property('Transform').property('Position');
+            pos.setValue([w / 2, h / 2]);
+            pos.expression = (b.drift > 0 && b.speed > 0)
+                ? 'seedRandom(' + (idx + 1) + ', true);' +
+                  'wiggle(' + b.speed.toFixed(3) + ', ' + b.drift.toFixed(1) + ');'
+                : '';
+        } catch (e) { }
+    }
 }
 
 // ── 2. LIVING GRADIENT ── 4-Color Gradient + Motion Tile + Turbulent Displace (from Living Gradients.jsx)
@@ -2053,6 +2288,23 @@ function updateGradientLive(paramsStr) {
             }
         }
 
+        /* SaaS spans four layers -- a backdrop and three blooms -- so it
+           cannot ride the single-layer table below.
+
+           Until this branch existed there was no SaaS entry anywhere in this
+           function, so a drag on the XY pad fell past every test here and
+           landed in the SilkFlare fallback at the bottom, which only touches
+           layers named "Matte Comp". The panel was sending the position on
+           every pointer move and After Effects was faithfully doing nothing
+           with it. That is the whole reason the joystick "wasn't real time" —
+           it was never connected, not slow. */
+        if (ctrl.type === 'SaaS') {
+            app.beginUndoGroup('Update SaaS');
+            tuneSaaS(comp, lcols, lctrl, realComp.width, realComp.height);
+            app.endUndoGroup();
+            return;
+        }
+
         var LIVE_TUNERS = {
             LiquidWaves:    { layer: 'Liquid Waves',    fn: tuneLiquidWaves },
             Metallic:       { layer: 'Metallic',        fn: tuneMetallic },
@@ -2324,6 +2576,23 @@ function updateGradientLive(paramsStr) {
                 }
             }
             app.endUndoGroup();
+            return;
+        }
+
+        /* Everything above returns. Anything still here reached the bottom of
+           the dispatch, and the bottom of the dispatch is SilkFlare's -- so
+           until this guard existed, every type without a tuner quietly ran
+           SilkFlare's code against layers it does not have and reported
+           success. That is a silent no-op, and it is exactly how the SaaS pad
+           managed to look wired up while doing nothing at all.
+
+           Now an unhandled type says so in the panel's own warning channel
+           instead of pretending. */
+        var SILKFLARE = { Silk: 1, Aurora: 1, Prism: 1, Fiber: 1, Veil: 1,
+                          Pulse: 1, Comet: 1 };
+        if (!SILKFLARE[ctrl.type]) {
+            LG.warn('No live tuner for "' + ctrl.type + '" — its sliders will ' +
+                    'only take effect when the gradient is re-applied.');
             return;
         }
 
@@ -3209,7 +3478,13 @@ function tuneGlassSurface(s, ctrl) {
 
     lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Relief'), {
         fractalType:  1,                  // Basic — see the note on Metal Grain
-        contrast:     170,
+        /* 170 was pushing plain fBm into its own tails. Basic noise gets no
+           bias correction because it does not need one, so contrast here is
+           unopposed: at 170 most of the distribution ends up pinned at one end
+           or the other and the "soft ridges" this comment asks for came out as
+           hard-edged blotches. A height field wants gradation above all else —
+           the shader makes the contrast, this only has to describe the shape. */
+        contrast:     115,
         brightness:   0,
         overflow:     2,                  // soft clamp — no folds, no flashing
         complexity:   5,
@@ -3243,12 +3518,21 @@ function tuneGlass(s, c, ctrl, bumpIndex) {
        of that, so there are edges for the surface to bend. */
     lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Glass Colour Field'), {
         fractalType:  1,                  // Basic — see the note on Metal Grain
-        contrast:     160,
+        /* Small features plus high contrast is the recipe for camouflage, and
+           camouflage is what this was rendering: irregular hard-edged patches
+           of light and dark with no fade between them.
+
+           The note above about needing "edges for the surface to bend" is
+           right in principle and was applied about twice as hard as it needed
+           to be. The refraction reads the *surface* field for its edges; this
+           layer is only the colour behind the glass, and colour behind frosted
+           glass is a soft wash. Bigger features, gentler contrast. */
+        contrast:     118,
         brightness:   0,
         overflow:     2,
         complexity:   4,
-        scaleWidth:   num(ctrl.scale, 420) * 0.34,
-        scaleHeight:  num(ctrl.scale, 420) * 0.26,
+        scaleWidth:   num(ctrl.scale, 420) * 0.62,
+        scaleHeight:  num(ctrl.scale, 420) * 0.48,
         subInfluence: 60,
         speed:        speed
     });
@@ -3761,10 +4045,26 @@ var METAL_SURFACES = {
            Glass's, because Blobbylize has a single Cut Away where CC Glass
            has both a Height and a Displacement.
 
-           Wrap Back on the height field too, so the droplets arrive as closed
-           rounded contours before Blobbylize ever sees them. */
-        shader: 'blobbylize', blobCut: 32,
-        env: 'flow', field: 'noise', overflow: 3,
+           THE HOLES CAME FROM HERE. Two settings on this preset combined into
+           them, and both are gone.
+
+           Cut Away does not darken the layer, it *discards* it — every pixel
+           below the threshold stops existing. Over nothing, that is a
+           hard-edged black void, which is exactly what a hole is. At 32 it was
+           removing a third of the height range.
+
+           Wrap Back then supplied the large low regions for it to cut. Wrap
+           Back is a discontinuity by construction: wherever the field crosses
+           the wrap point it snaps from white to black across a single pixel.
+           That is the hard edge around the void, and on an evolving field it
+           is also the strobing — a whole region crossing the wrap on the same
+           frame reads as a blink, not a flicker.
+
+           Soft Clamp keeps the contours without the cliff, and Blobbylize
+           still rounds them into surface-tension shapes, which was always the
+           reason to use it over CC Glass. */
+        shader: 'blobbylize', blobCut: 0,
+        env: 'flow', field: 'noise', overflow: 2,
         hWidth: 300, hHeight: 280, hContrast: 140, hComplexity: 2,
         smooth: 22, tilt: 10, metal: 100, ambient: 30, diffuse: 46
     }
@@ -4046,13 +4346,41 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
 var LG_OVERSIZE = 1.8;
 function lgOversize(n) { return Math.round(n * LG_OVERSIZE); }
 
+/* How far the height solid overhangs its own comp on every side. Comfortably
+   past the largest Crumple the panel offers, because the cost of too much is
+   a little wasted render area and the cost of too little is a hole. */
+var HEIGHT_PAD = 600;
+
 function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
     var fps = comp.frameRate;
     var OW = lgOversize(w), OH = lgOversize(h);
 
-    // 1. The height field, in its own comp.
+    /* 1. The height field, in its own comp.
+
+       The solid is built LARGER than the comp that holds it, and that is the
+       whole point of the number below.
+
+       Everywhere else in this file a displaced layer is oversized relative to
+       the comp it sits in (see LG_OVERSIZE), so there is image beyond the
+       frame for the displacement to fetch. The height field was the one place
+       that was not: the solid was created at exactly OW x OH inside a comp of
+       exactly OW x OH, so its edges and the comp's edges were the same line.
+
+       Turbulent Displace, Directional Blur and CC Glass all work by fetching a
+       pixel from somewhere else on the layer. Ask any of them for a pixel past
+       the edge and there is nothing there, so they fetch transparency — and
+       with the layer edge sitting exactly on the comp edge, that torn alpha
+       lands inside the frame instead of safely outside it. The height map is
+       CC Glass's bump source, so the holes then print straight through onto
+       the metal. That is why the checkerboard showed up in the same shape on
+       the height map and on the finished gradient.
+
+       HEIGHT_PAD is the overhang, sized past the largest Crumple the panel can
+       ask for so the tear always happens off-comp where nothing can see it. */
     var heightComp = app.project.items.addComp(kind + ' Height Map', OW, OH, 1, dur, fps);
-    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height', OW, OH, 1, dur);
+    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height',
+                                                 OW + HEIGHT_PAD * 2,
+                                                 OH + HEIGHT_PAD * 2, 1, dur);
     tuneMetalHeight(heightSolid, ctrl, kind);
 
     // 2. Both layers into the target comp, height first so it ends up below.
@@ -4601,13 +4929,40 @@ function lgFractalSet(fn, o) {
        pulling Brightness down to match and the field clips to white, which
        downstream means every pixel lands on the gradient map's top stop and
        the render comes out one flat colour. That was the yellow frame. */
+    /* The compensation below existed already but nothing could ever reach it:
+       it only applied when a caller left `brightness` undefined, and every
+       single caller in this file passes it explicitly. So the correction was
+       dead code, and the fields it was written to rescue went on clipping.
+
+       It is now applied as an offset on top of whatever the caller asked for,
+       and only to the fractal types that actually need it. Fractal Type 1
+       (Basic) is plain fBm and symmetric about mid-grey by construction, so it
+       gets nothing. The turbulent family is folded noise -- its mean sits well
+       above mid-grey -- so raising Contrast on it drives the whole field up
+       into the ceiling. What that looks like downstream depends only on the
+       Overflow mode, which is why one root cause produced so many different
+       symptoms:
+
+         Clip       -> large areas flatten to pure white. The blown-out
+                       blotches on Frosted Glass, the voids in the ASCII map.
+         Soft Clamp -> the field compresses into its top end and goes mushy,
+                       leaving a shader nothing to shade. The metals.
+         Wrap Back  -> whole regions sit against the wrap boundary at once and
+                       flip together as the noise evolves. That is not a
+                       gradient flickering, it is every pixel in a region
+                       crossing the same threshold on the same frame -- the
+                       strobing on Liquid Waves and Liquid Mercury.
+
+       Centre the field and all three behave: Clip stops clipping, Soft Clamp
+       keeps its mid-range, and Wrap Back's boundaries become smooth contours
+       that travel across the frame instead of regions that blink. */
     var contrast = num(o.contrast, 120);
-    var brightness = (o.brightness !== undefined)
-        ? o.brightness
-        : -(contrast - 100) * 0.22;
+    var fractalType = o.fractalType || 2;
+    var bias = (fractalType === 1) ? 0 : -(contrast - 100) * 0.22;
+    var brightness = num(o.brightness, 0) + bias;
     var scale = num(o.scale, 150);
 
-    LG.set(fn, 'Fractal Type', 1, o.fractalType || 2);   // 2 = Turbulent Smooth
+    LG.set(fn, 'Fractal Type', 1, fractalType);          // 2 = Turbulent Smooth
     LG.set(fn, 'Noise Type',   2, 4);                    // 4 = Spline
     LG.set(fn, 'Contrast',     4, contrast);
     LG.set(fn, 'Brightness',   5, brightness);
@@ -4651,6 +5006,27 @@ function lgTurbSet(td, o) {
     if (o.complexity !== undefined) LG.set(td, 'Complexity', 5, o.complexity);
     var speed = num(o.speed, 20);
     LG.expr(td, 'Evolution', 6, speed !== 0 ? 'time * ' + speed : 'value');
+
+    /* Pinning and Resize Layer, set explicitly rather than left to whatever
+       the host defaults to. This is the holes.
+
+       Turbulent Displace moves pixels by fetching them from somewhere else on
+       the layer. Ask for a displacement near an edge and it reaches past the
+       layer bounds, where there is nothing -- so it fetches transparency and
+       punches a hole straight through an otherwise opaque surface. Composited
+       over nothing, that reads as a hard-edged black void, which is exactly
+       what the metals were showing.
+
+       'Pin All' (option 1) clamps the fetch to the layer's own edges, so an
+       out-of-bounds sample returns the nearest real pixel instead of a hole.
+       Resize Layer stays off: the layers here are already oversized on purpose
+       (see LG_OVERSIZE) and letting the effect grow them again would knock
+       every downstream index and bump-layer reference out of alignment.
+
+       Both are indices 12 and 13 -- from tools/effect_probe_report.txt, not
+       from memory. */
+    LG.set(td, 'Pinning',      12, 1);
+    LG.set(td, 'Resize Layer', 13, false);
     return td;
 }
 
@@ -4942,7 +5318,15 @@ function tuneLiquidWaves(s, c, ctrl) {
         fractalType: 2,
         contrast:    num(ctrl.bands, 200),
         brightness:  0,
-        overflow:    3,                          // Wrap Back — this is the effect
+        /* Soft Clamp, not Wrap Back. Wrap Back was chosen to make the bands —
+           each fold of the field past white and back down is another ribbon —
+           and it does, but it makes them out of a hard discontinuity. As the
+           field evolves, every pixel in a region crosses the wrap point on the
+           same frame and the whole area flips black at once. That is the
+           strobing, and it is also why a single frame could come back as one
+           flat colour: the frame was caught mid-fold. Soft Clamp folds the
+           same field without the cliff. */
+        overflow:    2,
         complexity:  num(ctrl.complexity, 4),
         scale:       scale,
         scaleWidth:  scale * 1.6,

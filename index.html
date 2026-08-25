@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Living Gradients v2</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/shelf.css" />
 </head>
 
 <body>
@@ -447,15 +448,39 @@
 
 
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="lib/CSInterface.js"></script>
-  <script src="js/license.js?v=4"></script>
-  <script src="js/presets.js?v=4"></script>
-  <script src="js/controls.js?v=4"></script>
-  <script src="js/preview.js?v=4"></script>
-  <script src="js/liquidEther.js?v=4"></script>
+  <!-- three.js r128, vendored rather than fetched from a CDN.
 
-  <script src="js/main.js?v=4"></script>
+       It used to load from cdnjs, which meant the Fluid tab was the one part of
+       this panel that needed the internet to work — and an edit suite with no
+       outbound connection is a normal thing, not an edge case.
+
+       Pinned to r128 deliberately: js/liquidEther.js was written against that
+       API, and later revisions removed Geometry and changed colour management,
+       so "just update it" is a rewrite of the fluid simulation, not a version
+       bump. MIT licensed; see the header of the file. -->
+  <script src="lib/three.min.js"></script>
+
+  <script src="lib/CSInterface.js"></script>
+
+  <!-- Load order matters and is documented in js/boot.js. Foundations first
+       (disk, then the model, then the interface primitives), features next,
+       boot last — it assumes every name below is already defined. -->
+  <script src="js/store.js?v=13"></script>
+  <script src="js/library.js?v=13"></script>
+  <script src="js/ui.js?v=13"></script>
+  <script src="js/service.js?v=13"></script>
+
+  <script src="js/license.js?v=13"></script>
+  <script src="js/presets.js?v=13"></script>
+  <script src="js/controls.js?v=13"></script>
+  <script src="js/preview.js?v=13"></script>
+  <script src="js/liquidEther.js?v=13"></script>
+
+  <script src="js/shelf.js?v=13"></script>
+  <script src="js/footer.js?v=13"></script>
+
+  <script src="js/main.js?v=13"></script>
+  <script src="js/boot.js?v=13"></script>
 
 </body>
 

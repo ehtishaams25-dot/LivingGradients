@@ -2,3 +2,27 @@
 # Contact-sheet renders. The script and its report are versioned; the
 # 11MB image it produces is not — re-run tools/contact_sheet.jsx for it.
 tools/contact_sheet.png
+
+# Build output. tools/build.ps1 regenerates both from source.
+build/
+dist/
+
+# The signing certificate and its password never go in the repository.
+# Losing it means future updates are signed by a different identity and read
+# as a different product to the installer, so keep it somewhere safe —
+# just not here.
+tools/certificate.p12
+tools/ZXPSignCmd*.exe
+
+# Editor and OS litter
+*.bak
+.DS_Store
+Thumbs.db
+
+# The certificate password, if -NewCert wrote it out. Move it to a password
+# manager and delete the file.
+tools/certificate-password.txt
+
+# OpenSSL's random seed file, dropped in the working directory by certificate
+# generation. Regenerated on demand and meaningless to anyone else.
+.rnd

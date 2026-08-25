@@ -9,6 +9,20 @@ const GRADIENT_CONTROLS = {
     { id: 'gradientType', label: 'Gradient Type', options: ['Linear', 'Radial'], default: 'Linear', type: 'select' },
     { id: 'angle',        label: 'Angle',  min: 0, max: 90,  step: 90, default: 0,  type: 'slider' }
   ],
+  /* Position first, deliberately. On this gradient it is not one setting
+     among many — it is the one that decides what the thing looks like, and
+     burying it under four sliders would say otherwise. */
+  SaaS: [
+    { id: 'position',  label: 'Bloom Position', type: 'xy', default: [30, 35],
+      hint: 'Drag to place the light. Arrow keys nudge, Home recentres, double-click resets.' },
+    { id: 'size',      label: 'Bloom Size',   min: 10, max: 160, step: 1, default: 70, type: 'slider' },
+    { id: 'softness',  label: 'Softness',     min: 10, max: 100, step: 1, default: 80, type: 'slider' },
+    { id: 'intensity', label: 'Intensity',    min: 5,  max: 100, step: 1, default: 85, type: 'slider' },
+    { id: 'blooms',    label: 'Blooms',       min: 1,  max: 3,   step: 1, default: 2,  type: 'slider' },
+    { id: 'spread',    label: 'Spread',       min: 0,  max: 120, step: 1, default: 55, type: 'slider' },
+    { id: 'drift',     label: 'Drift',        min: 0,  max: 200, step: 5, default: 30, type: 'slider' },
+    { id: 'speed',     label: 'Drift Speed',  min: 0,  max: 60,  step: 1, default: 12, type: 'slider' }
+  ],
   Metallic: [
     { id: 'finish',      label: 'Finish',
       options: ['Chrome', 'Iridescent', 'Brushed', 'Y2K Chrome'],
@@ -308,6 +322,25 @@ const GRADIENT_CONTROLS = {
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
   ],
+  /* Same sliders as Hammered, different numbers, and the numbers are the whole
+     difference between a beaten copper plate and a snake. Specular 95 -> 38 and
+     roughness 14 -> 62 is what stops it looking wet; scale 100 -> 45 is what
+     makes the cells read as scales rather than dents; speed 6 -> 0 because a
+     drifting reflection is a metal cue and skin does not have one. */
+  Snakeskin: [
+    { id: 'scaleAll',    label: 'Scale Size',    min: 15, max: 200, step: 5, default: 45,  type: 'slider' },
+    { id: 'relief',      label: 'Scale Depth',   min: 0,  max: 100, step: 1, default: 74,  type: 'slider' },
+    { id: 'bands',       label: 'Banding',       min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
+    { id: 'brushLength', label: 'Stretch',       min: 0,  max: 200, step: 5, default: 40,  type: 'slider' },
+    { id: 'warp',        label: 'Body Curve',    min: 0,  max: 400, step: 5, default: 70,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 42,  type: 'slider' },
+    { id: 'specular',    label: 'Sheen',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 62,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 1,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 0,   type: 'slider' }
+  ],
   Hammered: [
     { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
     { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
@@ -503,6 +536,186 @@ function paintRange(el) {
   if (cap) cap.style.setProperty('--pct', pct + '%');
 }
 
+/* -- THE XY PAD ------------------------------------------------------
+
+   A Figma-style position control: a square of dots with a draggable handle.
+
+   Some gradients are not about a ramp between corners at all. A SaaS-style
+   background is mostly empty space with one big soft bloom pushed off to a
+   side, and *where that bloom sits* is the entire design decision. Offering
+   that as two sliders labelled X and Y is technically complete and
+   completely unusable: nobody thinks in coordinates, they think 'up and to
+   the left'.
+
+   THE TRICK THAT MAKES THIS FREE
+
+   The pad does not introduce a new value type. It writes into two ordinary
+   hidden number inputs named ctrl-<id>X and ctrl-<id>Y, which means every
+   system already in the panel keeps working with no changes at all:
+
+     - getControlValues() reads them like any other control
+     - the coalesced live-update path carries them to After Effects mid-drag
+     - applyPolledControls() writes into them when a layer is selected in AE
+     - loading a preset restores them
+
+   and the pad listens to its own hidden inputs and moves the dot to match.
+   So the dot follows After Effects as readily as After Effects follows the
+   dot, and none of that needed writing twice.
+
+   Values are 0-100 in both axes, X left to right and Y top to bottom, so
+   they map onto a comp by multiplying by width and height. */
+
+function buildXYPad(ctrl, item, reset, label) {
+  var defX = (ctrl.default && ctrl.default.length) ? ctrl.default[0] : 50;
+  var defY = (ctrl.default && ctrl.default.length) ? ctrl.default[1] : 50;
+
+  var head = document.createElement('div');
+  head.className = 'ctrl-row is-xy-head';
+  head.appendChild(label);
+  head.appendChild(reset);
+
+  var readout = document.createElement('span');
+  readout.className = 'xy-readout';
+  head.appendChild(readout);
+  item.appendChild(head);
+
+  /* The values themselves. Hidden rather than absent: everything downstream
+     finds a control with getElementById('ctrl-' + key), so these ARE the
+     control as far as the rest of the panel is concerned. */
+  var fx = document.createElement('input');
+  fx.type = 'hidden';
+  fx.id = 'ctrl-' + ctrl.id + 'X';
+  fx.value = defX;
+
+  var fy = document.createElement('input');
+  fy.type = 'hidden';
+  fy.id = 'ctrl-' + ctrl.id + 'Y';
+  fy.value = defY;
+
+  item.appendChild(fx);
+  item.appendChild(fy);
+
+  var pad = document.createElement('div');
+  pad.className = 'xy-pad';
+  pad.tabIndex = 0;
+  pad.setAttribute('role', 'application');
+  pad.setAttribute('aria-label', ctrl.label + ' position. Arrow keys to nudge.');
+
+  var dot = document.createElement('div');
+  dot.className = 'xy-dot';
+  pad.appendChild(dot);
+  item.appendChild(pad);
+
+  if (ctrl.hint) {
+    var hint = document.createElement('p');
+    hint.className = 'ctrl-hint';
+    hint.textContent = ctrl.hint;
+    item.appendChild(hint);
+  }
+
+  function paint() {
+    var x = parseFloat(fx.value), y = parseFloat(fy.value);
+    if (isNaN(x)) x = defX;
+    if (isNaN(y)) y = defY;
+    dot.style.left = x + '%';
+    dot.style.top = y + '%';
+    readout.textContent = Math.round(x) + ', ' + Math.round(y);
+  }
+
+  function commit(x, y) {
+    fx.value = Math.max(0, Math.min(100, x)).toFixed(1);
+    fy.value = Math.max(0, Math.min(100, y)).toFixed(1);
+    paint();
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  }
+
+  /* Pointer events rather than mouse events, and setPointerCapture rather
+     than a document-level listener. Capture is what keeps the drag alive
+     when the pointer leaves the pad. Without it the dot sticks at the edge
+     the moment you overshoot, which is exactly when you are trying to push
+     the bloom right off the frame. */
+  /* The rect is measured once, when the drag starts, and reused for the whole
+     drag. Re-measuring on every move looks more correct and is not: the
+     inspector is a scrolling column, so anything that scrolls it mid-drag
+     moves the pad out from under a pointer that has not moved, and the handle
+     lurches. Freezing the frame of reference at pointerdown makes the drag
+     immune to layout shifting underneath it. */
+  var rect = null;
+
+  function fromEvent(e) {
+    var r = rect || pad.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    commit(((e.clientX - r.left) / r.width) * 100,
+           ((e.clientY - r.top) / r.height) * 100);
+  }
+
+  var dragging = false;
+
+  pad.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    dragging = true;
+    rect = pad.getBoundingClientRect();
+    pad.classList.add('is-dragging');
+    try { pad.setPointerCapture(e.pointerId); } catch (err) { }
+
+    /* preventScroll is load-bearing. Focusing an element scrolls it into
+       view, and the pad lives near the bottom of a scrolling inspector -- so
+       without this, grabbing it scrolls the column, the pad moves, and the
+       first thing the drag does is throw the handle to an edge. It cost an
+       afternoon to find because it only shows on one axis: scrolling is
+       vertical, so X behaved perfectly and Y pinned itself to 100. */
+    pad.focus({ preventScroll: true });
+
+    fromEvent(e);
+  });
+
+  pad.addEventListener('pointermove', function (e) {
+    if (dragging) fromEvent(e);
+  });
+
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    rect = null;
+    pad.classList.remove('is-dragging');
+    try { pad.releasePointerCapture(e.pointerId); } catch (err) { }
+  }
+  pad.addEventListener('pointerup', endDrag);
+  pad.addEventListener('pointercancel', endDrag);
+
+  /* Arrow keys, because a pad alone cannot hit 50,50 exactly and dead
+     centre is a value people genuinely want. Shift is the coarse step,
+     Home recentres. */
+  pad.addEventListener('keydown', function (e) {
+    var step = e.shiftKey ? 10 : 1;
+    var x = parseFloat(fx.value), y = parseFloat(fy.value);
+    var handled = true;
+    switch (e.key) {
+      case 'ArrowLeft':  x -= step; break;
+      case 'ArrowRight': x += step; break;
+      case 'ArrowUp':    y -= step; break;
+      case 'ArrowDown':  y += step; break;
+      case 'Home':       x = 50; y = 50; break;
+      default: handled = false;
+    }
+    if (!handled) return;
+    e.preventDefault();
+    commit(x, y);
+  });
+
+  pad.addEventListener('dblclick', function () { commit(defX, defY); });
+  reset.addEventListener('click', function () { commit(defX, defY); });
+
+  /* When After Effects pushes values back (the sync poller, or a preset
+     being loaded) it writes the hidden inputs and fires 'input' on them.
+     Listening here keeps the dot honest without anyone downstream having to
+     remember to move it. */
+  fx.addEventListener('input', paint);
+  fy.addEventListener('input', paint);
+
+  paint();
+}
+
 function renderControls(type) {
   const container = document.getElementById('controls-container');
   if (!container) return;
@@ -536,7 +749,10 @@ function renderControls(type) {
     label.className = 'ctrl-label';
     label.textContent = ctrl.label;
 
-    if (ctrl.type === 'select' || ctrl.type === 'text') {
+    if (ctrl.type === 'xy') {
+      buildXYPad(ctrl, item, reset, label);
+
+    } else if (ctrl.type === 'select' || ctrl.type === 'text') {
       /* Selects, text fields and sliders share one capsule, so a column of
          mixed controls still reads as a single list rather than as three
          different kinds of widget stacked up. */
@@ -668,6 +884,20 @@ function getControlValues(type) {
   const controls = GRADIENT_CONTROLS[type] || [];
   const vals = {};
   controls.forEach(ctrl => {
+    /* An xy pad is two values under one label, so it reports as two keys.
+       Flat numbers rather than a nested array on purpose: this payload is
+       JSON-stringified into ExtendScript, and flat is one less thing for a
+       1999 JavaScript engine to get wrong. */
+    if (ctrl.type === 'xy') {
+      const ex = document.getElementById('ctrl-' + ctrl.id + 'X');
+      const ey = document.getElementById('ctrl-' + ctrl.id + 'Y');
+      const dx = (ctrl.default && ctrl.default.length) ? ctrl.default[0] : 50;
+      const dy = (ctrl.default && ctrl.default.length) ? ctrl.default[1] : 50;
+      vals[ctrl.id + 'X'] = ex ? parseFloat(ex.value) : dx;
+      vals[ctrl.id + 'Y'] = ey ? parseFloat(ey.value) : dy;
+      return;
+    }
+
     const el = document.getElementById('ctrl-' + ctrl.id);
     if (el) {
       vals[ctrl.id] = (ctrl.type === 'select') ? el.value : parseFloat(el.value);

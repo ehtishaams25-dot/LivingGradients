@@ -2,6 +2,20 @@
    LICENSE.JS — Gumroad License Validation
    ============================================ */
 
+/* ── DEVELOPMENT BYPASS ──────────────────────────────────────────────
+
+   Set true to skip the licence check while working on the panel.
+
+   This used to be an unconditional `showMainPanel(); return true;` sitting at
+   the top of checkStoredLicense(), with the real check stranded as unreachable
+   code below it. That is the version of this that ships by accident: it does
+   not look like a switch, so nobody thinks to turn it off, and everything
+   underneath it is dead code that stops getting read.
+
+   As a named flag it is one line to flip — and tools/build.ps1 refuses to
+   package a release while it is true, so the accident cannot happen. */
+const LG_DEV_BYPASS_LICENSE = false;
+
 const GUMROAD_PRODUCT_PERMALINK = 'livinggradients'; // Your Gumroad product permalink
 const LICENSE_STORAGE_KEY = 'lg_license_key';
 const LICENSE_VALID_KEY = 'lg_license_valid';
@@ -23,7 +37,7 @@ const getLicenseLink = document.getElementById('get-license-link');
 if (getLicenseLink) {
   getLicenseLink.addEventListener('click', function(e) {
     e.preventDefault();
-    if (typeof CSInterface !== 'undefined') {
+    if (lgHostReady()) {
       var cs = new CSInterface();
       cs.openURLInDefaultBrowser('https://digivero.gumroad.com/l/' + GUMROAD_PRODUCT_PERMALINK);
     } else {
@@ -53,12 +67,13 @@ licenseInput.addEventListener('input', function() {
 
 // Check stored license on load
 function checkStoredLicense() {
-  // DEV OVERRIDE: Bypass license check for testing
-  showMainPanel();
-  const badge = document.querySelector('.header-badge');
-  if (badge) badge.textContent = 'DEV MODE';
-  return true;
-  
+  if (LG_DEV_BYPASS_LICENSE) {
+    showMainPanel();
+    const badge = document.querySelector('.header-badge');
+    if (badge) badge.textContent = 'DEV MODE';
+    return true;
+  }
+
   const stored = localStorage.getItem(LICENSE_STORAGE_KEY);
   const valid = localStorage.getItem(LICENSE_VALID_KEY);
   if (stored && valid === 'true') {
@@ -138,13 +153,18 @@ activateBtn.addEventListener('click', async function() {
 // Deactivate
 if (deactivateBtn) {
   deactivateBtn.addEventListener('click', function() {
-    if (confirm('Deactivate license? You will need to re-enter your key.')) {
+    LGUI.confirm("Deactivate this license?", {
+      title: "Manage license",
+      detail: "You will need your key again to reactivate. Your presets are untouched — they live outside the extension.",
+      confirmLabel: "Deactivate"
+    }).then(function (yes) {
+      if (!yes) return;
       localStorage.removeItem(LICENSE_STORAGE_KEY);
       localStorage.removeItem(LICENSE_VALID_KEY);
-      licenseInput.value = '';
-      setStatus(licenseStatus, '', '');
+      licenseInput.value = "";
+      setStatus(licenseStatus, "", "");
       showLicenseScreen();
-    }
+    });
   });
 }
 

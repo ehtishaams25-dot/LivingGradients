@@ -1,0 +1,213 @@
+Living Gradients — hole probe
+AE      : 26.0x67
+Date    : Tue Aug 25 2026 19:43:10 GMT+0530
+Root    : Comp 1
+
+Looking for: a layer that EXACTLY FILLS COMP and carries an effect
+that samples elsewhere on the layer (Turbulent Displace, CC Glass,
+CC Blobbylize, Directional Blur). That combination is what tears
+transparency in from beyond the edge.
+
+Check Turbulent Displace "Pinning" and "Resize Layer" below against
+what the build tried to set — a value still at its default means the
+write never landed.
+=============================================================================
+
+=== COMP: Comp 1   1920x1080   1 layers
+
+  --- LAYER 1: Foil Gradient   1920x1080   <-- EXACTLY FILLS COMP (no overhang to displace into)
+      blend: 5212   opacity: 100
+      (no effects)
+
+  === COMP: Foil Gradient   1920x1080   2 layers
+
+    --- LAYER 1: Foil Metal   3456x1944
+        blend: 5212   opacity: 100
+        1. Metal Ramp   {ADBE Ramp}
+             1   Start of Ramp                     [0, 0]
+             2   Start Color                       [0, 0, 0, 1]
+             3   End of Ramp                       [3456, 427.68]
+             4   End Color                         [1, 1, 1, 1]
+             5   Ramp Shape                        1
+             6   Ramp Scatter                      0
+             7   Blend With Original               0
+        2. Metal Fold   {ADBE Tile}
+             1   Tile Center                       expr: [value[0] + time * 60, value[1]]
+             2   Tile Width                        12.5
+             3   Tile Height                       100
+             4   Output Width                      100
+             5   Output Height                     100
+             6   Mirror Edges                      1
+             7   Phase                             0
+             8   Horizontal Phase Shift            0
+        3. Metal Flow   {ADBE Fractal Noise}  [DISABLED]
+             1   Fractal Type                      1
+             2   Noise Type                        3
+             3   Invert                            0
+             4   Contrast                          100
+             5   Brightness                        0
+             6   Overflow                          4
+             7   Transform                         <unreadable>
+             8   Rotation                          0
+             9   Uniform Scaling                   1
+             10  Scale                             100
+             11  Scale Width                       100
+             12  Scale Height                      100
+             13  Offset Turbulence                 [1728, 972]
+             14  Perspective Offset                0
+             16  Complexity                        6
+             17  Sub Settings                      <unreadable>
+             18  Sub Influence (%)                 70
+             19  Sub Scaling                       56
+             20  Sub Rotation                      0
+             21  Sub Offset                        [0, 0]
+             22  Center Subscale                   0
+             24  Evolution                         0
+             25  Evolution Options                 <unreadable>
+             26  Cycle Evolution                   0
+             27  Cycle (in Revolutions)            1
+             28  Random Seed                       0
+             29  Random Seed                       <unreadable>
+             30  Opacity                           100
+             31  Blending Mode                     2
+        4. Metal Twist   {ADBE Turbulent Displace}
+             1   Displacement                      6
+             2   Amount                            77.196
+             3   Size                              1000
+             4   Offset (Turbulence)               [1728, 972]
+             5   Complexity                        1
+             6   Evolution                         expr: time * -2
+             7   Evolution Options                 <unreadable>
+             8   Cycle Evolution                   0
+             9   Cycle (in Revolutions)            1
+             10  Random Seed                       0
+             11  Random Seed                       <unreadable>
+             12  Pinning                           1
+             13  Resize Layer                      0
+             14  Antialiasing for Best Quality     1
+        5. Metal Environment   {ADBE Turbulent Displace}
+             1   Displacement                      4
+             2   Amount                            268.404
+             3   Size                              620
+             4   Offset (Turbulence)               [1728, 972]
+             5   Complexity                        1
+             6   Evolution                         expr: time * 3
+             7   Evolution Options                 <unreadable>
+             8   Cycle Evolution                   0
+             9   Cycle (in Revolutions)            1
+             10  Random Seed                       0
+             11  Random Seed                       <unreadable>
+             12  Pinning                           1
+             13  Resize Layer                      0
+             14  Antialiasing for Best Quality     1
+        6. CC Toner   {CC Toner}
+             1   Tones                             3
+             2   Highlights                        [1, 1, 1, 1]
+             3   Brights                           [0.832, 0.867, 0.897, 1]
+             4   Midtones                          [0.598, 0.647, 0.692, 1]
+             5   Darktones                         [0.323, 0.359, 0.398, 1]
+             6   Shadows                           [0.039, 0.047, 0.059, 1]
+             7   Blend w. Original                 0
+        7. CC Glass   {CC Glass}
+             1   Surface                           <unreadable>
+             2   Bump Map                          2
+             3   Property                          5
+             4   Softness                          8.4
+             5   Height                            70
+             6   Displacement                      56
+             8   Light                             <unreadable>
+             9   Using                             1
+             10  Light Intensity                   94.3
+             11  Light Color                       [1, 1, 1, 1]
+             12  Light Type                        1
+             13  Light Height                      30
+             14  Light Position                    [1728, 972]
+             15  Light Direction                   305
+             17  Shading                           <unreadable>
+             18  Ambient                           32
+             19  Diffuse                           44
+             20  Specular                          98
+             21  Roughness                         0.024
+             22  Metal                             100
+        8. Metal Bloom   {ADBE Glo2}
+             1   Glow Based On                     2
+             2   Glow Threshold                    88
+             3   Glow Radius                       39
+             4   Glow Intensity                    0.273
+             5   Composite Original                2
+             6   Glow Operation                    3
+             7   Glow Colors                       1
+             8   Color Looping                     3
+             9   Color Loops                       1
+             10  Color Phase                       0
+             11  A & B Midpoint                    0.5
+             12  Color A                           [1, 1, 1, 1]
+             13  Color B                           [0, 0, 0, 1]
+             14  Glow Dimensions                   1
+        9. Fast Box Blur   {ADBE Box Blur2}
+             1   Blur Radius                       0
+             2   Iterations                        3
+             3   Blur Dimensions                   1
+             4   Repeat Edge Pixels                1
+
+    --- LAYER 2: Foil Height   3456x1944 [eye off]
+        blend: 5212   opacity: 100
+        (no effects)
+
+    === COMP: Foil Height Map   3456x1944   1 layers
+
+      --- LAYER 1: Height   3456x1944   <-- EXACTLY FILLS COMP (no overhang to displace into)
+          blend: 5212   opacity: 100
+          1. Metal Grain   {ADBE Fractal Noise}
+               1   Fractal Type                      1
+               2   Noise Type                        4
+               3   Invert                            0
+               4   Contrast                          200
+               5   Brightness                        0
+               6   Overflow                          2
+               7   Transform                         <unreadable>
+               8   Rotation                          0
+               9   Uniform Scaling                   0
+               10  Scale                             100
+               11  Scale Width                       150
+               12  Scale Height                      130
+               13  Offset Turbulence                 [1728, 972]
+               14  Perspective Offset                0
+               16  Complexity                        4
+               17  Sub Settings                      <unreadable>
+               18  Sub Influence (%)                 70
+               19  Sub Scaling                       56
+               20  Sub Rotation                      0
+               21  Sub Offset                        [0, 0]
+               22  Center Subscale                   0
+               24  Evolution                         expr: time * 10
+               25  Evolution Options                 <unreadable>
+               26  Cycle Evolution                   0
+               27  Cycle (in Revolutions)            1
+               28  Random Seed                       0
+               29  Random Seed                       <unreadable>
+               30  Opacity                           100
+               31  Blending Mode                     2
+          2. Metal Crumple   {ADBE Turbulent Displace}
+               1   Displacement                      4
+               2   Amount                            240
+               3   Size                              180
+               4   Offset (Turbulence)               [1728, 972]
+               5   Complexity                        1
+               6   Evolution                         expr: time * 6
+               7   Evolution Options                 <unreadable>
+               8   Cycle Evolution                   0
+               9   Cycle (in Revolutions)            1
+               10  Random Seed                       0
+               11  Random Seed                       <unreadable>
+               12  Pinning                           1
+               13  Resize Layer                      0
+               14  Antialiasing for Best Quality     1
+          3. Metal Brush   {ADBE Motion Blur}  [DISABLED]
+               1   Direction                         90
+               2   Blur Length                       0
+          4. Fast Box Blur   {ADBE Box Blur2}
+               1   Blur Radius                       2
+               2   Iterations                        3
+               3   Blur Dimensions                   1
+               4   Repeat Edge Pixels                1

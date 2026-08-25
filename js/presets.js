@@ -28,6 +28,12 @@ const COLOR_ROLES = {
   Cow:            ['Coat', 'Patches'],
   Fur:            ['Undercoat', 'Guard Hair'],
   Leopard:        ['Coat', 'Rosette Ring', 'Rosette Core'],
+  Snakeskin:      ['Deep Scale', 'Body', 'Bright Scale', 'Sheen'],
+
+  /* The only gradient in the library whose first swatch is the BACKGROUND
+     rather than a stop in a ramp. In this look the background is most of what
+     you see, so it gets the first slot and says so. */
+  SaaS:           ['Background', 'Bloom', 'Accent Bloom', 'Third Bloom'],
 
   /* The shaded metals. These four are not a ramp between corners — they are
      the four things a lit metal surface is made of, and the shader uses each
@@ -117,12 +123,30 @@ const GRADIENT_LIBRARY = [
      pushing — see the note in jsx/main.jsx. */
   { id: 'Fur', category: 'Animal Prints', label: 'Fur', cssClass: 'preview-cellular', defaultColors: ['#D9A441', '#4A2408'] },
 
+  /* Snakeskin came out of Hammered Metal, not out of the animal-print builder.
+     The dimple lattice that makes hammered copper read as beaten metal is,
+     geometrically, a field of scales — what said "metal" was never the shape,
+     it was the lighting: a hard specular, low roughness and a drifting
+     reflection. Drop the shine, tighten the cells, give it a reptile palette,
+     and the same height field reads as a snake.
+
+     So this shares buildMetalTexture's 'Hammered' path deliberately rather
+     than getting a builder of its own. Two implementations of one height field
+     would drift, and this one is already right. */
+  { id: 'Snakeskin', category: 'Animal Prints', label: 'Snakeskin', cssClass: 'preview-cellular', defaultColors: ['#141A12', '#3E5230', '#8CA35C', '#E4E9C9'] },
+
   /* PRINT & PATTERN
      Screens, grids and cells. Repeating structure you can count. */
   { id: 'Halftone', category: 'Print & Pattern', label: 'Halftone', cssClass: 'preview-halftone', defaultColors: ['#12101A', '#5227FF', '#F4F1EA'] },
   { id: 'AsciiMatrix', category: 'Print & Pattern', label: 'ASCII Matrix', cssClass: 'preview-ascii', defaultColors: ['#000000', '#004400', '#00AA00', '#00FF00'] },
   { id: 'CellularMosaic', category: 'Print & Pattern', label: 'Cellular Mosaic', cssClass: 'preview-cellular', defaultColors: ['#00FF99', '#00AAFF', '#AA00FF', '#001133'] },
   { id: 'StackedSquares', category: 'Print & Pattern', label: 'Stacked Squares', cssClass: 'preview-stackedsquares', defaultColors: ['#FF3300', '#FFCC00', '#FF0066', '#9900FF'] },
+
+  /* SAAS & UI
+     Backgrounds for interfaces rather than for footage: mostly empty, one big
+     soft bloom carrying all the colour, and a position control instead of an
+     angle. The section to grow if more product-page looks get added. */
+  { id: 'SaaS', category: 'SaaS & UI', label: 'SaaS Gradient', cssClass: 'preview-living', defaultColors: ['#FBFBFD', '#7C5CFF', '#FF6FB1', '#3ED6C5'] },
 
   /* GLASS
      Surfaces you see *through*. Both of these are a colour field with a

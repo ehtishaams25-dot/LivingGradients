@@ -1,8 +1,26 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.digivero.livinggradients" ExtensionBundleVersion="2.0.0" ExtensionBundleName="Living Gradients">
+<!--
+  Living Gradients — CEP extension manifest.
+
+  ExtensionBundleVersion is the version of record. tools/build.ps1 reads it and
+  stamps it into js/service.js at package time, so the number the panel reports
+  and the number the installer registers cannot drift apart. Change it here and
+  nowhere else.
+
+  Host range starts at 15.0 (After Effects CC 2018): that is the oldest release
+  with a CEP runtime this panel's Node usage works on, and comp.saveFrameToPng
+  — which is how preset thumbnails are rendered — has been present since well
+  before it.
+-->
+<ExtensionManifest Version="7.0"
+  ExtensionBundleId="com.digivero.livinggradients"
+  ExtensionBundleVersion="2.1.0"
+  ExtensionBundleName="Living Gradients">
+
   <ExtensionList>
-    <Extension Id="com.digivero.livinggradients.panel" Version="2.0.0"/>
+    <Extension Id="com.digivero.livinggradients.panel" Version="2.1.0"/>
   </ExtensionList>
+
   <ExecutionEnvironment>
     <HostList>
       <Host Name="AEFT" Version="[15.0,99.9]"/>
@@ -14,6 +32,7 @@
       <RequiredRuntime Name="CSXS" Version="7.0"/>
     </RequiredRuntimeList>
   </ExecutionEnvironment>
+
   <DispatchInfoList>
     <Extension Id="com.digivero.livinggradients.panel">
       <DispatchInfo>
@@ -21,8 +40,24 @@
           <MainPath>./index.html</MainPath>
           <ScriptPath>./jsx/main.jsx</ScriptPath>
           <CEFCommandLine>
+            <!--
+              enable-nodejs gives js/store.js the `fs` module it prefers for the
+              data folder. It degrades to window.cep.fs without it, so this is
+              an optimisation rather than a requirement.
+
+              mixed-context keeps the panel's scripts in one context, which is
+              what lets the modules here see each other as plain globals.
+
+              v=0 silences CEF's own logging, which otherwise fills the Adobe
+              CEP log with noise that hides real errors.
+
+              (Written without the leading double hyphens on purpose: a pair of
+              hyphens is not legal inside an XML comment, and any parser
+              stricter than After Effects' own rejects the whole manifest.)
+            -->
             <Parameter>--enable-nodejs</Parameter>
             <Parameter>--mixed-context</Parameter>
+            <Parameter>--v=0</Parameter>
           </CEFCommandLine>
         </Resources>
         <Lifecycle>
@@ -37,11 +72,21 @@
               <Width>340</Width>
             </Size>
             <MinSize>
-              <Height>600</Height>
-              <Width>300</Width>
+              <!--
+                Below ~300px the inspector's two columns collapse to one and the
+                shelf toolbar wraps; below ~260 nothing lays out sensibly, so
+                the panel refuses to go there rather than looking broken.
+              -->
+              <Height>420</Height>
+              <Width>280</Width>
             </MinSize>
           </Geometry>
-          <Icons/>
+          <Icons>
+            <Icon Type="Normal">./icons/icon-normal.png</Icon>
+            <Icon Type="DarkNormal">./icons/icon-normal.png</Icon>
+            <Icon Type="RollOver">./icons/icon-rollover.png</Icon>
+            <Icon Type="DarkRollOver">./icons/icon-rollover.png</Icon>
+          </Icons>
         </UI>
       </DispatchInfo>
     </Extension>

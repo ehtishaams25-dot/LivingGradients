@@ -1,0 +1,1082 @@
+/* ============================================
+   SHELF.CSS — the preset library, and the panel's chrome
+   ============================================
+
+   Layered on top of styles.css, which already owns the surfaces, the brand
+   accent and the type scale. Nothing here redefines those.
+
+   WHAT THIS ADDS TO THE TOKEN SYSTEM
+
+   styles.css has 49 custom properties and they are good ones — surfaces,
+   accent, type, radii. What it does not have is the second half of a design
+   system: the sizes controls come in, the durations things move over, and the
+   curves they move on. Without those, every new component picks its own 28px
+   or 30px and its own 0.2s, and the panel slowly stops agreeing with itself.
+   That is the difference you can see between this panel and Code Runner, whose
+   CSS carries a full set of --ml-control-h-sm/md/lg and --ml-duration/-fast/
+   -drawer/-reorder tokens.
+
+   So: one control height scale, one duration scale, one easing set. Everything
+   below uses them and nothing below invents a number. */
+
+:root {
+  /* ── CONTROL SIZING ──────────────────────────────────────────────
+     Three heights, and every button, input and select is one of them. */
+  --lg-control-h-sm: 24px;
+  --lg-control-h-md: 30px;
+  --lg-control-h-lg: 36px;
+
+  --lg-control-px-sm: 8px;
+  --lg-control-px-md: 11px;
+  --lg-control-px-lg: 14px;
+
+  --lg-gap-xs: 4px;
+  --lg-gap-sm: 8px;
+  --lg-gap-md: 12px;
+  --lg-gap-lg: 18px;
+
+  /* ── MOTION ──────────────────────────────────────────────────────
+     A docked panel sits inside an application with its own motion language,
+     so these are short. Anything above ~220ms reads as the panel being slow
+     rather than as animation. */
+  --lg-duration-fast: 110ms;
+  --lg-duration: 180ms;
+  --lg-duration-slow: 260ms;
+
+  --lg-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --lg-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --lg-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Set from LGLibrary.settings().radius by boot.js — the roundness slider. */
+  --lg-radius: 11px;
+  --lg-card-radius: var(--lg-radius);
+
+  --lg-z-banner: 40;
+  --lg-z-footer: 45;
+  --lg-z-menu: 90;
+  --lg-z-modal: 100;
+  --lg-z-toast: 120;
+}
+
+/* Somebody who has asked the operating system to stop animating things has
+   asked this panel too. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lg-duration-fast: 1ms;
+    --lg-duration: 1ms;
+    --lg-duration-slow: 1ms;
+  }
+}
+
+.lg-icon { flex: none; display: block; }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.lg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lg-gap-sm);
+  height: var(--lg-control-h-md);
+  padding: 0 var(--lg-control-px-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-raised);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--lg-duration-fast) var(--lg-ease),
+    border-color var(--lg-duration-fast) var(--lg-ease),
+    transform var(--lg-duration-fast) var(--lg-ease);
+}
+
+.lg-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.lg-btn:active { transform: translateY(1px); background: var(--bg-active); }
+
+.lg-btn.is-primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #1A1206;
+}
+.lg-btn.is-primary:hover { background: var(--accent-hover); }
+.lg-btn.is-primary:active { background: var(--accent-press); }
+
+.lg-btn.is-danger { color: var(--danger); border-color: rgba(255, 92, 92, 0.3); }
+.lg-btn.is-danger:hover { background: rgba(255, 92, 92, 0.12); border-color: var(--danger); }
+.lg-btn.is-danger.is-primary { background: var(--danger); color: #1A0606; border-color: transparent; }
+
+.lg-btn.is-small { height: var(--lg-control-h-sm); padding: 0 var(--lg-control-px-sm); font-size: var(--fs-caption); }
+.lg-btn.is-block { width: 100%; }
+.lg-btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+.lg-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: var(--lg-control-h-md);
+  height: var(--lg-control-h-md);
+  border: 1px solid transparent;
+  border-radius: var(--lg-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--lg-duration-fast) var(--lg-ease), color var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-icon-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+.lg-icon-btn:active { background: var(--bg-active); }
+
+.lg-btn:focus-visible,
+.lg-icon-btn:focus-visible,
+.lg-input:focus-visible,
+.lg-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.lg-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  margin-top: var(--lg-gap-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+.lg-link:hover { color: var(--accent-hover); text-decoration: underline; }
+
+/* ============================================================
+   INPUTS
+   ============================================================ */
+
+.lg-input {
+  width: 100%;
+  height: var(--lg-control-h-md);
+  padding: 0 var(--lg-control-px-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  transition: border-color var(--lg-duration-fast) var(--lg-ease), box-shadow var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-input::placeholder { color: var(--text-faint); }
+.lg-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-quiet);
+}
+.lg-input.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(255, 92, 92, 0.16); }
+
+.lg-textarea {
+  height: auto;
+  padding: var(--lg-gap-sm) var(--lg-control-px-md);
+  line-height: 1.5;
+  resize: vertical;
+  font-family: var(--font-sans);
+}
+
+.lg-field-label {
+  display: block;
+  margin: var(--lg-gap-md) 0 var(--lg-gap-xs);
+  color: var(--text-muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lg-field-label:first-child { margin-top: 0; }
+
+.lg-color-field {
+  width: 34px;
+  height: var(--lg-control-h-sm);
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.lg-range {
+  width: 100%;
+  height: 4px;
+  margin: var(--lg-gap-sm) 0;
+  border-radius: 999px;
+  background: var(--bg-input);
+  appearance: none;
+  cursor: pointer;
+}
+.lg-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg-panel);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ============================================================
+   TOASTS
+   ============================================================ */
+
+.lg-toasts {
+  position: fixed;
+  right: var(--lg-gap-md);
+  bottom: 44px;
+  z-index: var(--lg-z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lg-gap-sm);
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.lg-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  max-width: min(320px, calc(100vw - 24px));
+  padding: var(--lg-gap-sm) var(--lg-control-px-md);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--lg-radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-main);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  transition:
+    opacity var(--lg-duration) var(--lg-ease-out),
+    transform var(--lg-duration) var(--lg-ease-out);
+}
+.lg-toast.is-in { opacity: 1; transform: none; }
+.lg-toast.is-success { border-color: rgba(74, 222, 148, 0.4); color: var(--success); }
+.lg-toast.is-error { border-color: rgba(255, 92, 92, 0.45); color: var(--danger); }
+.lg-toast .lg-icon { margin-top: 1px; }
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+
+.lg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lg-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lg-gap-md);
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity var(--lg-duration) var(--lg-ease);
+}
+.lg-modal-backdrop.is-in { opacity: 1; }
+
+.lg-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  /* A docked panel can be 400px tall. The sheet has to fit inside it or the
+     buttons at the bottom are unreachable, which is the classic way a web
+     dialog fails once it is inside a panel. */
+  max-height: calc(100vh - 24px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--lg-radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-pop);
+  transform: translateY(10px) scale(0.985);
+  transition: transform var(--lg-duration-slow) var(--lg-ease-out);
+}
+.lg-modal-backdrop.is-in .lg-modal { transform: none; }
+.lg-modal.is-wide { max-width: 560px; }
+
+.lg-modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  flex: none;
+  padding: var(--lg-gap-md) var(--lg-gap-md) var(--lg-gap-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+.lg-modal-head h3 {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 400;
+  color: var(--text-main);
+}
+
+.lg-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lg-gap-md);
+}
+
+.lg-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--lg-gap-sm);
+  flex: none;
+  padding: var(--lg-gap-sm) var(--lg-gap-md) var(--lg-gap-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.lg-modal-text { color: var(--text-main); font-size: var(--fs-body); line-height: 1.55; }
+.lg-modal-detail {
+  margin-top: var(--lg-gap-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+}
+
+/* ============================================================
+   MENUS
+   ============================================================ */
+
+.lg-menu {
+  position: fixed;
+  z-index: var(--lg-z-menu);
+  min-width: 208px;
+  max-width: 300px;
+  padding: var(--lg-gap-xs);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--lg-radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--lg-duration-fast) var(--lg-ease), transform var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-menu.is-in { opacity: 1; transform: none; }
+
+.lg-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  width: 100%;
+  height: var(--lg-control-h-md);
+  padding: 0 var(--lg-gap-sm);
+  border: 0;
+  border-radius: calc(var(--lg-radius) - 3px);
+  background: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+.lg-menu-item:hover, .lg-menu-item:focus { background: var(--bg-hover); outline: none; }
+.lg-menu-item.is-danger { color: var(--danger); }
+.lg-menu-item.is-danger:hover { background: rgba(255, 92, 92, 0.14); }
+.lg-menu-item.is-disabled { opacity: 0.35; pointer-events: none; }
+
+.lg-menu-glyph { display: flex; width: 14px; color: var(--text-muted); }
+.lg-menu-item:hover .lg-menu-glyph { color: var(--accent); }
+.lg-menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-menu-hint { color: var(--text-faint); font-size: var(--fs-eyebrow); }
+.lg-menu-sep { height: 1px; margin: var(--lg-gap-xs) var(--lg-gap-sm); background: var(--border-light); }
+
+/* ============================================================
+   BANNERS — the diagnostics card
+   ============================================================ */
+
+.lg-banners { flex: none; }
+
+.lg-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lg-gap-sm);
+  margin: var(--lg-gap-sm) var(--lg-gap-md) 0;
+  padding: var(--lg-gap-sm) var(--lg-control-px-md);
+  border: 1px solid;
+  border-radius: var(--lg-radius);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+.lg-banner.is-warn { border-color: rgba(255, 179, 64, 0.35); background: rgba(255, 179, 64, 0.08); }
+.lg-banner.is-error { border-color: rgba(255, 92, 92, 0.4); background: rgba(255, 92, 92, 0.08); }
+
+.lg-banner-glyph { flex: none; margin-top: 2px; }
+.lg-banner.is-warn .lg-banner-glyph { color: var(--warning); }
+.lg-banner.is-error .lg-banner-glyph { color: var(--danger); }
+
+.lg-banner-text { flex: 1; min-width: 0; }
+.lg-banner-text strong { display: block; margin-bottom: 2px; color: var(--text-main); font-size: var(--fs-label); }
+.lg-banner-text p { color: var(--text-muted); }
+.lg-banner-tools { display: flex; align-items: center; gap: var(--lg-gap-xs); flex: none; }
+
+/* ============================================================
+   THE SHELF
+   ============================================================ */
+
+/* .view-panel in styles.css already owns show/hide, absolute fill and a 16px
+   pad. The shelf wants none of that pad — its toolbar is edge-to-edge and its
+   list scrolls on its own — so it opts out rather than nesting two scrollers,
+   which is what produces the panel-inside-a-panel scrollbar. */
+.lg-shelf.view-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.lg-shelf-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  flex: none;
+  flex-wrap: wrap;
+  padding: var(--lg-gap-sm) var(--lg-gap-md);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-app);
+}
+
+.lg-collection-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  height: var(--lg-control-h-md);
+  max-width: 45%;
+  padding: 0 var(--lg-gap-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-raised);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+.lg-collection-picker:hover { background: var(--bg-hover); }
+.lg-collection-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-collection-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-faint);
+  font-size: var(--fs-eyebrow);
+  font-variant-numeric: tabular-nums;
+}
+
+.lg-search {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  flex: 1;
+  min-width: 110px;
+  height: var(--lg-control-h-md);
+  padding: 0 var(--lg-gap-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-input);
+  color: var(--text-faint);
+}
+.lg-search:focus-within { border-color: var(--accent); color: var(--accent); }
+.lg-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+}
+.lg-search-input:focus { outline: none; }
+.lg-search-input::placeholder { color: var(--text-faint); }
+
+.lg-shelf-tools { display: flex; align-items: center; gap: var(--lg-gap-xs); }
+
+.lg-shelf-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lg-gap-md);
+}
+
+/* ── CARDS ──────────────────────────────────────────────────────────
+
+   Grid is an auto-fill so the panel decides how many fit rather than the
+   stylesheet guessing. At 300px wide that is one column, at 600px it is three,
+   and nothing has to be told the panel was resized. */
+
+.lg-cards { display: grid; gap: var(--lg-gap-sm); }
+
+.is-grid .lg-cards { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.is-grid.is-sm .lg-cards { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.is-grid.is-lg .lg-cards { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.is-list .lg-cards { grid-template-columns: 1fr; }
+
+.lg-card {
+  --lg-card-accent: var(--accent);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-card-radius);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition:
+    border-color var(--lg-duration-fast) var(--lg-ease),
+    transform var(--lg-duration-fast) var(--lg-ease),
+    box-shadow var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-card:hover {
+  border-color: var(--lg-card-accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
+}
+.lg-card.is-dragging { opacity: 0.4; }
+.lg-card.is-drop { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-quiet); }
+
+.lg-card-art {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.lg-card-art img,
+.lg-card-art canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lg-card-strip { display: flex; width: 100%; height: 100%; }
+.lg-card-strip span { flex: 1; }
+
+.lg-card-kind {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text-main);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Hover actions sit over the art, so the card never changes size and a grid
+   never reflows as the pointer crosses it. */
+.lg-card-quick {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--lg-gap-xs);
+  padding: var(--lg-gap-xs);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--lg-duration-fast) var(--lg-ease), transform var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-card:hover .lg-card-quick,
+.lg-card:focus-within .lg-card-quick { opacity: 1; transform: none; }
+
+.lg-quick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(20, 20, 20, 0.9);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-quick-btn:hover { background: var(--bg-hover); }
+.lg-quick-btn.is-primary { background: var(--accent); border-color: transparent; color: #1A1206; }
+.lg-quick-btn.is-primary:hover { background: var(--accent-hover); }
+
+.lg-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px var(--lg-gap-sm) var(--lg-gap-sm);
+}
+.lg-card-name {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lg-card-type { color: var(--text-faint); font-size: var(--fs-eyebrow); }
+
+/* List mode: the art becomes a thumbnail strip beside the name. */
+.is-list .lg-card { display: grid; grid-template-columns: 76px 1fr; align-items: center; }
+.is-list .lg-card-art { aspect-ratio: 16 / 9; border-radius: 0; }
+.is-list .lg-card-meta { padding: var(--lg-gap-sm); }
+.is-list .lg-card-quick {
+  inset: 0 0 0 auto;
+  align-items: center;
+  padding: 0 var(--lg-gap-sm);
+  background: linear-gradient(to left, var(--bg-panel) 60%, transparent);
+}
+
+/* ── FOLDERS ───────────────────────────────────────────────────── */
+
+.lg-folder { margin-top: var(--lg-gap-md); }
+.lg-folder:first-child { margin-top: 0; }
+
+.lg-folder-head {
+  --lg-folder-accent: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  width: 100%;
+  height: var(--lg-control-h-md);
+  padding: 0 var(--lg-gap-sm);
+  padding-left: calc(var(--lg-gap-sm) + var(--lg-folder-depth, 0) * 12px);
+  border: 1px solid transparent;
+  border-radius: var(--lg-radius);
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-folder-head:hover { background: var(--bg-panel); color: var(--text-main); }
+.lg-folder-head.is-drop { border-color: var(--accent); background: var(--accent-quiet); color: var(--accent); }
+.lg-folder-glyph { color: var(--lg-folder-accent); }
+.lg-folder-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.lg-folder-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-faint);
+  font-size: var(--fs-eyebrow);
+  font-variant-numeric: tabular-nums;
+}
+.lg-folder-body { padding: var(--lg-gap-sm) 0 0 calc(var(--lg-folder-depth, 0) * 12px); }
+.lg-folder-empty {
+  padding: var(--lg-gap-md);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--lg-radius);
+  color: var(--text-faint);
+  font-size: var(--fs-caption);
+  text-align: center;
+}
+
+/* ── EMPTY STATE ───────────────────────────────────────────────────
+
+   Not decoration. This is the screen every new user sees first, so it says
+   what a preset is and offers the two ways to make one. */
+
+.lg-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  padding: 44px var(--lg-gap-md);
+  text-align: center;
+}
+.lg-empty-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  background: var(--bg-panel);
+  color: var(--text-faint);
+}
+.lg-empty h4 { color: var(--text-main); font-size: var(--fs-body); font-weight: 600; }
+.lg-empty p { max-width: 300px; color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
+.lg-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--lg-gap-sm); margin-top: var(--lg-gap-xs); }
+
+/* ============================================================
+   PICKER LISTS — add from library, restore
+   ============================================================ */
+
+.lg-picker-list {
+  max-height: 320px;
+  margin-top: var(--lg-gap-sm);
+  overflow-y: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-sunken);
+}
+
+.lg-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  width: 100%;
+  padding: var(--lg-gap-sm) var(--lg-control-px-md);
+  border: 0;
+  border-bottom: 1px solid var(--border-light);
+  background: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+.lg-picker-row:last-child { border-bottom: 0; }
+.lg-picker-row:hover { background: var(--bg-hover); }
+
+.lg-picker-swatch { flex: none; width: 30px; height: 18px; border: 1px solid var(--border-light); border-radius: 5px; }
+.lg-picker-glyph { flex: none; color: var(--text-faint); }
+.lg-picker-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-picker-type { color: var(--text-faint); font-size: var(--fs-eyebrow); }
+
+.lg-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-quiet);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.lg-badge.is-quiet { background: var(--bg-raised); color: var(--text-faint); }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+.lg-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lg-gap-sm);
+  flex: none;
+  z-index: var(--lg-z-footer);
+  height: 34px;
+  padding: 0 var(--lg-gap-sm) 0 var(--lg-gap-md);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-app);
+}
+
+.lg-footer-left { display: flex; align-items: center; gap: var(--lg-gap-sm); min-width: 0; }
+.lg-footer-count { color: var(--text-faint); font-size: var(--fs-eyebrow); letter-spacing: 0.04em; }
+.lg-footer-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); font-size: var(--fs-eyebrow); }
+.lg-footer-right { display: flex; align-items: center; gap: 2px; }
+
+.lg-icon-btn.lg-bell { position: relative; }
+.lg-bell.has-news { color: var(--accent); }
+.lg-bell-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #1A1206;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 13px;
+  text-align: center;
+}
+
+/* ============================================================
+   SETTINGS, MESSAGES, FEEDBACK, HELP, ABOUT
+   ============================================================ */
+
+.lg-settings-head {
+  margin: var(--lg-gap-lg) 0 var(--lg-gap-sm);
+  color: var(--text-faint);
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lg-settings-head:first-child { margin-top: 0; }
+
+.lg-setting-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-md);
+  padding: var(--lg-gap-sm) 0;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+}
+.lg-setting-row.is-column { flex-direction: column; align-items: stretch; gap: 0; cursor: default; }
+.lg-setting-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.lg-setting-text strong { color: var(--text-main); font-size: var(--fs-label); font-weight: 600; }
+.lg-setting-text em { color: var(--text-faint); font-size: var(--fs-eyebrow); font-style: normal; line-height: 1.45; }
+.lg-setting-head { display: flex; align-items: center; justify-content: space-between; }
+.lg-setting-head strong { color: var(--text-main); font-size: var(--fs-label); font-weight: 600; }
+.lg-setting-value { color: var(--accent); font-family: var(--font-mono); font-size: var(--fs-eyebrow); }
+.lg-setting-hint { color: var(--text-faint); font-size: var(--fs-eyebrow); line-height: 1.5; }
+
+.lg-settings-where { margin-top: var(--lg-gap-lg); }
+.lg-settings-where code {
+  display: block;
+  margin-bottom: var(--lg-gap-sm);
+  padding: var(--lg-gap-sm);
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-eyebrow);
+}
+.lg-settings-where .lg-btn { margin-top: var(--lg-gap-sm); }
+
+.lg-update-card {
+  padding: var(--lg-gap-md);
+  margin-bottom: var(--lg-gap-md);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--lg-radius);
+  background: var(--accent-quiet);
+}
+.lg-update-card.is-critical { border-color: var(--danger); background: rgba(255, 92, 92, 0.1); }
+.lg-update-head { display: flex; align-items: center; gap: var(--lg-gap-sm); margin-bottom: var(--lg-gap-xs); color: var(--accent); }
+.lg-update-card p { margin-bottom: var(--lg-gap-sm); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.55; }
+
+.lg-message { padding: var(--lg-gap-md) 0; border-bottom: 1px solid var(--border-light); }
+.lg-message:last-child { border-bottom: 0; }
+.lg-message header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--lg-gap-sm); margin-bottom: var(--lg-gap-xs); }
+.lg-message header strong { color: var(--text-main); font-size: var(--fs-label); }
+.lg-message time { color: var(--text-faint); font-size: var(--fs-eyebrow); }
+.lg-message p { color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
+.lg-message.is-warning header strong { color: var(--warning); }
+
+.lg-kind-picker { display: flex; gap: var(--lg-gap-xs); margin-bottom: var(--lg-gap-md); }
+.lg-kind {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  padding: var(--lg-gap-sm) var(--lg-gap-xs);
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--lg-duration-fast) var(--lg-ease), color var(--lg-duration-fast) var(--lg-ease);
+}
+.lg-kind:hover { color: var(--text-main); }
+.lg-kind.is-on { border-color: var(--accent); background: var(--accent-quiet); color: var(--accent); }
+
+.lg-context { margin-top: var(--lg-gap-md); }
+.lg-context summary {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-xs);
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.lg-context dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px var(--lg-gap-sm);
+  margin: var(--lg-gap-sm) 0;
+  padding: var(--lg-gap-sm);
+  border-radius: 7px;
+  background: var(--bg-sunken);
+  font-size: var(--fs-eyebrow);
+}
+.lg-context dt, .lg-editor-facts dt { color: var(--text-faint); }
+.lg-context dd, .lg-editor-facts dd { color: var(--text-muted); overflow-wrap: anywhere; }
+
+.lg-editor-row { display: flex; align-items: center; gap: var(--lg-gap-sm); margin-top: var(--lg-gap-md); }
+.lg-editor-row .lg-field-label { flex: 1; margin: 0; }
+.lg-editor-facts {
+  margin-top: var(--lg-gap-lg);
+  padding-top: var(--lg-gap-md);
+  border-top: 1px solid var(--border-light);
+}
+.lg-editor-facts dl { display: grid; grid-template-columns: auto 1fr; gap: 3px var(--lg-gap-md); font-size: var(--fs-eyebrow); }
+
+.lg-help section { margin-bottom: var(--lg-gap-lg); }
+.lg-help h4 { margin-bottom: var(--lg-gap-xs); color: var(--text-main); font-size: var(--fs-label); font-weight: 700; }
+.lg-help p { margin-bottom: var(--lg-gap-xs); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.65; }
+.lg-help em { color: var(--text-main); font-style: normal; font-weight: 600; }
+.lg-help code {
+  display: inline-block;
+  padding: 2px 6px;
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+  background: var(--bg-input);
+  font-family: var(--font-mono);
+  font-size: var(--fs-eyebrow);
+}
+
+.lg-about { text-align: center; }
+.lg-about-mark { display: flex; justify-content: center; margin-bottom: var(--lg-gap-md); }
+.lg-about h3 { font-family: var(--font-display); font-size: 22px; font-weight: 400; color: var(--text-main); }
+.lg-about-version { margin-bottom: var(--lg-gap-md); color: var(--text-faint); font-size: var(--fs-caption); }
+.lg-about dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px var(--lg-gap-md);
+  text-align: left;
+  font-size: var(--fs-caption);
+}
+.lg-about dt { color: var(--text-faint); }
+.lg-about dd { color: var(--text-main); }
+
+/* ============================================================
+   THE SAVE SECTION IN THE INSPECTOR
+   ============================================================ */
+
+.lg-save-row { display: flex; gap: var(--lg-gap-sm); }
+.lg-save-row .lg-btn { flex: 1; min-width: 0; }
+.lg-capture-btn { margin-top: var(--lg-gap-sm); }
+.lg-save-section .ctrl-hint { margin-top: var(--lg-gap-sm); }
+
+/* ============================================================
+   DROP TARGET
+   ============================================================ */
+
+body.lg-dropping::after {
+  content: 'Drop a preset file to import it, or an image to pull its colours';
+  position: fixed;
+  inset: var(--lg-gap-sm);
+  z-index: var(--lg-z-toast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lg-gap-lg);
+  border: 2px dashed var(--accent);
+  border-radius: var(--lg-radius);
+  background: rgba(220, 181, 88, 0.1);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ============================================================
+   NARROW PANEL
+
+   A CEP panel docks as a column. Below ~360px the toolbar has to stop being
+   one row, or the search field collapses to nothing and the collection name
+   truncates to two characters.
+   ============================================================ */
+
+@media (max-width: 360px) {
+  .lg-shelf-bar { align-items: stretch; }
+  .lg-collection-picker { order: 1; max-width: none; flex: 1; }
+  .lg-shelf-tools { order: 2; }
+  .lg-search { order: 3; flex-basis: 100%; }
+  .lg-kind-picker { flex-direction: column; }
+  .lg-kind { flex-direction: row; justify-content: flex-start; gap: var(--lg-gap-sm); }
+  .lg-modal-foot { flex-direction: column-reverse; }
+  .lg-modal-foot .lg-btn { width: 100%; }
+  .lg-save-row { flex-direction: column; }
+}
+
+/* ============================================================
+   THE XY PAD
+
+   A square of dots with a handle, for gradients whose subject is *where*
+   something sits rather than how much of it there is.
+
+   The dot is positioned with left/top percentages and translated back by half
+   itself, so 0,0 puts its centre on the corner rather than its top-left. That
+   matters: the useful values for a SaaS bloom are the extremes, and a handle
+   that cannot reach the corner cannot express them.
+   ============================================================ */
+
+.ctrl-row.is-xy-head {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-gap-sm);
+  margin-bottom: 6px;
+}
+.ctrl-row.is-xy-head .ctrl-label { flex: 1; }
+
+.xy-readout {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-eyebrow);
+  font-variant-numeric: tabular-nums;
+}
+
+.xy-pad {
+  position: relative;
+  width: 100%;
+  /* Square, and it stays square as the panel is resized — a position pad with
+     a different aspect to the comp lies about where the dot will land. */
+  aspect-ratio: 1 / 1;
+  max-width: 190px;
+  margin: 0 auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--lg-radius);
+  background-color: var(--bg-input);
+  /* The dotted grid, and a faint cross through the middle so centre is
+     findable by eye rather than only by the readout. */
+  background-image:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(to right, transparent calc(50% - 0.5px), rgba(255, 255, 255, 0.07) calc(50% - 0.5px), rgba(255, 255, 255, 0.07) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255, 255, 255, 0.07) calc(50% - 0.5px), rgba(255, 255, 255, 0.07) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+  background-size: 12.5% 12.5%, 100% 100%, 100% 100%;
+  background-position: center;
+  cursor: crosshair;
+  touch-action: none;          /* or a drag scrolls the panel instead */
+  transition: border-color var(--lg-duration-fast) var(--lg-ease);
+}
+
+.xy-pad:hover { border-color: var(--border-strong); }
+.xy-pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.xy-pad.is-dragging { border-color: var(--accent); }
+
+.xy-dot {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  border: 2px solid var(--bg-panel);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  /* No transition on left/top: the handle must sit under the pointer exactly,
+     and easing it puts it visibly behind a fast drag. The scale-up on grab is
+     the only thing that animates. */
+  transition: transform var(--lg-duration-fast) var(--lg-ease);
+}
+.xy-pad.is-dragging .xy-dot { transform: scale(1.25); }
+
+/* A soft halo showing roughly what the bloom will cover. Decoration, but it is
+   the difference between placing a dot and placing a light. */
+.xy-dot::after {
+  content: '';
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+}
+
+@media (max-width: 320px) {
+  .xy-pad { max-width: none; }
+}

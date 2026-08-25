@@ -1,0 +1,34 @@
+{
+  // Living Gradients — panel service.
+  // See worker.js for what each route does and server/README.md for deployment.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "living-gradients-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-01",
+
+  // Observability on by default: this is a service you will forget exists
+  // until it breaks, and the logs are how you find out it did.
+  "observability": {
+    "enabled": true
+  },
+
+  "kv_namespaces": [
+    {
+      "binding": "LG_KV",
+      // Replace with the id printed by:
+      //   npx wrangler kv namespace create LG_KV
+      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+    }
+  ]
+
+  // Secrets are NOT set here — they go in with `wrangler secret put`, so they
+  // never land in the repository:
+  //   ADMIN_TOKEN        guards /admin/*
+  //   FEEDBACK_WEBHOOK   where reports are forwarded (Discord/Slack/automation)
+
+  // To serve this from api.digivero.dev instead of the workers.dev subdomain,
+  // add the zone to Cloudflare and uncomment:
+  // ,"routes": [
+  //   { "pattern": "api.digivero.dev/living-gradients/*", "zone_name": "digivero.dev" }
+  // ]
+}

@@ -133,5 +133,142 @@ category error rather than a typo.
 *   **Posterize Time** — Frame Rate 1.
 *   **Missing on this machine:** VR Color Gradient, PE Thick Stroke.
 
+## 3. Product Architecture (Aug 2026 — after taking Code Runner 2 apart)
+
+Everything above is about making After Effects do the right thing. This section
+is about the other half: what turns a script that works into a product somebody
+can own, share and get support for. It came out of dissecting Jake In Motion's
+Code Runner 2, which is a CEP panel built on Bolt CEP (Vite + React 19), and
+finding that almost none of what makes it feel finished is in its React code.
+
+### 3.1. User data never lives inside the extension
+
+Our presets were in `localStorage`. That put them inside the extension's CEF
+cache — the exact thing you clear to fix a panel that opens blank. The standard
+support answer destroyed the user's work.
+
+The rule: anything the user made goes in a per-user support folder beside the
+host application's own data, reached through
+`CSInterface.getSystemPath(SystemPath.USER_DATA)` rather than assembled from
+`process.env` (which is absent precisely when nodejs failed, i.e. exactly when
+you need the fallback). Ours is
+`%APPDATA%\Digivero\LivingGradients2` / `~/Library/Application Support/...`.
+
+Three properties follow, and all three are the reason to bother:
+
+*   **Updating cannot cost a preset.** Install over the top; the data is
+    elsewhere.
+*   **It can be backed up and moved**, because it is a folder a human can find.
+*   **It can be repaired.** Write the index atomically (temp file, then rename)
+    and *also* write each record as its own file. A truncated index is then
+    rebuildable from the records — the user loses their folder arrangement, not
+    their work.
+
+### 3.2. A preset is the instruction, not the output
+
+`applyGlobalPolish()` had been stamping the entire build payload onto every
+generated layer as `LIVING_GRADIENT_DATA:` for months. Capture-from-comp is a
+*read* of that string. It is exact by construction, because it is the same
+instruction played back rather than an effect stack inspected and guessed at.
+
+Two consequences worth writing down:
+
+*   Capture only works on layers we made. There is no general way to read an
+    arbitrary effect stack back into parameters, and pretending otherwise
+    produces presets that silently rebuild something else. Say so in the error.
+*   Dimensions must never be part of a preset. Every builder takes `w`/`h` from
+    the active comp, so a preset captured at 1080p fills a square comp properly
+    — but only if the stored payload does not carry the old size along.
+
+**After Effects cannot save an `.ffx` from script.** There is no API for writing
+animation presets, and an `.ffx` is per-layer while these gradients are five or
+six layers plus a precomp, a matte and expressions. Our own format is not a
+compromise, it is the only option — and it is the better one, because it
+re-renders at any size.
+
+### 3.3. The library/collection split
+
+Code Runner's structural idea, worth copying exactly: a preset lives in one
+library; a collection holds a *reference* to it. So the same preset appears in
+several collections, editing it changes all of them, and removing it from a
+collection is a soft act that leaves it in the library flagged "unused".
+
+That single distinction is what makes deleting a collection unscary, and it is
+why "Add from library" exists as a first-class action rather than an undo.
+
+### 3.4. `alert()` and `confirm()` are not available to us
+
+Inside a CEP panel they are Chromium's dialogs: centred on the whole screen
+rather than the panel, unstyled, and blocking the CEF thread — which in a docked
+panel reads as After Effects hanging. One of them undoes an otherwise careful
+interface. We had six.
+
+Replace them with in-panel dialogs that trap focus, close on Escape, and return
+a Promise. Trapping focus is not politeness here: focus escaping a panel goes to
+After Effects, where keystrokes become tool shortcuts.
+
+### 3.5. `typeof CSInterface !== 'undefined'` is the wrong guard
+
+`CSInterface.js` defines the class in any browser. What it cannot conjure is
+`window.__adobe_cep__`, which every one of its methods delegates to. So outside
+After Effects the guard passes, the call is made, and it throws on the first
+property read. This codebase had ten of them, and opening `index.html` in a
+browser produced six uncaught errors before the page finished loading.
+
+Test for the bridge itself (`window.lgHostReady()`). The side effect is that a
+plain browser becomes a usable place to work on the interface.
+
+### 3.6. Say the diagnosis once, at the top
+
+Code Runner's best small idea. If After Effects cannot write files, every script
+button fails — so rather than letting each fail confusingly, it puts one card at
+the top of the panel with the condition and the fix.
+
+We have two such conditions: After Effects cannot write files (no thumbnails)
+and the data folder is not writable (no presets at all). Both are otherwise
+silent. Both have a fix the user can carry out. The "Allow Scripts to Write
+Files" one additionally needs "**and restart After Effects**" in the message,
+because the setting is not picked up until it does.
+
+### 3.7. Three endpoints are a whole backend
+
+`/version`, `/messages`, `/feedback`. That is the entire cloud footprint of a
+product with thousands of users, and it fits in one Cloudflare Worker with a KV
+namespace.
+
+The feedback button is a product feature, not a support one. Reports arrive
+whether or not you provide a channel; the only question is whether they carry
+the After Effects version, language, platform and whether file-writing is on.
+Attaching that automatically — and *showing* the user what is attached, so they
+leave it on — is the whole trick.
+
+### 3.8. The design system needs its second half
+
+`css/styles.css` had 49 tokens: surfaces, accent, type, radii. Good ones. What
+was missing is what Code Runner's CSS has and ours did not — control heights,
+spacing steps, durations, easings. Without those, every new component invents
+its own 28px and its own 0.2s, and the panel stops agreeing with itself one
+component at a time. See the token block at the top of `css/shelf.css`.
+
+### 3.9. Shipping is a build step, not a copy
+
+`sync_to_cep.ps1` copied the working tree, `.debug` file and all — a remote
+debugging port left open on every customer's machine — and required every
+customer to enable PlayerDebugMode because an unsigned folder will not load.
+
+A release is: stage from an **allowlist** (a denylist ships whatever you added
+last week and forgot), stamp the version from the manifest into the panel so the
+update check compares two numbers that cannot drift, syntax-check every file,
+sign with a timestamped signature (`-tsa`), and produce a folder with the `.zxp`,
+a README and an INSTALL beside it. `tools/build.ps1` does all of it.
+
+Keep the signing certificate. Signing an update with a different one makes it a
+different product to the installer.
+
+Two footguns found by running it: `--` is illegal inside an XML comment, so a
+manifest documenting its own `--enable-nodejs` flags will not parse; and
+`Get-Content` without `-Raw` hands PowerShell an array, which turns a real XML
+error into a confusing cast error.
+
 ---
 *Generated for the Living Gradients & Liquid Ether Ecosystem.*
