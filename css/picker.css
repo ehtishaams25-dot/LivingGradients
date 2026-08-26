@@ -1,0 +1,277 @@
+/* ============================================
+   PICKER.CSS — the in-panel colour picker
+   ============================================
+
+   Every value here is a token from styles.css. The picker is a part of the
+   panel, not a widget dropped into it, so it uses the panel's surfaces, the
+   panel's radii and the panel's accent and inherits any future change to
+   them for free.
+
+   One thing is deliberately not tokenised: the saturation field and the hue
+   rail carry real colour, because that is what they are for. They are the
+   only two coloured surfaces in the whole panel, which is also why the rest
+   of the chrome around them is kept grey and quiet. */
+
+.lgp {
+  position: fixed;
+  z-index: 9000;                 /* above the inspector, below modals (9500) */
+  width: 268px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+
+  /* Docked to the edge of After Effects this panel is routinely under 300px
+     tall, which is shorter than the picker wants to be. Capping it to the
+     viewport and letting it scroll means the saturation field keeps its full
+     size and the recents scroll out of reach, rather than everything being
+     squeezed until none of it works. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-sans);
+  color: var(--text-main);
+  user-select: none;
+}
+
+.lgp[hidden] { display: none; }
+
+/* ── head ─────────────────────────────────────────────────────────── */
+
+.lgp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lgp-title {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lgp-x {
+  flex: none;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background var(--trans-fast), color var(--trans-fast);
+}
+.lgp-x:hover { background: var(--bg-hover); color: var(--text-main); }
+.lgp-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── body: field + rail on the left, palette roles on the right ────── */
+
+.lgp-body { display: flex; gap: 9px; align-items: stretch; }
+.lgp-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.lgp-sv {
+  position: relative;
+  height: 116px;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  touch-action: none;                 /* or the drag scrolls the panel */
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--border-light);
+}
+/* White across, black down. Two layers over the hue underneath is the whole
+   saturation/brightness square — no canvas, so it stays crisp at any size and
+   costs nothing to repaint while dragging. */
+.lgp-sv-white,
+.lgp-sv-black { position: absolute; inset: 0; }
+.lgp-sv-white { background: linear-gradient(to right, #fff, rgba(255,255,255,0)); }
+.lgp-sv-black { background: linear-gradient(to top, #000, rgba(0,0,0,0)); }
+.lgp-sv:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.lgp-hue {
+  position: relative;
+  height: 13px;
+  border-radius: var(--radius-pill);
+  cursor: ew-resize;
+  touch-action: none;
+  box-shadow: inset 0 0 0 1px var(--border-light);
+  background: linear-gradient(to right,
+    #f00 0%, #ff0 16.66%, #0f0 33.33%, #0ff 50%, #00f 66.66%, #f0f 83.33%, #f00 100%);
+}
+.lgp-hue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.lgp-knob {
+  position: absolute;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,0.42), 0 1px 4px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+.lgp-hue-knob { top: 50%; }
+
+/* ── palette roles ────────────────────────────────────────────────── */
+
+.lgp-roles {
+  flex: none;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  max-height: 137px;
+}
+.lgp-roles[hidden] { display: none; }
+
+.lgp-role {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 5px;
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--trans-fast), border-color var(--trans-fast);
+}
+.lgp-role:hover { background: var(--bg-hover); }
+.lgp-role.is-current {
+  border-color: var(--border-accent);
+  background: var(--accent-quiet);
+  cursor: default;
+}
+.lgp-role:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.lgp-role-chip {
+  flex: none;
+  width: 13px; height: 13px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+}
+
+.lgp-role-name {
+  font-size: 9.5px;
+  line-height: 1.15;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lgp-role.is-current .lgp-role-name { color: var(--text-main); }
+
+/* ── fields ───────────────────────────────────────────────────────── */
+
+.lgp-fields { display: flex; gap: 5px; align-items: flex-end; }
+
+.lgp-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 0; }
+.lgp-f-hex { flex: 1.9 1 0; }
+
+.lgp-f > span {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  padding-left: 1px;
+}
+
+.lgp-f input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 5px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: center;
+}
+.lgp-f-hex input { text-transform: uppercase; }
+.lgp-f input:hover { border-color: var(--border-strong); }
+.lgp-f input:focus {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* The spinners are 20px of chrome each on a 40px-wide field, and the value is
+   already keyboard-steppable. */
+.lgp-f input[type="number"]::-webkit-inner-spin-button,
+.lgp-f input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.lgp-eye {
+  flex: none;
+  width: 26px; height: 24px;
+  display: grid; place-items: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--trans-fast), color var(--trans-fast), border-color var(--trans-fast);
+}
+.lgp-eye:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--border-accent); }
+.lgp-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.lgp-hsl {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+}
+
+/* ── recents ──────────────────────────────────────────────────────── */
+
+.lgp-recent-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.lgp-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.lgp-recent { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.lgp-swatch {
+  width: 20px; height: 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+  transition: transform var(--trans-fast), box-shadow var(--trans-fast);
+}
+.lgp-swatch:hover {
+  transform: scale(1.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), 0 2px 6px rgba(0,0,0,0.5);
+}
+.lgp-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.lgp-recent-empty { font-size: 10px; color: var(--text-faint); }
+
+/* ── narrow panel ─────────────────────────────────────────────────
+   Docked to the side of After Effects the panel is often under 300px wide.
+   The roles column is the first thing to go: it is context, and the field and
+   the hex box are the job. */
+@media (max-width: 320px) {
+  .lgp { width: calc(100vw - 16px); }
+  .lgp-roles { display: none; }
+}

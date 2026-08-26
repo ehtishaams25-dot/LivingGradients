@@ -43,10 +43,52 @@ var LGService = (function () {
   /* Point this at your own deployment. server/worker.js in this repo is a
      Cloudflare Worker that implements all three routes; deploy it, put its
      hostname here, and the panel lights up. Until then every call fails
-     quietly and the panel behaves exactly as it does today. */
-  var API = 'https://api.digivero.dev/living-gradients';
+     quietly and the panel behaves exactly as it does today.
 
-  var PANEL_VERSION = '2.0.0';
+     THE PLACEHOLDER IS NAMED, not just written down. Two things follow from
+     that, and both matter:
+
+       - Nothing is requested while it is still the placeholder. Before, the
+         panel woke up twice a day to make two requests to a host that does not
+         resolve, per install, forever. Failing quietly is not the same as not
+         trying: a DNS lookup that times out holds the bell spinning for six
+         seconds every time the panel opens.
+
+       - tools/build.ps1 warns on it by matching this exact string. Keep the two
+         in step if either changes. */
+  var API_PLACEHOLDER = 'https://api.digivero.dev/living-gradients';
+  var API = API_PLACEHOLDER;
+
+  /* A deployed install can be repointed without a new build.
+
+     If the host in settings.json is set, it wins. This exists because the
+     alternative is that a domain change bricks the update channel of every
+     copy already out there — the one channel that could have told them to
+     update. It is opt-in, it is only read from the user's own data folder, and
+     it is the sort of thing that costs nothing until the day it is the only
+     way out. */
+  function resolveApi() {
+    try {
+      if (typeof LGLibrary === 'undefined') return;
+      var override = (LGLibrary.settings() || {}).apiHost;
+      if (typeof override === 'string' && /^https:\/\/[\w.-]+/.test(override)) {
+        API = override.replace(/\/+$/, '');
+      }
+    } catch (e) { /* settings unreadable; the compiled default stands */ }
+  }
+
+  /* Is there anywhere to call? Every entry point checks this, so an
+     undeployed build does nothing rather than doing something slow. */
+  function configured() {
+    return API !== API_PLACEHOLDER;
+  }
+
+  /* Stamped from CSXS/manifest.xml by tools/build.ps1 on every build, so this
+     literal only matters when the panel is run straight from the repo in a
+     browser. Kept in step with the manifest anyway: a number in the source that
+     disagrees with the version of record is a number somebody will eventually
+     trust. */
+  var PANEL_VERSION = '2.1.0';
   var PRODUCT_URL = 'https://digivero.gumroad.com/l/livinggradients';
 
   var CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;   /* twice a day at most */
@@ -151,6 +193,7 @@ var LGService = (function () {
   }
 
   function checkForUpdate(force) {
+    if (!configured()) return Promise.resolve(null);
     var settings = LGLibrary.settings();
     if (!settings.checkForUpdates && !force) return Promise.resolve(null);
 
@@ -183,6 +226,7 @@ var LGService = (function () {
   /* ── MESSAGES ────────────────────────────────────────────────────── */
 
   function fetchMessages(force) {
+    if (!configured()) return Promise.resolve(inboxState());
     var settings = LGLibrary.settings();
     if (!settings.checkForUpdates && !force) return Promise.resolve(inboxState());
 
@@ -290,7 +334,7 @@ var LGService = (function () {
   }
 
   function flushQueue() {
-    if (!LGStore.available()) return Promise.resolve(0);
+    if (!configured() || !LGStore.available()) return Promise.resolve(0);
     var path = LGStore.join(LGStore.paths.root, 'outbox.json');
     var queue = LGStore.readJson(path, []);
     if (!queue.length) return Promise.resolve(0);
@@ -319,7 +363,24 @@ var LGService = (function () {
   /* Deliberately late and deliberately quiet. The panel is fully usable
      before any of this runs, and if all of it fails nothing changes. */
   function start() {
+    /* The settings override is read here rather than at module load, because
+       js/library.js has to be up before LGLibrary.settings() means anything and
+       the load order puts it after this file. */
+    resolveApi();
     loadInbox();
+
+    if (!configured()) {
+      /* Said once, to the console, not to the user. An undeployed backend is a
+         developer's problem and there is nothing a customer could do about it. */
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[Living Gradients] No backend configured (API is still the ' +
+                     'placeholder), so update checks, messages and feedback are off. ' +
+                     'Deploy server/worker.js and set API in js/service.js, or put ' +
+                     'apiHost in settings.json.');
+      }
+      return;
+    }
+
     setTimeout(function () {
       checkForUpdate(false);
       fetchMessages(false);
@@ -330,7 +391,12 @@ var LGService = (function () {
   return {
     version: PANEL_VERSION,
     productUrl: PRODUCT_URL,
-    api: API,
+    /* A function, not a value. `api: API` captured the placeholder at module
+       creation, which is before resolveApi() has had a chance to run, so the
+       diagnostics card would report the wrong host for the rest of the
+       session. */
+    api: function () { return API; },
+    configured: configured,
 
     start: start,
     onChange: onChange,

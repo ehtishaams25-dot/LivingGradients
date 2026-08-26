@@ -412,7 +412,7 @@ function lgApplyPalette(colorsStr) {
     try {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) return 'ERROR: No active composition.';
-        if (typeof updateLiveColors !== 'function') return 'ERROR: The panel is out of date — reopen it.';
+        if (typeof updateLiveColors !== 'function') return 'ERROR: The panel is out of date \u2014 reopen it.';
         updateLiveColors(colorsStr);
         return 'Recoloured.';
     } catch (e) {

@@ -13,7 +13,6 @@
    keeps four unlabelled ones and behaves as it always has. `defaultColors` in
    the library below supplies the starting values and must match the length. */
 const COLOR_ROLES = {
-  Metallic:       ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
   Halftone:       ['Ink A', 'Ink B', 'Paper'],
   Sunburst:       ['Ray A', 'Ray B', 'Backdrop'],
   LiquidWaves:    ['Deep', 'Mid', 'Bright', 'Crest'],
@@ -33,27 +32,7 @@ const COLOR_ROLES = {
   /* The only gradient in the library whose first swatch is the BACKGROUND
      rather than a stop in a ramp. In this look the background is most of what
      you see, so it gets the first slot and says so. */
-  SaaS:           ['Background', 'Bloom', 'Accent Bloom', 'Third Bloom'],
-
-  /* The shaded metals. These four are not a ramp between corners — they are
-     the four things a lit metal surface is made of, and the shader uses each
-     one for a different job:
-
-       Shadow      what the surface reflects where nothing is lighting it
-       Base Metal  the body colour — the part that says copper, not steel
-       Bright      the reflected environment's light side
-       Highlight   the specular hit itself
-
-     Getting these in the wrong order is the difference between gold and mud,
-     which is why they are named rather than sorted by luminance. */
-  Brushed:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Polished:       ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Hammered:       ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Foil:           ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Gold:           ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Copper:         ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Mercury:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Gunmetal:       ['Shadow', 'Base Metal', 'Bright', 'Highlight']
+  SaaS:           ['Background', 'Bloom', 'Accent Bloom', 'Third Bloom']
 };
 
 /* The slots for a type: its declared roles, or four unlabelled. */
@@ -155,28 +134,15 @@ const GRADIENT_LIBRARY = [
   { id: 'Glass', category: 'Glass', label: 'Frosted Glass', cssClass: 'preview-glass', defaultColors: ['#0B1622', '#3E6E8C', '#BFE3F0', '#FFFFFF'] },
   { id: 'ReededGlass', category: 'Glass', label: 'Reeded Glass', cssClass: 'preview-reeded', defaultColors: ['#003366', '#0099CC', '#00CED1', '#E6E6FA'] },
 
-  /* LIQUID METAL
-     Flow, not surface. These two are about metal *moving* — bands of
-     reflection sliding over each other — which is a different look from a
-     still metal plate and belongs in its own section rather than sitting at
-     the top of Metal pretending to be one of them. */
-  { id: 'Metallic', category: 'Liquid Metal', label: 'Liquid Chrome', cssClass: 'preview-pulse', defaultColors: ['#05070C', '#3E5A78', '#B9D4E8', '#FFFFFF'] },
-  { id: 'Mercury', category: 'Liquid Metal', label: 'Liquid Mercury', cssClass: 'preview-pulse', defaultColors: ['#04070A', '#6C7A85', '#C3D2DB', '#FFFFFF'] },
+  /* The metals used to live here — Liquid Chrome and Liquid Mercury, then
+     seven shaded plates on CC Glass's Blinn-Phong shader. They are removed.
+     Every attempt to make them read as lit metal rather than as a striped
+     ramp either failed outright or only held at one comp size, and shipping a
+     look that is convincing in the card and wrong in the render is worse than
+     not shipping it.
 
-  /* METAL
-     A lit metal surface, shaded rather than drawn. Each of these is a height
-     field under a real light — CC Glass's Blinn-Phong shader with Metal at
-     full, so the specular takes the metal's own colour instead of the
-     light's. That is the whole reason gold reads as gold here and read as a
-     yellow gradient before.
-
-     The palettes are the metals. Shadow / Base Metal / Bright / Highlight, in
-     that order, and the order is load-bearing. */
-  { id: 'Polished', category: 'Metal', label: 'Polished Chrome', cssClass: 'preview-pulse', defaultColors: ['#05070C', '#46586B', '#B7CBDD', '#FFFFFF'] },
-  { id: 'Brushed', category: 'Metal', label: 'Brushed Steel', cssClass: 'preview-pulse', defaultColors: ['#16191C', '#5C6570', '#AEB8C2', '#F2F6FA'] },
-  { id: 'Gold', category: 'Metal', label: 'Molten Gold', cssClass: 'preview-pulse', defaultColors: ['#2B1A05', '#A9791C', '#F0C05A', '#FFF2C4'] },
-  { id: 'Copper', category: 'Metal', label: 'Polished Copper', cssClass: 'preview-pulse', defaultColors: ['#2A0E06', '#9E4B22', '#E08A55', '#FFD9BE'] },
-  { id: 'Gunmetal', category: 'Metal', label: 'Gunmetal', cssClass: 'preview-pulse', defaultColors: ['#07090B', '#2E3946', '#6E7F92', '#C9D8E4'] },
-  { id: 'Hammered', category: 'Metal', label: 'Hammered Metal', cssClass: 'preview-pulse', defaultColors: ['#0E1113', '#4A535B', '#9BA7B2', '#E8EEF4'] },
-  { id: 'Foil', category: 'Metal', label: 'Crumpled Foil', cssClass: 'preview-pulse', defaultColors: ['#0A0C0F', '#6E7A86', '#C6D2DC', '#FFFFFF'] }
+     The builders are still in jsx/main.jsx because Snakeskin runs on
+     buildMetalTexture's 'Hammered' height field. Nothing else reaches them.
+     Presets a customer already saved on a metal still carry their own recipe
+     and still rebuild — the library just no longer offers a new one. */
 ];

@@ -851,49 +851,110 @@ if (importBtn && importModal) {
   });
 }
 
-// ── EYEDROPPER API ──
+// ── EYEDROPPER ──
+/* Chromium's EyeDropper FIRST, the host second. The order used to be the other
+   way round, which meant that inside After Effects — the only place this panel
+   ever runs — the eyedropper button opened a colour dialog instead of sampling
+   a pixel. The two are not the same tool: EyeDropper reads a colour from
+   anywhere on screen in one click, which is the whole point of the button, and
+   a picker is a dialog that happens to return a colour.
+
+   The host picker is still the fallback, because EyeDropper needs Chromium 95
+   and older builds of After Effects ship less than that — and it does at least
+   carry an eyedropper of its own inside the dialog. */
 const eyeBtn = document.getElementById('eyedropper-btn');
 if (eyeBtn) {
+  function adoptSampledColour(hex) {
+    const clean = LGPicker.parseHex(hex);
+    if (!clean) return;
+    const value = LGPicker.toHex(clean);
+    // Shift right, newest first — the sampled colour becomes Colour 1.
+    state.colors.unshift(value);
+    state.colors.pop();
+    paletteIsCustom = true;
+    LGPicker.remember(value);
+    paintColorSlots();
+    triggerColorUpdate();
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  }
+
   eyeBtn.addEventListener('click', async () => {
-    if (lgHostReady()) {
-      const cs = new CSInterface();
-      cs.evalScript(`openNativeColorPicker('#FFFFFF')`, function(res) {
-        if (res && res !== "-1") {
-          state.colors.unshift(res.toUpperCase());
-          state.colors.pop();
-          document.querySelectorAll('.color-pick').forEach((p, i) => p.style.backgroundColor = state.colors[i]);
-          triggerColorUpdate();
-          if (typeof window.triggerRealtimeUpdate === 'function') {
-            window.triggerRealtimeUpdate();
-          }
-        }
-      });
-    } else if (window.EyeDropper) {
-      const eye = new EyeDropper();
+    if (window.EyeDropper) {
       try {
-        const result = await eye.open();
-        // Shift colors right, insert new color at start
-        state.colors.unshift(result.sRGBHex.toUpperCase());
-        state.colors.pop();
-        document.querySelectorAll('.color-pick').forEach((p, i) => p.style.backgroundColor = state.colors[i]);
-        triggerColorUpdate();
+        const result = await new EyeDropper().open();
+        adoptSampledColour(result.sRGBHex);
       } catch (e) {
-        // user canceled
+        /* Cancelled. Not an error and not worth a toast. */
       }
-    } else {
-      LGUI.toast("This build of After Effects has no screen eyedropper. Use the swatches instead.", "error");
+      return;
     }
+
+    if (lgHostReady()) {
+      new CSInterface().evalScript(`openNativeColorPicker('${state.colors[0] || '#FFFFFF'}')`,
+        function (res) { if (res && res !== '-1') adoptSampledColour(res); });
+      return;
+    }
+
+    LGUI.toast('This build of After Effects has no screen eyedropper. ' +
+               'Click a swatch and type a hex instead.', 'error');
   });
 }
 
 // ── EXPORT CSS & SVG ──
+/* Copy, then say so — in that order, and only if it worked.
+
+   Both buttons used to fire navigator.clipboard.writeText() and change their
+   own label on the next line without waiting for it. writeText returns a
+   promise and it does reject: the Clipboard API needs the document focused,
+   and a CEP panel loses focus to the application constantly — clicking into
+   the comp, a modal opening, the panel being docked but not frontmost. Every
+   one of those produced a button that said "Copied CSS!" over an unchanged
+   clipboard, which is the one failure a user cannot see.
+
+   The fallback is the old execCommand path. It is deprecated and it still
+   works everywhere this panel runs, and between a deprecated copy and no copy
+   the deprecated one is better. */
+function lgCopyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).catch(function () {
+      return lgCopyFallback(text);
+    });
+  }
+  return lgCopyFallback(text);
+}
+
+function lgCopyFallback(text) {
+  return new Promise(function (resolve, reject) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    ok ? resolve() : reject(new Error('copy failed'));
+  });
+}
+
+/* The button says what happened, and puts its own label back either way. */
+function lgCopyButton(btn, text, done) {
+  const original = btn.textContent;
+  lgCopyToClipboard(text).then(function () {
+    btn.textContent = done;
+  }, function () {
+    btn.textContent = 'Copy failed';
+    LGUI.toast('After Effects would not let the panel reach the clipboard. ' +
+               'Click inside the panel and try again.', 'error');
+  }).then(function () {
+    setTimeout(function () { btn.textContent = original; }, 2000);
+  });
+}
+
 document.getElementById('export-css-btn')?.addEventListener('click', function () {
   const css = `background: linear-gradient(135deg, ${state.colors.join(', ')});`;
-  navigator.clipboard.writeText(css);
-  const btn = this;
-  const originalText = btn.textContent;
-  btn.textContent = "Copied CSS!";
-  setTimeout(() => btn.textContent = originalText, 2000);
+  lgCopyButton(this, css, 'Copied CSS!');
 });
 
 document.getElementById('export-svg-btn')?.addEventListener('click', function () {
@@ -908,11 +969,7 @@ document.getElementById('export-svg-btn')?.addEventListener('click', function ()
   </defs>
   <rect width="100%" height="100%" fill="url(#lg)" />
 </svg>`;
-  navigator.clipboard.writeText(svg);
-  const btn = this;
-  const originalText = btn.textContent;
-  btn.textContent = "Copied SVG!";
-  setTimeout(() => btn.textContent = originalText, 2000);
+  lgCopyButton(this, svg, 'Copied SVG!');
 });
 
 // Force load main.jsx to bypass AE manifest cache without restarting!
@@ -926,27 +983,116 @@ try {
   console.error("Failed to evalFile main.jsx:", e);
 }
 
-// ── NATIVE COLOR PICKER LOGIC ──
+// ── COLOUR PICKER ──
 /* Delegated from the row rather than bound to each swatch: the swatches are
    rebuilt every time the gradient changes, and per-element listeners would go
-   with them. */
+   with them.
+
+   INSIDE AFTER EFFECTS, THE PICKER IS AFTER EFFECTS'. A swatch opens the
+   host's own colour picker — the current one, with the eyedropper, the colour
+   fields and the project's working space — because that is the picker every
+   other colour in the application uses, and a panel that invents its own asks
+   the user to learn a second one for no gain. openNativeColorPicker() in
+   jsx/main.jsx is how, and its header explains why that stopped being
+   dangerous.
+
+   The panel's own HTML picker is still here and still shipped. It runs when
+   there is no host at all, which is a plain browser — the only place the panel
+   is ever developed. See js/colorpicker.js.
+
+   WHAT THE SWAP COSTS. The host dialog is modal, so the comp cannot follow the
+   drag any more: one colour arrives when the dialog closes instead of a
+   continuous stream while the pointer moves. The live path underneath is
+   unchanged, so a colour that arrives this way still updates the comp without
+   a rebuild — it just arrives once. */
 const colorRowEl = document.getElementById('color-row');
 if (colorRowEl) {
+
+  /* One place where a picked colour lands, whichever picker produced it. */
+  function adoptPickedColour(i, hex, live) {
+    const rgb = LGPicker.parseHex(hex);
+    if (!rgb) return;
+    state.colors[i] = LGPicker.toHex(rgb);
+    paletteIsCustom = true;
+    const c = colorRowEl.querySelector('.color-pick[data-index="' + i + '"]');
+    if (c) c.style.backgroundColor = state.colors[i];
+    const f = colorRowEl.querySelector('.color-hex[data-index="' + i + '"]');
+    if (f && f !== document.activeElement) f.value = state.colors[i];
+    if (!live) paintColorSlots();
+    triggerColorUpdate();
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  }
+
+  /* The host's picker. evalScript is asynchronous from this side, and the
+     dialog is modal on the other, so the callback fires whenever the user is
+     done — seconds later is normal and is not a hang.
+
+     Cancel is not distinguishable from picking the colour it opened on: the
+     dialog does not say which button closed it. Both come back as the starting
+     colour, so both leave the swatch where it was, which is what cancel should
+     do anyway. */
+  function openHostPickerFor(i) {
+    const before = state.colors[i] || '#FFFFFF';
+    const chip = colorRowEl.querySelector('.color-pick[data-index="' + i + '"]');
+    if (chip) chip.classList.add('is-picking');
+
+    new CSInterface().evalScript(
+      "openNativeColorPicker('" + before + "')",
+      function (res) {
+        if (chip) chip.classList.remove('is-picking');
+        if (!res || res === '-1' || res === 'EvalScript error.' || res === 'undefined') return;
+        if (res.toUpperCase() === before.toUpperCase()) return;
+        adoptPickedColour(i, res, false);
+        LGPicker.remember(state.colors[i]);
+      }
+    );
+  }
+
+  function openPickerFor(i) {
+    if (lgHostReady()) { openHostPickerFor(i); return; }
+    openPanelPickerFor(i);
+  }
+
+  function openPanelPickerFor(i) {
+    const chip = colorRowEl.querySelector('.color-pick[data-index="' + i + '"]');
+    if (!chip) return;
+    const roles = (typeof colorRolesFor === 'function')
+      ? colorRolesFor(selectedType) : [];
+
+    LGPicker.open({
+      anchor: chip,
+      hex: state.colors[i],
+      index: i,
+      label: (roles && roles[i]) || ('Colour ' + (i + 1)),
+      palette: state.colors.slice(0),
+      roles: roles || [],
+
+      /* Continuous. Everything downstream of here is already coalesced —
+         triggerColorUpdate repaints the previews and sends updateLiveColors,
+         and triggerRealtimeUpdate keeps at most one evalScript in flight — so
+         firing on every pointer move makes the comp track the drag instead of
+         queueing behind it. */
+      onChange: function (hex) { adoptPickedColour(i, hex, true); },
+
+      onCommit: function (hex) {
+        state.colors[i] = hex;
+        paintColorSlots();
+      },
+
+      /* Clicking another role in the picker's own palette column moves to that
+         slot rather than closing — picking a four-colour palette is one task,
+         not four. */
+      onSlot: function (next) { openPanelPickerFor(next); }
+    });
+  }
+
   colorRowEl.addEventListener('click', function (e) {
     const picker = e.target.closest('.color-pick');
-    if (!picker || !lgHostReady()) return;
+    if (!picker) return;
     e.preventDefault();
     const i = parseInt(picker.dataset.index, 10);
     if (isNaN(i)) return;
-
-    new CSInterface().evalScript(`openNativeColorPicker('${state.colors[i]}')`, function (res) {
-      if (res && res !== '-1') {
-        state.colors[i] = res;
-        picker.style.backgroundColor = res;
-        triggerColorUpdate();
-        if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
-      }
-    });
+    openPickerFor(i);
   });
 
   /* Typing a hex is often faster than opening the host's picker, and it is the
@@ -957,11 +1103,14 @@ if (colorRowEl) {
     const i = parseInt(field.dataset.index, 10);
     if (isNaN(i)) return;
 
-    let v = field.value.trim();
-    if (v[0] !== '#') v = '#' + v;
-    if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;      // mid-typing
+    /* One hex parser for the panel, in js/colorpicker.js. It also accepts the
+       three-digit form, which is what people paste out of CSS. Anything it
+       cannot read is treated as mid-typing rather than corrected — "#F" is an
+       unfinished thought, not an error. */
+    const rgb = LGPicker.parseHex(field.value);
+    if (!rgb) return;
 
-    state.colors[i] = v.toUpperCase();
+    state.colors[i] = LGPicker.toHex(rgb);
     const chip = colorRowEl.querySelector('.color-pick[data-index="' + i + '"]');
     if (chip) chip.style.backgroundColor = state.colors[i];
     triggerColorUpdate();
@@ -1225,7 +1374,9 @@ function paintPreviewVars() {
 function paintInspectorPreview() {
   const cv = document.getElementById('inspector-preview');
   if (cv && typeof paintPreview === 'function') {
-    paintPreview(cv, selectedType, state.colors);
+    /* live: this one follows the swatches, so it must stay painted. The card
+       renders in css/previews are of each gradient's default palette. */
+    paintPreview(cv, selectedType, state.colors, { live: true });
   }
 }
 

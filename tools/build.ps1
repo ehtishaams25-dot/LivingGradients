@@ -143,15 +143,65 @@ foreach ($pattern in $Purge) {
 $debugFile = Join-Path $StageDir '.debug'
 if (Test-Path $debugFile) { Remove-Item $debugFile -Force; Say '  - .debug' 'DarkGray' }
 
-# css/previews holds source art that nothing in the panel references — silk.png
-# alone was 617KB, roughly two thirds of the shipped package. Kept in the
-# repository, kept out of the build. If a preview image is ever wired up, take
-# this out and the size report below will keep it honest.
+# css/previews is now wired up: js/preview.js reads index.json and loads the
+# card renders it names. So the folder ships - but only what the index names,
+# and nothing else at all.
+#
+# INDEX.JSON IS THE ALLOWLIST, and matching filenames against the library was
+# the wrong way to do it. tools/render_cards.jsx writes the index, so the index
+# is by definition the set of files that exist and are wanted. Two things went
+# wrong with the filename approach on the first run:
+#
+#   - PowerShell's -contains is case-INSENSITIVE, so silk.png matched the
+#     gradient id "Silk" and 603KB of source art shipped. That is two thirds of
+#     the package, and it is the exact file this block was originally written to
+#     keep out.
+#   - Windows filesystems are case-insensitive too, so silk.png and Silk.png are
+#     one file. Source art has no business sitting in the folder whose names are
+#     now generated.
+#
+# The budget is a hard failure, not a warning. Forty-eight stills is exactly the
+# kind of thing that grows a megabyte at a time until somebody notices the .zxp
+# is 40MB, and by then it has shipped.
+$PreviewBudgetKB = 6144
+
 $previews = Join-Path $StageDir 'css\previews'
 if (Test-Path $previews) {
-    $freed = [math]::Round((Get-ChildItem $previews -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
-    Remove-Item $previews -Recurse -Force
-    Say "  - css/previews (unreferenced, $freed KB)" 'DarkGray'
+    $indexFile = Join-Path $previews 'index.json'
+    $keep = @()
+    if (Test-Path $indexFile) {
+        $indexRaw = Get-Content $indexFile -Raw -Encoding utf8
+        foreach ($m in [regex]::Matches($indexRaw, '"([A-Za-z0-9_]+)"')) {
+            $name = $m.Groups[1].Value
+            if ($name -ne 'cards' -and $name -ne 'rendered') { $keep += ($name + '.png') }
+        }
+        $keep += 'index.json'
+    }
+
+    if ($keep.Count -le 1) {
+        # No index, or an index naming nothing. Either way there are no cards to
+        # ship and the painters in js/preview.js cover every gradient.
+        Remove-Item $previews -Recurse -Force
+        Say '  - css/previews (no index.json; run tools/render_cards.jsx)' 'DarkGray'
+    } else {
+        $droppedKB = 0; $dropped = 0
+        Get-ChildItem $previews -Recurse -File | ForEach-Object {
+            # -cnotcontains: case-SENSITIVE. See the note above.
+            if ($keep -cnotcontains $_.Name) {
+                $droppedKB += [math]::Round($_.Length / 1KB)
+                $dropped++
+                Remove-Item $_.FullName -Force
+            }
+        }
+        if ($dropped) { Say "  - $dropped file(s) not in index.json ($droppedKB KB)" 'DarkGray' }
+
+        $remaining = @(Get-ChildItem $previews -Recurse -File)
+        $keptKB = [math]::Round(($remaining | Measure-Object Length -Sum).Sum / 1KB)
+        Say "  + css/previews ($($remaining.Count - 1) cards, $keptKB KB)"
+        if ($keptKB -gt $PreviewBudgetKB) {
+            throw "css/previews is $keptKB KB, over the $PreviewBudgetKB KB budget. Lower CARD_W/CARD_H in tools/render_cards.jsx and re-run it."
+        }
+    }
 }
 
 # ── 3. STAMP ──────────────────────────────────────────────────────────
@@ -171,12 +221,25 @@ Step 'Stamping version'
 $servicePath = Join-Path $StageDir 'js\service.js'
 if (Test-Path $servicePath) {
     $service = Get-Content $servicePath -Raw -Encoding utf8
-    $stamped = $service -replace "var PANEL_VERSION = '[^']*';", "var PANEL_VERSION = '$BundleVersion';"
-    if ($stamped -eq $service) {
-        Say '  WARNING: PANEL_VERSION not found in service.js — the update check will compare the wrong number.' 'Yellow'
+    $versionPattern = "var PANEL_VERSION = '[^']*';"
+
+    # Test whether the pattern MATCHED, not whether the text changed.
+    #
+    # Comparing before and after conflates "the declaration is not there" with
+    # "it is already the right version" — so the moment the source happened to
+    # agree with the manifest, the build started warning that PANEL_VERSION was
+    # missing. A check that cries wolf on the correct state is worse than no
+    # check, because the next real failure reads as the same false alarm.
+    if ($service -notmatch $versionPattern) {
+        Say '  WARNING: PANEL_VERSION not found in service.js - the update check will compare the wrong number.' 'Yellow'
     } else {
-        Set-Content $servicePath $stamped -Encoding utf8 -NoNewline
-        Say "  js/service.js -> $BundleVersion" 'Green'
+        $stamped = $service -replace $versionPattern, "var PANEL_VERSION = '$BundleVersion';"
+        if ($stamped -ne $service) {
+            Set-Content $servicePath $stamped -Encoding utf8 -NoNewline
+            Say "  js/service.js -> $BundleVersion" 'Green'
+        } else {
+            Say "  js/service.js already at $BundleVersion" 'Green'
+        }
     }
 }
 
@@ -207,8 +270,55 @@ if ($node) {
     }
     if ($bad.Count) { throw "Syntax errors in: $($bad -join ', ')" }
     Say "  $(@(Get-ChildItem (Join-Path $StageDir 'js') -Filter *.js).Count) js files parse" 'Green'
+
+    # The two static audits. Both check things that are invisible on this
+    # machine and break on a customer's, which is the worst category there is:
+    #
+    #   index_audit  every indexed property write in jsx/main.jsx against a real
+    #                dump from an installed After Effects. A wrong index is
+    #                harmless on an English host, because the name resolves
+    #                first, and sets a DIFFERENT parameter everywhere else. It
+    #                found fifty of them.
+    #
+    #   live_audit   every gradient in the library has a live tuner, every tuner
+    #                named exists, and every layer name a tuner waits for is one
+    #                some builder assigns. Twelve gradients shipped with sliders
+    #                that did nothing and reported success.
+    #
+    #   panel_audit  the fourteen files in js/ share one global scope. Two of
+    #                them defining `setStatus` is a silent replacement; two
+    #                defining the same `const` is a SyntaxError that shows up as
+    #                a blank panel in After Effects and nowhere else.
+    #
+    # Run against the repo, not the stage: they read tools/, which does not ship.
+    #
+    # KEEP DOUBLE-QUOTED STRINGS IN THIS FILE ASCII. This script has no BOM, so
+    # Windows PowerShell 5.1 decodes it with the system ANSI codepage; an em dash
+    # (E2 80 94) comes through as three cp1252 characters and the third of them
+    # is U+201D, a smart double quote, which PowerShell accepts as a string
+    # delimiter. One em dash inside a "..." here closed the string early and the
+    # whole file stopped parsing 250 lines later. Comments are unaffected and
+    # single-quoted strings are unaffected, which is why the em dashes elsewhere
+    # in this file have always been harmless.
+    foreach ($audit in @(
+        @{ Name = 'effect indices'; Script = 'tools\index_audit.js' },
+        @{ Name = 'live tuners';    Script = 'tools\live_audit.js' },
+        @{ Name = 'panel globals';  Script = 'tools\panel_audit.js' }
+    )) {
+        $auditPath = Join-Path $Root $audit.Script
+        if (-not (Test-Path $auditPath)) {
+            Say "  $($audit.Name): $($audit.Script) is missing - audit skipped" 'DarkYellow'
+            continue
+        }
+        $out = & node $auditPath 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $out | ForEach-Object { Say "    $_" 'DarkYellow' }
+            throw "$($audit.Name) audit failed. Run 'node $($audit.Script)' for the detail."
+        }
+        Say "  $($audit.Name) audit clean" 'Green'
+    }
 } else {
-    Say '  node not found — skipping the syntax check' 'DarkYellow'
+    Say '  node not found — skipping the syntax check and both audits' 'DarkYellow'
 }
 
 foreach ($required in @('index.html', 'jsx\main.jsx', 'jsx\presets.jsx', 'lib\CSInterface.js', 'CSXS\manifest.xml')) {
@@ -234,9 +344,18 @@ if (Test-Path $licensePath) {
 
 # Anything still pointing at a placeholder API host would ship a bell and a
 # feedback button that silently do nothing.
+# Matched against the API_PLACEHOLDER declaration and the line that assigns it,
+# not against a hardcoded hostname. The check used to look for the literal URL on
+# the `var API =` line; naming the placeholder moved the URL one line up and the
+# warning silently stopped firing, which is the worst outcome for a check whose
+# entire job is to notice something is still unconfigured.
 $svc = Get-Content (Join-Path $StageDir 'js\service.js') -Raw -Encoding utf8
-if ($svc -match "var API = 'https://api\.digivero\.dev/living-gradients'") {
-    Say '  WARNING: js/service.js still points at the placeholder API host. Updates, messages and feedback will not work.' 'Yellow'
+if ($svc -match "var API = API_PLACEHOLDER\s*;") {
+    Say '  WARNING: js/service.js still points at the placeholder API host. Updates, messages and feedback are switched off until server/worker.js is deployed and API is set.' 'Yellow'
+} elseif ($svc -notmatch "var API_PLACEHOLDER\s*=") {
+    Say '  WARNING: API_PLACEHOLDER is gone from service.js - this check can no longer tell whether the backend is configured.' 'Yellow'
+} else {
+    Say '  backend host is configured' 'Green'
 }
 
 # The CDN dependency. Not fatal, but a panel that needs the internet to finish
@@ -305,7 +424,21 @@ if ($NewCert) {
 Step 'Packaging'
 
 New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
-$ZxpPath = Join-Path $DistDir "LivingGradients-$BundleVersion.zxp"
+
+# AN UNSIGNED BUILD NEVER TAKES THE SHIPPABLE FILENAME.
+#
+# It used to. -SkipSign wrote LivingGradients-<version>.zxp, the same path the
+# signed build writes, so a single verification run silently replaced the
+# package you were about to release with one that no installer will accept —
+# same name, same version, same folder, and nothing on disk to tell them apart.
+# You find out when the installer refuses it, or worse, when a customer does.
+#
+# Unsigned builds are now clearly labelled and cannot collide.
+$ZxpPath = if ($SkipSign) {
+    Join-Path $DistDir "LivingGradients-$BundleVersion-UNSIGNED.zxp"
+} else {
+    Join-Path $DistDir "LivingGradients-$BundleVersion.zxp"
+}
 if (Test-Path $ZxpPath) { Remove-Item $ZxpPath -Force }
 
 if ($SkipSign) {
@@ -315,6 +448,13 @@ if ($SkipSign) {
     Move-Item "$ZxpPath.zip" $ZxpPath -Force
     Say "Unsigned package: $ZxpPath" 'Yellow'
     Say 'This will NOT install without PlayerDebugMode. Do not ship it.' 'Yellow'
+
+    # If a signed package for this version is sitting next to it, say so — the
+    # two are one tab-complete apart and only one of them installs.
+    $signedTwin = Join-Path $DistDir "LivingGradients-$BundleVersion.zxp"
+    if (Test-Path $signedTwin) {
+        Say "  the signed $BundleVersion package is still there and is the one to install." 'DarkGray'
+    }
 } else {
     if (-not $tool)              { throw 'ZXPSignCmd not found. See the header of this script, or pass -SkipSign to build an unsigned test package.' }
     if (-not (Test-Path $CertPath)) { throw "No certificate at $CertPath. Run: .\tools\build.ps1 -NewCert" }
@@ -375,23 +515,38 @@ Get-ChildItem $StageDir -Recurse -File |
 
 Step 'Release folder'
 
-$ReleaseDir = Join-Path $DistDir "LivingGradients_$BundleVersion"
-if (Test-Path $ReleaseDir) { Remove-Item $ReleaseDir -Recurse -Force }
-New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
+# UNSIGNED BUILDS DO NOT GET ONE, and do not touch the one that is there.
+#
+# The other half of the trap above: this block wiped and rebuilt the release
+# folder on every run, so a -SkipSign verification build replaced a finished
+# release with a folder whose .zxp no installer accepts — while still printing
+# "Release folder:" in green. A directory that says release and contains
+# something unshippable is worse than no directory.
+if ($SkipSign) {
+    Say '  skipped: unsigned builds get no release folder.' 'DarkGray'
+    $existing = Join-Path $DistDir "LivingGradients_$BundleVersion"
+    if (Test-Path $existing) {
+        Say "  the signed release folder for $BundleVersion is untouched." 'DarkGray'
+    }
+} else {
+    $ReleaseDir = Join-Path $DistDir "LivingGradients_$BundleVersion"
+    if (Test-Path $ReleaseDir) { Remove-Item $ReleaseDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 
-Copy-Item $ZxpPath -Destination $ReleaseDir
-foreach ($doc in @('README.md', 'LICENSE.txt', 'INSTALL.md')) {
-    $source = Join-Path $Root $doc
-    if (Test-Path $source) { Copy-Item $source -Destination $ReleaseDir }
+    Copy-Item $ZxpPath -Destination $ReleaseDir
+    foreach ($doc in @('README.md', 'LICENSE.txt', 'INSTALL.md')) {
+        $source = Join-Path $Root $doc
+        if (Test-Path $source) { Copy-Item $source -Destination $ReleaseDir }
+    }
+
+    $starter = Join-Path $Root 'starter'
+    if (Test-Path $starter) {
+        Copy-Item $starter -Destination (Join-Path $ReleaseDir 'Presets') -Recurse
+        Say '  + starter presets'
+    }
+
+    Say "Release folder: $ReleaseDir" 'Green'
 }
-
-$starter = Join-Path $Root 'starter'
-if (Test-Path $starter) {
-    Copy-Item $starter -Destination (Join-Path $ReleaseDir 'Presets') -Recurse
-    Say '  + starter presets'
-}
-
-Say "Release folder: $ReleaseDir" 'Green'
 
 # ── 8. INSTALL ────────────────────────────────────────────────────────
 

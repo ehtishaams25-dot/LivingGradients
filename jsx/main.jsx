@@ -204,7 +204,7 @@ var LG = (function () {
                     return e;
                 }
             }
-            record((context ? context + " — " : "") + "effect unavailable: " + names[0]);
+            record((context ? context + " \u2014 " : "") + "effect unavailable: " + names[0]);
             return null;
         },
 
@@ -258,7 +258,7 @@ var LG = (function () {
             if (p) {
                 try { p.setValue(val); return true; } catch (x) { }
             }
-            record((context ? context + " — " : "") + "cannot set '" + name + "'");
+            record((context ? context + " \u2014 " : "") + "cannot set '" + name + "'");
             return false;
         },
 
@@ -268,7 +268,7 @@ var LG = (function () {
             if (!fx) return false;
             try { fx.property(groupName).property(name).setValue(val); return true; } catch (x) { }
             try { fx.property(name).setValue(val); return true; } catch (x2) { }
-            record((context ? context + " — " : "") + "cannot set '" + groupName + " > " + name + "'");
+            record((context ? context + " \u2014 " : "") + "cannot set '" + groupName + " > " + name + "'");
             return false;
         },
 
@@ -278,7 +278,7 @@ var LG = (function () {
             if (p) {
                 try { p.expression = str; return true; } catch (x) { }
             }
-            record((context ? context + " — " : "") + "cannot express '" + name + "'");
+            record((context ? context + " \u2014 " : "") + "cannot express '" + name + "'");
             return false;
         },
 
@@ -305,55 +305,117 @@ var LG = (function () {
     };
 })();
 
-/* The colour picker.
+/* The colour picker — After Effects' own, not the operating system's.
 
-   WHAT THIS USED TO DO, AND WHY IT TOOK AFTER EFFECTS DOWN WITH IT. The old
-   version opened a comp, added a shape layer called TEMP_COLOR_PICKER, put a
-   Color Control on it, selected the property and fired app.executeCommand(2240)
-   to make After Effects open its own picker on that property -- all inside an
-   app.beginUndoGroup().
+   THREE IMPLEMENTATIONS, AND WHY THIS IS THE THIRD.
 
-   executeCommand(2240) opens a MODAL dialog. Script execution stops dead while
-   it is up, and the undo group opened before it cannot close until the user
-   dismisses it. After Effects notices the mismatch and says so ("Undo group
-   mismatch, will attempt to fix"), and "attempt" is doing real work in that
-   sentence -- the undo stack is left inconsistent and the application is one
-   wrong step from going down. When the script died before reaching its
-   cleanup, the temp layer stayed in the comp too.
+   The first one opened a comp, added a shape layer called TEMP_COLOR_PICKER,
+   put a Color Control on it, selected the property and fired
+   app.executeCommand(2240) -- all inside an app.beginUndoGroup(). That is the
+   right idea wrapped around a fatal mistake. 2240 is "Edit Value...", which
+   opens a MODAL dialog: script execution stops dead while it is up, and the
+   undo group opened before it cannot close until the user dismisses it. After
+   Effects notices ("Undo group mismatch, will attempt to fix"), the undo stack
+   is left inconsistent, and the application is one wrong step from going down.
+   When the script died before its cleanup, the temp layer stayed behind too.
 
-   None of that machinery is necessary. ExtendScript ships a colour picker:
-   $.colorPicker() is synchronous, needs no comp, no layer, no undo group and
-   no modal command. It takes and returns a plain 0xRRGGBB integer, or -1 when
-   the user cancels.
+   The second one threw the whole approach away for $.colorPicker(), which is
+   synchronous, needs no comp and cannot crash anything. It also opens the
+   WRONG PICKER: $.colorPicker() is the operating system's colour dialog. It
+   ignores the host's "Use System Color Picker" preference, it knows nothing
+   about the project's working space, and on Windows it is the twenty-year-old
+   grid of basic colours.
 
-   It also means picking a colour is no longer an undoable document edit,
-   which is correct -- choosing a swatch in a panel should never have been on
-   the undo stack in the first place. */
+   This one goes back to the temp layer WITHOUT THE UNDO GROUP, which is the
+   only part that was ever dangerous. Nothing is open across the modal, so
+   there is no mismatch to fix: add the layer, set the starting colour, select
+   the property, open the dialog, read the value back, remove the layer. The
+   removal is in a finally, so a failure inside the dialog still cleans up, and
+   lgSweepPickerLeftovers() clears anything an older build stranded.
+
+   WHAT IT NEEDS, AND WHAT HAPPENS WHEN IT IS MISSING. "Edit Value..." acts on
+   the selection in the active comp, so this needs one open. With no comp it
+   falls back to $.colorPicker() rather than failing -- an old dialog beats no
+   dialog -- and the panel falls back again to its own HTML picker if even that
+   is unavailable, which is also what runs when the panel is opened in a plain
+   browser.
+
+   CANCEL IS NOT DETECTABLE. The dialog does not report which button closed it;
+   cancelling simply leaves the property at the colour it opened on, so this
+   returns the starting colour and the swatch does not move. That is the right
+   outcome anyway. */
 function openNativeColorPicker(hexStr) {
     try {
-        /* Anything the old implementation stranded gets cleared out the next
-           time the picker is opened, so a user who hit the crash is not left
-           with invisible junk layers in their comp forever. */
         lgSweepPickerLeftovers();
 
-        var start = 0xFFFFFF;
-        try {
-            var rgb = hexRgb(hexStr);
-            start = (Math.round(rgb[0] * 255) << 16) |
-                    (Math.round(rgb[1] * 255) << 8) |
-                     Math.round(rgb[2] * 255);
-        } catch (e) { }
+        var rgb;
+        try { rgb = hexRgb(hexStr); } catch (e) { rgb = [1, 1, 1]; }
 
-        var picked = $.colorPicker(start);
-        if (picked === null || picked === undefined || picked < 0) return "-1";
+        var picked = lgAeColorPicker(rgb);
+        if (!picked) picked = lgSystemColorPicker(rgb);
+        if (!picked) return "-1";
 
-        var r = (picked >> 16) & 0xFF;
-        var g = (picked >> 8) & 0xFF;
-        var b = picked & 0xFF;
-
-        return "#" + lgHex2(r) + lgHex2(g) + lgHex2(b);
+        return "#" + lgHex2(picked[0] * 255) +
+                     lgHex2(picked[1] * 255) +
+                     lgHex2(picked[2] * 255);
     } catch (e) {
         return "-1";
+    }
+}
+
+/* After Effects' own picker, via a Color Control nobody ever sees.
+
+   The layer is a shape layer with no contents, so it renders nothing even for
+   the instant it exists, and it is disabled and named TEMP_COLOR_PICKER so
+   that anything which does survive a crash is obviously ours and gets swept
+   the next time the picker opens.
+
+   Returns [r, g, b] in 0..1, or null when there is no comp to work in. */
+function lgAeColorPicker(rgb) {
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) return null;
+
+    var temp = null;
+    try {
+        temp = comp.layers.addShape();
+        temp.name = 'TEMP_COLOR_PICKER';
+        try { temp.enabled = false; } catch (e) { }
+
+        var ctrl = temp.property("ADBE Effect Parade").addProperty("ADBE Color Control");
+        var prop = ctrl.property("ADBE Color Control-0001");
+        try { prop.setValue([rgb[0], rgb[1], rgb[2], 1]); } catch (e) { }
+
+        /* No undo group. See the note above -- an open group across this modal
+           is what took After Effects down. 2240 is "Edit Value...", used by id
+           rather than through findMenuCommandId() because the menu item's name
+           changes with the host's language and the id does not. */
+        prop.selected = true;
+        app.executeCommand(2240);
+
+        var out = prop.value;
+        if (!out || out.length < 3) return null;
+        return [out[0], out[1], out[2]];
+    } catch (e) {
+        return null;
+    } finally {
+        if (temp) { try { temp.remove(); } catch (e) { } }
+    }
+}
+
+/* The operating system's dialog. Only reached when there is no comp open.
+   Takes and returns 0xRRGGBB, or -1 when the user cancels. */
+function lgSystemColorPicker(rgb) {
+    try {
+        var start = (Math.round(rgb[0] * 255) << 16) |
+                    (Math.round(rgb[1] * 255) << 8) |
+                     Math.round(rgb[2] * 255);
+        var picked = $.colorPicker(start);
+        if (picked === null || picked === undefined || picked < 0) return null;
+        return [((picked >> 16) & 0xFF) / 255,
+                ((picked >> 8) & 0xFF) / 255,
+                 (picked & 0xFF) / 255];
+    } catch (e) {
+        return null;
     }
 }
 
@@ -781,7 +843,7 @@ function applyColorQuality(enabled) {
     try {
         if (app.project.linearBlending) {
             app.project.linearBlending = false;
-            LG.note('linear blending off — these effect stacks blend in gamma space');
+            LG.note('linear blending off \u2014 these effect stacks blend in gamma space');
         }
     } catch (e) {
         LG.warn('could not set the blending space: ' + e.message);
@@ -807,7 +869,7 @@ function generateBatch(paramsStr) {
 
         LG.reset();
         applyColorQuality(p.colorQuality === true);
-        app.beginUndoGroup('Living Gradients — Batch');
+        app.beginUndoGroup('Living Gradients \u2014 Batch');
 
         folder = app.project.items.addFolder('Living Gradients');
 
@@ -819,7 +881,7 @@ function generateBatch(paramsStr) {
 
             try {
                 comp = app.project.items.addComp(
-                    'LG — ' + (item.label || item.type),
+                    'LG \u2014 ' + (item.label || item.type),
                     src.width, src.height, src.pixelAspect, src.duration, src.frameRate);
                 comp.parentFolder = folder;
 
@@ -1178,16 +1240,19 @@ function num(v, fallback) {
    Oklab-interpolated stops onto it, all through properties scripting can
    actually write. */
 function buildOklabSmooth(comp, c, ctrl, w, h, dur) {
+    // The name is what the live recolour path matches on — keep it.
+    var s = comp.layers.addSolid([0, 0, 0], 'Oklab Smooth Gradient', w, h, 1, dur);
+    tuneOklabSmooth(s, c, ctrl, w, h);
+}
+
+/* Both settings redraw the ramp in place, so both are live. */
+function tuneOklabSmooth(s, c, ctrl, w, h) {
+    if (!s) return;
     var radial = !!(ctrl.gradientType &&
                     String(ctrl.gradientType).toLowerCase() === 'radial');
     var angle  = (num(ctrl.angle, 0) === 90) ? 90 : 0;
-
-    // The name is what the live recolour path matches on — keep it.
-    var s = comp.layers.addSolid([0, 0, 0], 'Oklab Smooth Gradient', w, h, 1, dur);
-
-    lgOklabRamp(s, c, w, h, angle, radial);
-
-    if (ctrl.softness && ctrl.softness > 0) lgBlur(s, num(ctrl.softness, 0));
+    lgOklabRamp(s, c, w || 1920, h || 1080, angle, radial);
+    lgBlur(s, num(ctrl.softness, 0));
 }
 
 // -- SAAS GRADIENT --
@@ -1399,11 +1464,7 @@ function tuneSaaS(comp, c, ctrl, w, h) {
 
 // ── 2. LIVING GRADIENT ── 4-Color Gradient + Motion Tile + Turbulent Displace (from Living Gradients.jsx)
 function buildLiving(comp, c, ctrl, w, h, dur) {
-    var speed = Math.round(ctrl.speed || 10);
-    var turbAmt = ctrl.softness || 250;
-    var scaleAmt = ctrl.scale || 400;
-    var evolSpd = ctrl.rotation || 70;
-    var opacity = ctrl.opacity || 100;
+    var speed = Math.round(num(ctrl.speed, 10));
 
     var s = comp.layers.addSolid([1, 1, 1], 'Living Gradient', w, h, 1);
 
@@ -1428,7 +1489,7 @@ function buildLiving(comp, c, ctrl, w, h, dur) {
     }
 
     // 4-Color Gradient
-    var g4 = addFx(s, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient', 'ADBE 4ColorGradient', 'ADBE 4 Color Gradient']);
+    var g4 = addFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
     if (g4) {
         var ov = Math.max(w, h) * 0.5;
         var corners = [
@@ -1451,26 +1512,53 @@ function buildLiving(comp, c, ctrl, w, h, dur) {
         }
     }
 
-    // Turbulent Displace
-    var td = addFx(s, ['ADBE TurbulentDisplace', 'Turbulent Displace']);
+    addFx(s, ['ADBE Turbulent Displace', 'Turbulent Displace']);
+    tuneLiving(s, c, ctrl);
+}
+
+/* Turbulence, scale, evolution and opacity are all plain values, so all four
+   are live. Shift Speed is the interesting one: it sets how long the
+   four-colour drift takes to reach its far position before the pingpong loop
+   sends it back, which is a keyframe *time* rather than a value — so it is
+   retimed rather than rewritten, and the positions the build randomised stay
+   exactly where they were instead of jumping on every drag. */
+function tuneLiving(s, c, ctrl) {
+    if (!s) return;
+
+    var td = findFx(s, ['ADBE Turbulent Displace', 'Turbulent Displace']);
     if (td) {
-        try {
-            td.property('Amount').setValue(turbAmt);
-        } catch (e) { }
-        try {
-            td.property('Size').setValue(scaleAmt);
-        } catch (e) { }
-        try {
-            td.property('Complexity').setValue(2);
-        } catch (e) { }
-        try {
-            td.property('Evolution').expression = 'time * ' + evolSpd;
-        } catch (e) { }
+        LG.set(td, 'Amount',     2, num(ctrl.softness, 250));
+        LG.set(td, 'Size',       3, Math.min(1000, Math.max(1, num(ctrl.scale, 400))));
+        LG.set(td, 'Complexity', 5, 2);
+        var evol = num(ctrl.rotation, 70);
+        LG.expr(td, 'Evolution', 6, evol !== 0 ? 'time * ' + evol : 'value');
     }
 
-    // Opacity
+    var g4 = findFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
+    if (g4) {
+        var cycle = lgCycleTime(Math.round(num(ctrl.speed, 10)));
+        var pidx = [2, 4, 6, 8], cidx = [3, 5, 7, 9], i;
+        for (i = 0; i < 4; i++) {
+            lgRetimeLastKey(LG.find(g4, 'Point ' + (i + 1), pidx[i]), cycle);
+            LG.set(g4, 'Color ' + (i + 1), cidx[i], c[i % c.length]);
+        }
+    }
+
+    try { s.opacity.setValue(num(ctrl.opacity, 100)); } catch (e) { }
+}
+
+/* Move a property's last keyframe to a new time without changing its value.
+   After Effects has no "retime a key" call, so it is read, removed and set
+   again — which is only safe because the value is carried across. */
+function lgRetimeLastKey(prop, t) {
+    if (!prop) return;
     try {
-        s.opacity.setValue(opacity);
+        var n = prop.numKeys;
+        if (n < 2) return;
+        if (Math.abs(prop.keyTime(n) - t) < 0.001) return;
+        var v = prop.keyValue(n);
+        prop.removeKey(n);
+        prop.setValueAtTime(t, v);
     } catch (e) { }
 }
 
@@ -2051,9 +2139,9 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
     // Motion Tile
     var tile1 = addFx(s, ['ADBE Tile']);
     if (tile1) {
-        safeSet(tile1, "Output Width", 1, 300);
-        safeSet(tile1, "Output Height", 2, 300);
-        safeSet(tile1, "Mirror Edges", 3, true);
+        safeSet(tile1, "Output Width", 4, 300);
+        safeSet(tile1, "Output Height", 5, 300);
+        safeSet(tile1, "Mirror Edges", 6, true);
     }
 
     // Waves (Wave Warp)
@@ -2075,15 +2163,15 @@ function buildFluid(comp, c, ctrl, w, h, dur) {
     var noise = addFx(s, ["ADBE Noise", "Noise"]);
     if (noise) {
         safeSet(noise, "Amount of Noise", 1, noiseAmount);
-        safeSet(noise, "Use Color Noise", 2, false);
+        safeSet(noise, "Noise Type", 2, false);
     }
 
     // Motion Tile (Second)
     var tile2 = addFx(s, ['ADBE Tile']);
     if (tile2) {
-        safeSet(tile2, "Output Width", 1, 300);
-        safeSet(tile2, "Output Height", 2, 300);
-        safeSet(tile2, "Mirror Edges", 3, true);
+        safeSet(tile2, "Output Width", 4, 300);
+        safeSet(tile2, "Output Height", 5, 300);
+        safeSet(tile2, "Mirror Edges", 6, true);
     }
 }
 
@@ -2203,7 +2291,7 @@ function updateGradientLive(paramsStr) {
                 if (!noise && ctrl.grain > 0) {
                     try { 
                         noise = layer.property("Effects").addProperty("ADBE Noise"); 
-                        noise.property("Use Color Noise").setValue(false);
+                        safeSet(noise, "Noise Type", 2, false);
                     } catch(e) {}
                 }
                 
@@ -2305,12 +2393,62 @@ function updateGradientLive(paramsStr) {
             return;
         }
 
+        /* WHICH BUILDER'S LAYERS AM I LOOKING AT?
+
+           Usually the type's own. Snakeskin is the exception: it is built by
+           buildMetalTexture(..., 'Hammered') on purpose, so its layers are
+           called "Hammered Metal" and "Hammered Height" — and every lookup
+           below searched for "Snakeskin Metal", found nothing, and reported
+           success. One entry here is the whole fix, and any future preset that
+           shares another builder needs one line and nothing else. */
+        var LIVE_ALIAS = { Snakeskin: 'Hammered' };
+        var liveKind = LIVE_ALIAS[ctrl.type] || ctrl.type;
+
+        /* Each entry names the layers a type tunes and the function that tunes
+           each one. Single-layer types keep the short form. Every tuner is
+           called as fn(layer, colours, controls, compWidth, compHeight), and
+           every one of them is the same function the builder ran — that is the
+           rule that stops a slider meaning one thing on build and another on a
+           drag. */
         var LIVE_TUNERS = {
             LiquidWaves:    { layer: 'Liquid Waves',    fn: tuneLiquidWaves },
             Metallic:       { layer: 'Metallic',        fn: tuneMetallic },
             CellularMosaic: { layer: 'Cellular Mosaic', fn: tuneCellularMosaic },
             AnimeWater:     { layer: 'Anime Water',     fn: tuneAnimeWater },
-            AnimeCells:     { layer: 'Anime Cells',     fn: tuneAnimeCells }
+            AnimeCells:     { layer: 'Anime Cells',     fn: tuneAnimeCells },
+
+            /* The twelve that had no live update at all. */
+            OklabSmooth:    { layer: 'Oklab Smooth Gradient', fn: tuneOklabSmooth },
+            living:         { layer: 'Living Gradient',       fn: tuneLiving },
+            LavaLamp:       { layer: 'Lava Lamp',             fn: tuneLavaLamp },
+            Waves:          { layer: 'Wave Lines',            fn: tuneWaves },
+            WebThreads:     { layer: 'Web Threads',           fn: tuneWebThreads },
+            Antigravity:    { layer: 'Antigravity Particles', fn: tuneAntigravity },
+
+            SonduckLiquid:  { layers: [
+                { name: 'Sonduck Shapes', fn: tuneSonduckLiquid },
+                { name: 'Sonduck Null',   fn: tuneSonduckNull }
+            ] },
+            TwirlShapes:    { layers: [
+                { name: 'Twirl Shapes', fn: tuneSonduckLiquid },
+                { name: 'Twirl Null',   fn: tuneTwirlNull }
+            ] },
+            PrismaticBurst: { layers: [
+                { name: 'Prismatic Rays Matte', fn: tunePrismaticRays },
+                { name: 'Prismatic Colors',     fn: tunePrismaticColors }
+            ] },
+            StackedSquares: { layers: [
+                { name: 'Stacked Background', fn: tuneStackedSquares },
+                { name: 'Square 1', fn: tuneStackedSquare },
+                { name: 'Square 2', fn: tuneStackedSquare },
+                { name: 'Square 3', fn: tuneStackedSquare },
+                { name: 'Square 4', fn: tuneStackedSquare },
+                { name: 'Square 5', fn: tuneStackedSquare }
+            ] },
+            TrailGradient:  { layers: [
+                { name: 'Trail Animation', fn: tuneTrailGradient },
+                { match: /^Trail [0-9]+$/, fn: tuneTrailStroke }
+            ] }
         };
 
         /* Animal prints share one tuner, so they are registered by loop
@@ -2328,13 +2466,27 @@ function updateGradientLive(paramsStr) {
                 })(names[i]);
             }
         })();
-        if (LIVE_TUNERS[ctrl.type]) {
-            var tuner = LIVE_TUNERS[ctrl.type];
-            app.beginUndoGroup('Update ' + tuner.layer);
+
+        if (LIVE_TUNERS[liveKind]) {
+            var tuner = LIVE_TUNERS[liveKind];
+            var jobs = tuner.layers || [{ name: tuner.layer, fn: tuner.fn }];
+            var touched = 0;
+            app.beginUndoGroup('Update ' + ctrl.type);
             for (var ti = 1; ti <= comp.numLayers; ti++) {
-                if (comp.layer(ti).name === tuner.layer) tuner.fn(comp.layer(ti), lcols, lctrl);
+                var lay = comp.layer(ti);
+                for (var tj = 0; tj < jobs.length; tj++) {
+                    var job = jobs[tj];
+                    var hit = job.match ? job.match.test(lay.name) : (lay.name === job.name);
+                    if (hit) { job.fn(lay, lcols, lctrl, realComp.width, realComp.height); touched++; }
+                }
             }
             app.endUndoGroup();
+            /* Nothing matched means the selection is not this gradient. Saying
+               so beats the silence that made twelve of these look wired up. */
+            if (!touched) {
+                LG.warn('Nothing here belongs to "' + ctrl.type +
+                        '" \u2014 select the gradient you want to change.');
+            }
             return;
         }
 
@@ -2346,14 +2498,15 @@ function updateGradientLive(paramsStr) {
            live on the map, not on what you can see. */
         var SHADED = { Polished: 1, Brushed: 1, Gold: 1, Copper: 1,
                        Gunmetal: 1, Hammered: 1, Foil: 1, Mercury: 1 };
-        if (SHADED[ctrl.type]) {
-            var kind = ctrl.type;
-            app.beginUndoGroup('Update ' + kind);
-            var metalLayer = null, heightLayer = null, mi2;
+        if (SHADED[liveKind]) {
+            var kind = liveKind;
+            app.beginUndoGroup('Update ' + ctrl.type);
+            var metalLayer = null, heightLayer = null, baseLayer = null, mi2;
             for (mi2 = 1; mi2 <= comp.numLayers; mi2++) {
                 var ml = comp.layer(mi2);
                 if (ml.name === kind + ' Metal')  metalLayer = ml;
                 else if (ml.name === kind + ' Height') heightLayer = ml;
+                else if (ml.name === kind + ' Base')   baseLayer = ml;
             }
             if (heightLayer && heightLayer.source && heightLayer.source instanceof CompItem
                 && heightLayer.source.numLayers > 0) {
@@ -2362,6 +2515,17 @@ function updateGradientLive(paramsStr) {
             if (metalLayer) {
                 tuneMetalSurface(metalLayer, lcols, lctrl, kind,
                                  heightLayer ? heightLayer.index : 0);
+            } else {
+                LG.warn(ctrl.type + ': no "' + kind + ' Metal" layer here to update.');
+            }
+            /* The backstop carries the same bands and the same palette, so it
+               has to move when they do — a base still showing the old colours
+               would be the most visible thing in the frame the first time a
+               displacement did tear. Layers built before it existed simply do
+               not match, and nothing happens. */
+            if (baseLayer) {
+                tuneMetalBase(baseLayer, lcols, lctrl, kind,
+                              realComp.width, realComp.height);
             }
             app.endUndoGroup();
             return;
@@ -2500,7 +2664,7 @@ function updateGradientLive(paramsStr) {
                         if (lumaSolid) {
                             var turb = findFx(lumaSolid, ["Turbulent Displace", "ADBE Turbulent Displace"]);
                             if (turb && amctrl.speed !== undefined) {
-                                safeEx(turb, "Evolution", 5, "time * " + (parseFloat(amctrl.speed) * 2));
+                                safeEx(turb, "Evolution", 6, "time * " + (parseFloat(amctrl.speed) * 2));
                             }
                         }
                     }
@@ -2512,7 +2676,7 @@ function updateGradientLive(paramsStr) {
                 if (cLayer.name === "ASCII Color Overlay") {
                     var cTurb = findFx(cLayer, ["Turbulent Displace", "ADBE Turbulent Displace"]);
                     if (cTurb && amctrl.speed !== undefined) {
-                        safeEx(cTurb, "Evolution", 5, "time * " + (parseFloat(amctrl.speed) * 2));
+                        safeEx(cTurb, "Evolution", 6, "time * " + (parseFloat(amctrl.speed) * 2));
                     }
                 }
             }
@@ -2541,7 +2705,7 @@ function updateGradientLive(paramsStr) {
                         if (wctrl.turbType !== undefined) safeSet(td, "Displacement", 1, turbTypeMap[wctrl.turbType] || 3);
                         if (wctrl.turbAmount !== undefined) safeSet(td, "Amount", 2, parseFloat(wctrl.turbAmount));
                         if (wctrl.turbSize !== undefined) safeSet(td, "Size", 3, parseFloat(wctrl.turbSize));
-                        if (wctrl.turbEvolution !== undefined) safeEx(td, "Evolution", 5, "time * " + parseFloat(wctrl.turbEvolution));
+                        if (wctrl.turbEvolution !== undefined) safeEx(td, "Evolution", 6, "time * " + parseFloat(wctrl.turbEvolution));
                     }
                 }
             }
@@ -2591,7 +2755,7 @@ function updateGradientLive(paramsStr) {
         var SILKFLARE = { Silk: 1, Aurora: 1, Prism: 1, Fiber: 1, Veil: 1,
                           Pulse: 1, Comet: 1 };
         if (!SILKFLARE[ctrl.type]) {
-            LG.warn('No live tuner for "' + ctrl.type + '" — its sliders will ' +
+            LG.warn('No live tuner for "' + ctrl.type + '" \u2014 its sliders will ' +
                     'only take effect when the gradient is re-applied.');
             return;
         }
@@ -2919,11 +3083,11 @@ function buildHeatmap(comp, c, ctrl, w, h, dur) {
         var contrast = ctrl.contrast !== undefined ? parseFloat(ctrl.contrast) : 80;
         safeSet(noise, "Contrast", 4, contrast);
         safeSet(noise, "Brightness", 5, 0);
-        safeSet(noise, "Complexity", 8, 1);
+        safeSet(noise, "Complexity", 16, 1);
         var scale = ctrl.noiseScale !== undefined ? parseFloat(ctrl.noiseScale) : 150;
         safeSet(noise, "Scale", 10, scale);
         var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 40;
-        safeEx(noise, "Evolution", 10, "time * " + speed);
+        safeEx(noise, "Evolution", 24, "time * " + speed);
     }
 
     var blur = addFx(s, ["ADBE Fast Box Blur", "Fast Box Blur", "ADBE Box Blur2"]);
@@ -2949,7 +3113,7 @@ function buildHeatmap(comp, c, ctrl, w, h, dur) {
     var filmNoise = addFx(s, ['ADBE Noise', 'Noise']);
     if (filmNoise) {
         safeSet(filmNoise, "Amount of Noise", 1, 12);
-        safeSet(filmNoise, "Use Color Noise", 2, 0); // Grayscale noise only
+        safeSet(filmNoise, "Noise Type", 2, false); // Grayscale noise only
     }
 }
 
@@ -3283,21 +3447,21 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
 
     var grad = addFx(lumaSolid, ["4-Color Gradient", "ADBE 4ColorGradient"]);
     if (grad) {
-        safeSet(grad, "Point 1", 1, [w * 0.1, h * 0.1]);
-        safeSet(grad, "Point 2", 3, [w * 0.9, h * 0.2]);
-        safeSet(grad, "Point 3", 5, [w * 0.2, h * 0.8]);
-        safeSet(grad, "Point 4", 7, [w * 0.8, h * 0.9]);
-        safeEx(grad, "Point 1", 1, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
-        safeEx(grad, "Point 2", 3, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
-        safeEx(grad, "Point 3", 5, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
-        safeEx(grad, "Point 4", 7, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
+        safeSet(grad, "Point 1", 2, [w * 0.1, h * 0.1]);
+        safeSet(grad, "Point 2", 4, [w * 0.9, h * 0.2]);
+        safeSet(grad, "Point 3", 6, [w * 0.2, h * 0.8]);
+        safeSet(grad, "Point 4", 8, [w * 0.8, h * 0.9]);
+        safeEx(grad, "Point 1", 2, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
+        safeEx(grad, "Point 2", 4, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
+        safeEx(grad, "Point 3", 6, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
+        safeEx(grad, "Point 4", 8, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
     }
 
     var turb = addFx(lumaSolid, ["Turbulent Displace", "ADBE Turbulent Displace"]);
     if (turb) {
         safeSet(turb, "Amount", 2, 100);
         safeSet(turb, "Size", 3, 300);
-        safeEx(turb, "Evolution", 5, "time * " + speed * 2);
+        safeEx(turb, "Evolution", 6, "time * " + speed * 2);
     }
 
     addFx(lumaSolid, ["Tint", "ADBE Tint"]); // Grayscale!
@@ -3309,7 +3473,7 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
         safeSet(lumaNoise, "Noise Type", 2, 4); // Spline
         safeSet(lumaNoise, "Contrast", 4, 150);
         safeSet(lumaNoise, "Brightness", 5, 0);
-        safeEx(lumaNoise, "Evolution", 10, "time * " + (speed * 1.5));
+        safeEx(lumaNoise, "Evolution", 24, "time * " + (speed * 1.5));
     }
     try { noiseSolid.blendingMode = BlendingMode.OVERLAY; } catch (e) { }
 
@@ -3366,10 +3530,10 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
             var bandSize = 255 / numTiers;
             var minLuma = i * bandSize;
             var maxLuma = (i + 1) * bandSize;
-            safeSet(ext, "Black Point", 1, minLuma);
-            safeSet(ext, "White Point", 2, maxLuma);
-            safeSet(ext, "Black Softness", 3, 0);
-            safeSet(ext, "White Softness", 4, 0);
+            safeSet(ext, "Black Point", 3, minLuma);
+            safeSet(ext, "White Point", 4, maxLuma);
+            safeSet(ext, "Black Softness", 5, 0);
+            safeSet(ext, "White Softness", 6, 0);
         }
 
         // Set Alpha Matte
@@ -3385,24 +3549,24 @@ function buildAsciiMatrix(comp, c, ctrl, w, h, dur) {
         var colorMaster = comp.layers.addSolid([1, 1, 1], "ASCII Color Overlay", w, h, 1, dur);
         var cmGrad = addFx(colorMaster, ["4-Color Gradient", "ADBE 4ColorGradient"]);
         if (cmGrad) {
-            safeSet(cmGrad, "Point 1", 1, [w * 0.1, h * 0.1]);
-            safeSet(cmGrad, "Color 1", 2, c[0]);
-            safeSet(cmGrad, "Point 2", 3, [w * 0.9, h * 0.2]);
-            safeSet(cmGrad, "Color 2", 4, c[1]);
-            safeSet(cmGrad, "Point 3", 5, [w * 0.2, h * 0.8]);
-            safeSet(cmGrad, "Color 3", 6, c[2]);
-            safeSet(cmGrad, "Point 4", 7, [w * 0.8, h * 0.9]);
-            safeSet(cmGrad, "Color 4", 8, c[3]);
-            safeEx(cmGrad, "Point 1", 1, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
-            safeEx(cmGrad, "Point 2", 3, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
-            safeEx(cmGrad, "Point 3", 5, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
-            safeEx(cmGrad, "Point 4", 7, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
+            safeSet(cmGrad, "Point 1", 2, [w * 0.1, h * 0.1]);
+            safeSet(cmGrad, "Color 1", 3, c[0]);
+            safeSet(cmGrad, "Point 2", 4, [w * 0.9, h * 0.2]);
+            safeSet(cmGrad, "Color 2", 5, c[1]);
+            safeSet(cmGrad, "Point 3", 6, [w * 0.2, h * 0.8]);
+            safeSet(cmGrad, "Color 3", 7, c[2]);
+            safeSet(cmGrad, "Point 4", 8, [w * 0.8, h * 0.9]);
+            safeSet(cmGrad, "Color 4", 9, c[3]);
+            safeEx(cmGrad, "Point 1", 2, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s)*300, value[1] + Math.cos(s*0.8)*200]");
+            safeEx(cmGrad, "Point 2", 4, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*1.2)*300, value[1] + Math.sin(s*0.9)*200]");
+            safeEx(cmGrad, "Point 3", 6, "var s = time * " + (speed / 10) + "; [value[0] + Math.sin(s*0.7)*300, value[1] + Math.cos(s*1.1)*200]");
+            safeEx(cmGrad, "Point 4", 8, "var s = time * " + (speed / 10) + "; [value[0] + Math.cos(s*0.9)*300, value[1] + Math.sin(s*1.3)*200]");
         }
         var cmTurb = addFx(colorMaster, ["Turbulent Displace", "ADBE Turbulent Displace"]);
         if (cmTurb) {
             safeSet(cmTurb, "Amount", 2, 100);
             safeSet(cmTurb, "Size", 3, 300);
-            safeEx(cmTurb, "Evolution", 5, "time * " + speed * 2);
+            safeEx(cmTurb, "Evolution", 6, "time * " + speed * 2);
         }
         var cMosaic = addFx(colorMaster, ["Mosaic", "ADBE Mosaic"]);
         if (cMosaic) {
@@ -3606,9 +3770,9 @@ function buildWavy(comp, c, ctrl, w, h, dur) {
 
     var tile = addFx(s, ['ADBE Tile']);
     if (tile) {
-        safeSet(tile, "Output Width", 1, 300);
-        safeSet(tile, "Output Height", 2, 300);
-        safeSet(tile, "Mirror Edges", 3, true);
+        safeSet(tile, "Output Width", 4, 300);
+        safeSet(tile, "Output Height", 5, 300);
+        safeSet(tile, "Mirror Edges", 6, true);
     }
 
     applyAnimatedGradient(s, c, w, h, dur);
@@ -3628,7 +3792,7 @@ function buildWavy(comp, c, ctrl, w, h, dur) {
         safeSet(td, "Displacement", 1, turbTypeVal);
         safeSet(td, "Amount", 2, turbAmount);
         safeSet(td, "Size", 3, turbSize);
-        safeEx(td, "Evolution", 5, "time * " + turbEvolution);
+        safeEx(td, "Evolution", 6, "time * " + turbEvolution);
     }
 }
 
@@ -3725,6 +3889,7 @@ function buildReededGlass(comp, c, ctrl, w, h, dur) {
         else if (candidate.name === 'Reeded Lines') mapNow = candidate;
     }
 
+    /* @effect dispNow = ADBE Displacement Map */
     var dispNow = glassNow ? findFx(glassNow, ['ADBE Displacement Map']) : null;
     if (dispNow && mapNow) {
         LG.set(dispNow, 'Displacement Map Layer', 1, mapNow.index);
@@ -3934,7 +4099,7 @@ function lgShadeSet(fx, o, which) {
 
 /* The surface half of CC Glass: which layer is the height field, how deep it
    is, and how far it bends what is behind it. */
-function lgGlassSurface(fx, bumpLayerIndex, o) {
+function lgGlassSurface(fx, bumpLayerIndex, o) {   /* @effect fx = CC Glass */
     if (!fx) return null;
     if (bumpLayerIndex) LG.set(fx, 'Bump Map', 2, bumpLayerIndex);
     LG.set(fx, 'Property',     3, 5);                            // Lightness
@@ -4028,9 +4193,20 @@ var METAL_SURFACES = {
         smooth: 5, tilt: 16, metal: 100, ambient: 44, diffuse: 50
     },
     Foil: {
-        // Creases: mid-scale, very high contrast, then displaced hard.
+        /* Creases: mid-scale, then displaced hard.
+
+           hContrast was 200 and the probe caught what that does. This field is
+           Fractal Type 1, which is symmetric and therefore gets no bias
+           correction, so the contrast is unopposed — at 200 the distribution
+           is squeezed into its own top and bottom and Soft Clamp holds it
+           there. The dump read Contrast 200 / Brightness 0 / Overflow 2, which
+           is a height map with almost no usable mid-range left in it. CC Glass
+           shades the *slope* of this map, and a map that is flat-white here
+           and flat-black there has no slope to shade over most of its area.
+
+           Creases want a steep field, not a clipped one. */
         env: 'flow', field: 'noise',
-        hWidth: 150, hHeight: 130, hContrast: 200, hComplexity: 4,
+        hWidth: 150, hHeight: 130, hContrast: 135, hComplexity: 4,
         smooth: 2, tilt: 22, metal: 100, ambient: 32, diffuse: 44
     },
     Mercury: {
@@ -4070,6 +4246,49 @@ var METAL_SURFACES = {
     }
 };
 
+/* THE SMALLEST THING IN THE HEIGHT FIELD, in pixels.
+
+   CC Glass has two strengths and they do different jobs. Height is how hard
+   the surface is *lit* — the normals that make it read as metal. Displacement
+   is how far the reflection is *bent* over that surface.
+
+   Bending is the one with a limit. Displace the picture by more than the
+   distance between one bump and the next and the reflection does not flow over
+   the tooling, it tears across it, and what comes back is crinkle. That is
+   exactly what tools/bisect/06 -> 07 shows: frame 06 is smooth flowing ribbons
+   and frame 07, the only difference being CC Glass, is wrinkled foil.
+
+   Foil is the case that proves it. Its field is Fractal Noise at 150 x 130
+   with four octaves, so its finest structure is about 16px across, and the
+   build was asking CC Glass to displace by 56. Nothing survives that.
+
+   So the shader's Displacement is capped against this rather than left to
+   follow Relief alone. It is a cap and never a raise: a preset whose field is
+   already coarse (Polished at 620, Hammered's 90px dimples) is untouched, and
+   only the ones that were shredding themselves change. Height is left alone,
+   so the surface goes on being lit exactly as hard as it was. */
+function lgHeightFinestFeature(o) {
+    var scale  = num(o.scaleAll, 100) / 100;
+    var smooth = Math.max(0.5, num(o.smooth, 5) * scale);
+    var finest;
+
+    if (o.field === 'cells') {
+        /* A Cell Pattern is one smooth octave. Its dimple *is* its finest
+           structure, so the wavelength is the cell size, not a fraction of it. */
+        finest = Math.max(6, num(o.cellSize, 90) * scale);
+    } else {
+        /* Fractal Noise carries `complexity` octaves, each half the width of
+           the one above. The narrower axis is what binds — Brushed is 1400
+           wide and 3 tall on purpose. */
+        var base = Math.min(num(o.hWidth, 500), num(o.hHeight, 500)) * scale;
+        finest = base / Math.pow(2, Math.max(1, num(o.hComplexity, 3)) - 1);
+    }
+
+    /* The blur at the end of tuneMetalHeight erases everything below its own
+       radius, so whatever it leaves behind is the real answer. */
+    return Math.max(finest, smooth * 2);
+}
+
 /* The height field, inside its own comp. */
 function tuneMetalHeight(s, ctrl, kind) {
     if (!s) return;
@@ -4082,7 +4301,7 @@ function tuneMetalHeight(s, ctrl, kind) {
         var cell = lgFx(s, ['ADBE Cell Pattern']);
         if (cell) {
             LG.set(cell, 'Cell Pattern', 1, 1);                  // Bubbles
-            LG.set(cell, 'Contrast',     3, num(o.cellContrast, 150));
+            LG.set(cell, 'Contextual Slider', 3, num(o.cellContrast, 150));
             LG.set(cell, 'Disperse',     5, 0.55);
             LG.set(cell, 'Size',         6, Math.max(6, num(o.cellSize, 90) * scale));
             LG.expr(cell, 'Evolution', 13, speed !== 0 ? 'time * ' + (speed * 2) : 'value');
@@ -4117,6 +4336,14 @@ function tuneMetalHeight(s, ctrl, kind) {
     /* Crumple. On mercury this is the churn that keeps the droplets moving
        into and out of each other. */
     var warp = num(o.warp, 0);
+    /* Budgeted against the solid's own overhang, exactly as the surface's
+       displacements are budgeted against LG_OVERSIZE. The Crumple slider goes
+       to 400 and a reach of 3.2x puts that 1280px past the edge of a 600px
+       pad — the tear then prints straight through onto the metal, because this
+       map is what CC Glass reads as its bump source. */
+    var crumpleMax = lgDisplaceBudget(HEIGHT_PAD, 0);
+    if (warp > crumpleMax) warp = crumpleMax;
+
     var td = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Crumple');
     if (td) {
         lgTurbSet(td, {
@@ -4212,8 +4439,17 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
 
     /* Anything a previous version of this file left behind. A layer built
        before the hairlines were diagnosed still carries the wrap-back field,
-       and an effect nobody sets any more is an effect nobody turns off. */
-    var stale = lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Flow');
+       and an effect nobody sets any more is an effect nobody turns off.
+
+       FIND, NEVER ADD. lgFxNamed applies the effect when it cannot find one,
+       so this line was putting a fresh Fractal Noise onto every metal it built
+       purely in order to switch it off again — a dead effect on the stack of
+       all eight, and one more thing between the ramp and the shader. What it
+       does to a layer that still has a live one is visible in
+       tools/bisect/02 -> 03: frame 02 is the smooth mirrored bands this
+       gradient is trying to be, and frame 03, with Metal Flow on, is grey
+       mottle with no bands left in it at all. */
+    var stale = lgFindNamed(s, 'Metal Flow');
     if (stale) { try { stale.enabled = false; } catch (e) { } }
 
     /* 2. Bend it, within a budget.
@@ -4235,16 +4471,25 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
           is what binds — the frame is wider than it is tall, so the layer's
           vertical overhang is the smaller of the two. */
     var overhang = (h - h / LG_OVERSIZE) / 2;
-    var budget   = overhang * 0.8;               // leave a margin for the shader
+
+    /* The shader displaces on top of the turbulence and fetches from the same
+       overhang, so its reach is reserved rather than hoped for. Worked out here
+       and handed to the shader below, so the number the budget reserves and the
+       number the shader actually uses cannot drift apart.
+
+       Slightly conservative on Mercury and Gunmetal, which run CC Blobbylize
+       and CC Plastic — neither has a Displacement at all, so they reserve a
+       little they will not spend. Erring that way costs a fraction of the pour
+       and the other way costs a hole. */
+    var glassDisp   = Math.min(relief * 0.8, lgHeightFinestFeature(o) * 0.6);
+    var glassSoften = Math.max(1, relief * 0.12);
+    var budget = lgDisplaceBudget(overhang, glassDisp + glassSoften);
 
     var twistAmt = flow ? 70 + num(o.warp, 0) * 0.25 : 0;
     var envAmt   = flow ? 260 + num(o.warp, 0) * 0.8 : num(o.warp, 0) * 0.6;
-    var wanted   = twistAmt + envAmt;
-    if (wanted > budget && wanted > 0) {
-        var fit = budget / wanted;
-        twistAmt = twistAmt * fit;
-        envAmt   = envAmt * fit;
-    }
+    var fitted   = lgFitDisplace([twistAmt, envAmt], budget);
+    twistAmt = fitted[0];
+    envAmt   = fitted[1];
 
     /* Twist Smoother rather than Twist: plain Twist winds tight spirals whose
        centres compress the bands into a vortex, and a vortex is the other
@@ -4311,13 +4556,21 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     } else {
         var glass = lgFx(s, ['CC Glass']);
         if (glass) {
+            /* Displacement is what bends the reflection over the tooling, and
+               it has a ceiling that Relief knows nothing about: bend the
+               picture further than the distance between one bump and the next
+               and the reflection tears across the surface instead of flowing
+               over it. See lgHeightFinestFeature — and tools/bisect/06 next to
+               07, which is that failure with nothing else changed.
+
+               Height is deliberately left at full Relief. Height is how hard
+               the surface is lit and Displacement is how far the picture is
+               bent; only the second one shreds, so capping it keeps the metal
+               as lit as it ever was and stops the crinkle. */
             lgGlassSurface(glass, bumpIndex, {
-                softness:     Math.max(1, relief * 0.12),
+                softness:     glassSoften,
                 height:       relief,
-                /* Displacement is what bends the reflection over the tooling.
-                   Counted against the same overhang budget as the two stages
-                   above, so it cannot pull from beyond the layer either. */
-                displacement: relief * 0.8
+                displacement: glassDisp
             });
             lgShadeSet(glass, material, 'CC Glass');
         }
@@ -4343,13 +4596,133 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
 
    tuneMetalSurface reads this same constant to work out how much
    displacement it can afford, so the two can never disagree. */
-var LG_OVERSIZE = 1.8;
+var LG_OVERSIZE = 2.8;
+
+/* HOW FAR A TURBULENT DISPLACE ACTUALLY REACHES, PER UNIT OF "Amount".
+
+   This is the number the holes were about, and it was guessed three times
+   before it was measured. It is not 1. Amount is not a cap in pixels.
+
+   WHICH STAGE, from tools/hole_bisect.jsx. Frames 00-04 are opaque to every
+   edge; frame 05, whose only difference is Metal Environment switching on,
+   tears to the vertical centre of the frame. So the environment stage is the
+   one that overruns the overhang, and it overruns it by a long way. That is
+   qualitative: those frames were rendered in a small comp, and the amounts
+   scale with the comp, so they say which effect and not how much.
+
+   HOW MUCH, from tools/hole_probe_report.txt, which dumped a real 1920x1080
+   build: Metal Twist at Amount 77.2 and Metal Environment at 268.4 on a layer
+   with 432px of vertical overhang, and it tore roughly half of the 1080 frame
+   away. Write the reach as k x Amount:
+
+     total Amount 345.6, reach about 432 + 540      ->   k ~= 2.8
+
+   And a second, weaker constraint from the attempt after it — LG_OVERSIZE 2.4
+   with the amounts fitted to 290 against 756px of overhang — which reduced the
+   tear to a strip along the bottom edge rather than removing it:
+
+     290k a little over 756                         ->   k >~ 2.6
+
+   THE SIZE-PROPORTIONAL MODEL IS OUT. If the reach went as Amount x Size, the
+   probe's two stages at Size 1000 and 620 would have reached 772 + 1664 px
+   past a 432px overhang, which is the whole frame several times over. Half of
+   it survived. So the reach follows Amount, and whatever Size contributes is
+   small enough to sit inside the margin below.
+
+   3.2 rather than 2.8 is that margin — about 15%, on a quantity estimated from
+   pixels counted by eye in one render. It is an inference, not a measurement,
+   and it is the last one left in this file: tools/reach_calibrate.jsx renders
+   a sweep of Amount x Size x mode and tools/reach_measure.js decodes the alpha
+   and prints the fitted slope. Run those two and put the number they give here,
+   and the displacement budget stops being an estimate. */
+var LG_REACH_PER_AMOUNT = 3.2;
+
+/* The most Amount a stack of displacements may ask for, given how much image
+   there is beyond the edge to fetch from. `reserved` is what later effects on
+   the same layer will spend out of the same overhang — CC Glass displaces on
+   top of the turbulence, and its reach is not free either.
+
+   Every caller budgets through this, so the reach model lives in one place and
+   a future calibration changes every gradient at once. */
+function lgDisplaceBudget(overhang, reserved) {
+    var usable = overhang - (reserved || 0);
+    if (usable < 0) usable = 0;
+    return usable / LG_REACH_PER_AMOUNT;
+}
+
+/* Scale a requested displacement stack down to fit a budget. Takes and returns
+   an array of Amounts, so the relative weighting a preset chose survives. */
+function lgFitDisplace(amounts, budget) {
+    var wanted = 0, i, out = [];
+    for (i = 0; i < amounts.length; i++) wanted += amounts[i];
+    var fit = (wanted > budget && wanted > 0) ? budget / wanted : 1;
+    for (i = 0; i < amounts.length; i++) out.push(amounts[i] * fit);
+    return out;
+}
+
 function lgOversize(n) { return Math.round(n * LG_OVERSIZE); }
 
-/* How far the height solid overhangs its own comp on every side. Comfortably
-   past the largest Crumple the panel offers, because the cost of too much is
-   a little wasted render area and the cost of too little is a hole. */
-var HEIGHT_PAD = 600;
+/* How far the height solid overhangs its own comp on every side. The Crumple
+   inside that comp is budgeted against this the same way the surface's
+   displacements are budgeted against LG_OVERSIZE — it used to be a round
+   number chosen to be "comfortably past" the largest Crumple the panel offers,
+   which at Amount 400 and a reach of 3.2x was not close to true.
+
+   800 AND A SLIDER THAT STOPS AT 250 ARE ONE DECISION. 800 / 3.2 is 250, so the
+   top of the Crumple slider is exactly what this pad can pay for and every
+   position on it does something. At 600 the cap landed at 188 while the slider
+   went to 400, which meant the top half of the control was inert — and Foil's
+   own default of 240 was being silently clamped.
+
+   Going the other way instead — keeping the slider at 400 and padding to 1280 —
+   costs real render area: the height solid is already 6976 x 4624 at delivery
+   size and that would take it past 44 megapixels for a map nobody looks at. */
+var HEIGHT_PAD = 800;
+
+/* What shows through if a displacement tears after all.
+
+   The same reflection the metal is built from — the ramp, folded by Motion
+   Tile into the same number of bands, mapped through the same palette — with
+   none of the bending and a heavy blur over it. Blurred because it must read
+   as something behind the surface rather than as a second surface competing
+   with it, and because a torn edge against a soft field is far less legible
+   than a torn edge against a sharp one.
+
+   BAND WIDTH IS MATCHED, NOT COPIED. Motion Tile's Tile Width is a percentage
+   of its own layer, and this layer is comp-sized while the metal is
+   LG_OVERSIZE times bigger. Reusing 100/bands here would put the bands at
+   1/LG_OVERSIZE of the width they have on the metal and the mismatch would be
+   the most visible thing in the frame. */
+function tuneMetalBase(s, c, ctrl, kind, w, h) {
+    if (!s) return;
+    var spec  = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
+    var o     = lgDefaults(spec, ctrl);
+    var bands = Math.max(1, num(o.bands, 5));
+    var speed = num(o.speed, 6);
+
+    var ramp = lgFxNamed(s, ['ADBE Ramp'], 'Base Ramp');
+    if (ramp) {
+        LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
+        LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
+        LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
+        LG.set(ramp, 'End Color',     4, [1, 1, 1]);
+    }
+
+    var tile = lgFxNamed(s, ['ADBE Tile'], 'Base Fold');
+    if (tile) {
+        LG.set(tile, 'Tile Width',    2, (100 / bands) * LG_OVERSIZE);
+        LG.set(tile, 'Tile Height',   3, 100);
+        LG.set(tile, 'Output Width',  4, 100);
+        LG.set(tile, 'Output Height', 5, 100);
+        LG.set(tile, 'Mirror Edges',  6, true);
+        LG.expr(tile, 'Tile Center', 1, speed !== 0
+            ? '[value[0] + time * ' + (speed * 6) + ', value[1]]'
+            : 'value');
+    }
+
+    lgToneColors(lgFx(s, ['CC Toner']), c, true);
+    lgBlur(s, Math.max(24, Math.min(w, h) * 0.03));
+}
 
 function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
     var fps = comp.frameRate;
@@ -4383,10 +4756,30 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
                                                  OH + HEIGHT_PAD * 2, 1, dur);
     tuneMetalHeight(heightSolid, ctrl, kind);
 
-    // 2. Both layers into the target comp, height first so it ends up below.
+    // 2. The layers into the target comp, bottom-most first.
     var bump = comp.layers.add(heightComp);
     bump.name = kind + ' Height';
     bump.enabled = false;            // a bump source, not a picture
+
+    /* THE BACKSTOP, and the reason the holes can no longer be a black void
+       even if the reach model above is wrong again.
+
+       Everything else about the transparent regions is a budget: work out how
+       far a displacement reaches, make the layer bigger than that, keep the
+       tear off-comp. That is the right fix and it has now been wrong three
+       times, because the reach was a guess each time.
+
+       This is not a budget. It is a second, undisplaced copy of the same
+       reflection sitting underneath the metal, so a torn pixel does not fall
+       through to nothing — it falls through to soft out-of-focus metal in the
+       same palette. If the displacement never tears, nothing here is ever
+       seen. If it tears, the failure is a soft patch instead of a hole, and a
+       soft patch does not stop a release.
+
+       It costs one comp-sized layer carrying a ramp, a tile and a toner. No
+       displacement, no shader, nothing expensive. */
+    var base = comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Base', w, h, 1, dur);
+    tuneMetalBase(base, c, ctrl, kind, w, h);
 
     comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', OW, OH, 1, dur);
 
@@ -4403,6 +4796,7 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
         else if (comp.layer(i).name === kind + ' Height') bumpNow = comp.layer(i);
     }
     if (metalNow) tuneMetalSurface(metalNow, c, ctrl, kind, bumpNow ? bumpNow.index : 0);
+    else LG.warn(kind + ': lost the metal layer before shading it');
 }
 
 /* ── ANIMAL PRINTS ────────────────────────────────────────────────────
@@ -4527,7 +4921,7 @@ function lgPrintBias(coverage, contrast, mid) {
 }
 
 /* CC Toner's five stops, set directly. */
-function lgToneStops(toner, stops) {
+function lgToneStops(toner, stops) {   /* @effect toner = CC Toner */
     if (!toner) return null;
     LG.set(toner, 'Tones',      1, 3);                       // Pentone
     LG.set(toner, 'Shadows',    6, stops[0]);
@@ -4560,7 +4954,7 @@ function tuneAnimalPrint(s, c, ctrl, species) {
             };
             LG.set(cell, 'Cell Pattern', 1, patternMap[o.pattern] || 7);
             LG.set(cell, 'Invert',       2, o.invert !== false && o.invert !== 'Off');
-            LG.set(cell, 'Contrast',     3, contrast);
+            LG.set(cell, 'Contextual Slider', 3, contrast);
             LG.set(cell, 'Disperse',     5, num(o.disperse, 1));
             LG.set(cell, 'Size',         6, Math.max(6, num(o.size, 150) * scale));
             LG.expr(cell, 'Evolution', 13, speed !== 0 ? 'time * ' + speed : 'value');
@@ -4851,7 +5245,7 @@ function lgRamp5(c) {
    declared named roles for its slots — Metallic's Shadow / Base / Bright /
    Highlight. Without roles there is no way to know the intended order, so it
    is inferred from luminance. */
-function lgToneColors(toner, c, ordered, hard) {
+function lgToneColors(toner, c, ordered, hard) {   /* @effect toner = CC Toner */
     if (!toner) return null;
     var src = ordered ? c : lgByLuma(c);
     var s = hard ? lgSteps5(src) : lgRamp5(src);
@@ -4898,6 +5292,54 @@ function lgFx(layer, names) {
    the first match both times, so the second set of values silently overwrites
    the first and one of the two stages never exists. */
 function lgFxNamed(layer, names, label) {
+    var found = lgFindNamed(layer, label);
+    if (found) return found;
+    var added = addFx(layer, names);
+    if (added) { try { added.name = label; } catch (e) { } }
+    return added;
+}
+
+/* Set the value of an Expression Control that this panel named. Several
+   gradients are driven entirely by expressions reading `effect('Speed')(1)`,
+   which makes them the easiest things in the file to update live — one number
+   on one slider and every expression that reads it follows. */
+function lgCtrlSet(layer, label, value) {
+    var fx = lgFindNamed(layer, label);
+    if (!fx) return false;
+    /* Property 1 of a Slider Control is "Slider" and of a Color Control is
+       "Color". Ask by index: these two effects have exactly one parameter, so
+       there is nothing else it could be, on any host in any language. */
+    try { fx.property(1).setValue(value); return true; } catch (e) { }
+    LG.warn("could not set the '" + label + "' control");
+    return false;
+}
+
+/* The first shape group's Contents — where every shape builder in this file
+   puts its path, stroke and repeater. */
+function lgShapeContents(layer) {
+    try { return layer.property('Contents').property(1).property('Contents'); }
+    catch (e) { return null; }
+}
+
+/* An item inside a shape group, by matchName. Shape items have no stable
+   index: adding a repeater or a rounded-corners filter shifts everything after
+   it, and several builders here do exactly that. */
+function lgShapeItem(gc, matchName) {
+    if (!gc) return null;
+    var i, q;
+    for (i = 1; i <= gc.numProperties; i++) {
+        q = null;
+        try { q = gc.property(i); } catch (e) { continue; }
+        try { if (q && q.matchName === matchName) return q; } catch (e) { }
+    }
+    return null;
+}
+
+/* The same lookup without the "or apply one". For effects that only ever need
+   handling when a layer built by an older version still carries them — asking
+   lgFxNamed for those applies a fresh effect just so the next line can switch
+   it off, which is how a dead Fractal Noise ended up on all eight metals. */
+function lgFindNamed(layer, label) {
     var effects = null, i, ef;
     try { effects = layer.property('Effects'); } catch (e) { return null; }
     for (i = 1; i <= effects.numProperties; i++) {
@@ -4905,9 +5347,7 @@ function lgFxNamed(layer, names, label) {
         try { ef = effects.property(i); } catch (e) { continue; }
         if (ef && ef.name === label) return ef;
     }
-    var added = addFx(layer, names);
-    if (added) { try { added.name = label; } catch (e) { } }
-    return added;
+    return null;
 }
 
 /* Fractal Noise, configured from the probe dump rather than from memory.
@@ -4921,7 +5361,7 @@ function lgFxNamed(layer, names, label) {
    they all came out as the same undifferentiated cloud.
 
    Indices are from tools/effect_probe_report.txt on this machine. */
-function lgFractalSet(fn, o) {
+function lgFractalSet(fn, o) {   /* @effect fn = ADBE Fractal Noise */
     if (!fn) return null;
 
     /* The turbulent fractal types are bright-biased: they render as light
@@ -4992,7 +5432,7 @@ function lgFractalSet(fn, o) {
 
 /* Displacement modes are 1 Turbulent, 2 Bulge, 3 Twist, 4 Turbulent Smoother,
    5 Bulge Smoother, 6 Twist Smoother. */
-function lgTurbSet(td, o) {
+function lgTurbSet(td, o) {   /* @effect td = ADBE Turbulent Displace */
     if (!td) return null;
     LG.set(td, 'Displacement', 1, o.mode || 1);
     LG.set(td, 'Amount',       2, num(o.amount, 100));
@@ -5109,6 +5549,7 @@ function lgCycleTime(speed) {
 }
 
 function lgOklabToneStops(layer, c) {
+    /* @effect toner = CC Toner */
     var toner = layer ? findFx(layer, ['CC Toner']) : null;
     if (!toner) return null;
 
@@ -5372,9 +5813,13 @@ function tuneCellularMosaic(s, c, ctrl) {
     if (cell) {
         LG.set(cell, 'Cell Pattern', 1, pv);
         LG.set(cell, 'Invert',       2, ctrl.invert === 'On');
-        /* Property 3 is named "Contextual Slider" — it is Contrast or
-           Sharpness depending on the pattern, so only the index finds it. */
-        LG.set(cell, 'Contrast',     3, num(ctrl.contrast, 140));
+        /* The interface labels property 3 "Contrast" for most patterns and
+           "Sharpness" for the crystallised ones. The DOM calls it "Contextual
+           Slider" in every case, so that is what to ask for — asking for
+           "Contrast" missed the name and the scan and landed on the index,
+           which meant this one write was resolving the one way the rest of
+           this file treats as a last resort. */
+        LG.set(cell, 'Contextual Slider', 3, num(ctrl.contrast, 140));
         LG.set(cell, 'Disperse',     5, num(ctrl.dispersion, 50) / 100);
         LG.set(cell, 'Size',         6, Math.max(6, 250 - cells));
         LG.expr(cell, 'Offset', 7, drift > 0
@@ -5400,11 +5845,11 @@ function tuneCellularMosaic(s, c, ctrl) {
 
 function buildSonduckLiquid(comp, c, ctrl, w, h, dur) {
     var fps = comp.frameRate;
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 20;
 
     var shapesComp = app.project.items.addComp("Sonduck Shapes", w, h, 1, dur, fps);
     var nullLayer = shapesComp.layers.addNull(dur);
-    nullLayer.name = "Animation Null";
+    nullLayer.name = "Sonduck Null";
+    tuneShapeDrift(nullLayer, ctrl, lgSonduckDriftExpr);
 
     for (var i = 0; i < 15; i++) {
         var isWhite = i < 8;
@@ -5434,37 +5879,75 @@ function buildSonduckLiquid(comp, c, ctrl, w, h, dur) {
         safeSet(repeTile, "Expand Down", 3, 2000);
         safeSet(repeTile, "Expand Up", 4, 2000);
     }
-    safeEx(nullLayer.property("Transform").property("Position"), "var s = time * " + (speed * 50) + "; [value[0] - s, value[1]]");
-
-    var bg = comp.layers.addSolid([0.1, 0, 0.2], "Background", w, h, 1, dur);
+    comp.layers.addSolid([0.1, 0, 0.2], "Background", w, h, 1, dur);
     var shapesLayer = comp.layers.add(shapesComp);
     shapesLayer.name = "Sonduck Shapes";
-    
-    var tint = addFx(shapesLayer, ["Tint", "ADBE Tint"]);
-    if (tint) {
-        safeSet(tint, "Map Black To", 1, c[0]);
-        safeSet(tint, "Map White To", 2, c[1]);
-    }
-    
-    var dirBlur = addFx(shapesLayer, ["Directional Blur", "ADBE Directional Blur"]);
+
+    addFx(shapesLayer, ["ADBE Tint", "Tint"]);
+
+    var dirBlur = addFx(shapesLayer, ["ADBE Motion Blur", "Directional Blur"]);
     if (dirBlur) {
-        safeSet(dirBlur, "Direction", 1, 30);
-        safeSet(dirBlur, "Blur Length", 2, 700);
+        LG.set(dirBlur, "Direction", 1, 30);
+        LG.set(dirBlur, "Blur Length", 2, 700);
     }
-    
-    var twirl = addFx(shapesLayer, ["Twirl", "ADBE Twirl"]);
+
+    var twirl = addFx(shapesLayer, ["ADBE Twirl", "Twirl"]);
     if (twirl) {
-        safeSet(twirl, "Angle", 1, 60);
-        safeSet(twirl, "Twirl Radius", 2, 60);
+        LG.set(twirl, "Angle", 1, 60);
+        LG.set(twirl, "Twirl Radius", 2, 60);
+    }
+
+    tuneSonduckLiquid(shapesLayer, c, ctrl);
+}
+
+/* The drift lives on a null inside the precomp, and lgScope flattens precomps
+   into the same list as the top level, so the live path reaches it by name in
+   exactly the way it reaches anything else. */
+function lgSonduckDriftExpr(v) {
+    return "var s = time * " + (v * 50) + "; [value[0] - s, value[1]]";
+}
+function lgTwirlDriftExpr(v) {
+    return "var s = time * " + (v * 30) +
+           "; [value[0] + Math.cos(s)*500, value[1] + Math.sin(s)*500]";
+}
+
+function tuneShapeDrift(nullLayer, ctrl, exprFor) {
+    if (!nullLayer) return;
+    var speed = num(ctrl.speed, 20);
+    var pos = null;
+    try { pos = nullLayer.property("Transform").property("Position"); } catch (e) { }
+    if (!pos) return;
+    try {
+        pos.expression = speed !== 0 ? exprFor(speed) : '';
+    } catch (e) {
+        LG.warn('could not set the drift on "' + nullLayer.name + '"');
+    }
+}
+
+/* Bound signatures for the live dispatch, which calls every tuner the same
+   way. Keeping them here rather than inline in the table means the build and
+   the drag run the identical expression builder. */
+function tuneSonduckNull(layer, cols, ctrl) { tuneShapeDrift(layer, ctrl, lgSonduckDriftExpr); }
+function tuneTwirlNull(layer, cols, ctrl)   { tuneShapeDrift(layer, ctrl, lgTwirlDriftExpr); }
+
+function tuneSonduckLiquid(s, c, ctrl) {
+    if (!s) return;
+    var tint = findFx(s, ["ADBE Tint", "Tint"]);
+    if (tint) {
+        LG.set(tint, "Map Black To", 1, c[0]);
+        LG.set(tint, "Map White To", 2, c[1] || c[0]);
     }
 }
 
 function buildTwirlShapes(comp, c, ctrl, w, h, dur) {
     var fps = comp.frameRate;
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 20;
 
     var shapesComp = app.project.items.addComp("Twirl Shapes", w, h, 1, dur, fps);
     var nullLayer = shapesComp.layers.addNull(dur);
+    /* Named, because the live path finds it by name. An unnamed null is
+       "Null 1", which is also what any null the user added is called. */
+    nullLayer.name = "Twirl Null";
+    tuneShapeDrift(nullLayer, ctrl, lgTwirlDriftExpr);
 
     for (var i = 0; i < 20; i++) {
         var isWhite = i % 2 === 0;
@@ -5493,100 +5976,98 @@ function buildTwirlShapes(comp, c, ctrl, w, h, dur) {
         safeSet(repeTile, "Expand Down", 3, 2000);
         safeSet(repeTile, "Expand Up", 4, 2000);
     }
-    safeEx(nullLayer.property("Transform").property("Position"), "var s = time * " + (speed * 30) + "; [value[0] + Math.cos(s)*500, value[1] + Math.sin(s)*500]");
-
     comp.layers.addSolid([0, 0, 0], "Background", w, h, 1, dur);
     var shapesLayer = comp.layers.add(shapesComp);
     shapesLayer.name = "Twirl Shapes";
-    
-    var tint = addFx(shapesLayer, ["Tint", "ADBE Tint"]);
-    if (tint) {
-        safeSet(tint, "Map Black To", 1, c[0]);
-        safeSet(tint, "Map White To", 2, c[1]);
-    }
-    
-    var dirBlur = addFx(shapesLayer, ["Directional Blur", "ADBE Directional Blur"]);
+
+    addFx(shapesLayer, ["ADBE Tint", "Tint"]);
+
+    var dirBlur = addFx(shapesLayer, ["ADBE Motion Blur", "Directional Blur"]);
     if (dirBlur) {
-        safeSet(dirBlur, "Direction", 1, -45);
-        safeSet(dirBlur, "Blur Length", 2, 500);
+        LG.set(dirBlur, "Direction", 1, -45);
+        LG.set(dirBlur, "Blur Length", 2, 500);
     }
-    
-    var twirl = addFx(shapesLayer, ["Twirl", "ADBE Twirl"]);
+
+    var twirl = addFx(shapesLayer, ["ADBE Twirl", "Twirl"]);
     if (twirl) {
-        safeSet(twirl, "Angle", 1, -120);
-        safeSet(twirl, "Twirl Radius", 2, 80);
+        LG.set(twirl, "Angle", 1, -120);
+        LG.set(twirl, "Twirl Radius", 2, 80);
     }
+
+    /* Same tuner as Sonduck: both are a tinted field of shapes, and the only
+       thing either exposes is the tint. */
+    tuneSonduckLiquid(shapesLayer, c, ctrl);
 }
 
 function buildLavaLamp(comp, c, ctrl, w, h, dur) {
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 15;
+    var s = comp.layers.addSolid([0, 0, 0], "Lava Lamp", w, h, 1, dur);
 
-    var s = comp.layers.addSolid([0,0,0], "Lava Lamp", w, h, 1, dur);
     var repeTile = addFx(s, ["CC RepeTile"]);
     if (repeTile) {
-        safeSet(repeTile, "Expand Right", 1, 2000);
-        safeSet(repeTile, "Expand Left", 2, 1000);
-        safeSet(repeTile, "Expand Down", 3, 1000);
-        safeSet(repeTile, "Expand Up", 4, 1000);
+        LG.set(repeTile, "Expand Right", 1, 2000);
+        LG.set(repeTile, "Expand Left",  2, 1000);
+        LG.set(repeTile, "Expand Down",  3, 1000);
+        LG.set(repeTile, "Expand Up",    4, 1000);
     }
-    
-    var g4 = addFx(s, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient']);
+
+    addFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
+    addFx(s, ['ADBE Fractal Noise', 'Fractal Noise']);
+
+    var twirl = addFx(s, ["ADBE Twirl", "Twirl"]);
+    if (twirl) {
+        LG.set(twirl, "Angle", 1, 230);
+        LG.set(twirl, "Twirl Radius", 2, 35);
+    }
+
+    tuneLavaLamp(s, c, ctrl);
+}
+
+function tuneLavaLamp(s, c, ctrl) {
+    if (!s) return;
+    var speed = num(ctrl.speed, 15);
+
+    var g4 = findFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
     if (g4) {
-        for (var i = 0; i < 4; i++) {
-            safeSet(g4, 'Color ' + (i + 1), null, c[i % c.length]);
-            safeEx(g4, 'Point ' + (i + 1), null, 'wiggle(0.5, 500)');
+        var cidx = [3, 5, 7, 9], pidx = [2, 4, 6, 8], i;
+        for (i = 0; i < 4; i++) {
+            LG.set(g4, 'Color ' + (i + 1), cidx[i], c[i % c.length]);
+            LG.expr(g4, 'Point ' + (i + 1), pidx[i], 'wiggle(0.5, 500)');
         }
     }
-    
-    var fn = addFx(s, ['Fractal Noise', 'ADBE FractalNoise']);
+
+    var fn = findFx(s, ['ADBE Fractal Noise', 'Fractal Noise']);
     if (fn) {
-        safeSet(fn, 'Noise Type',    2, 1);
-        safeSet(fn, 'Contrast',      4, 200);
-        safeSet(fn, 'Brightness',    5, -30);
-        safeSet(fn, 'Complexity',   16, 1);
-        safeSet(fn, 'Blending Mode', 31, 5);
+        LG.set(fn, 'Noise Type',    2, 1);
+        LG.set(fn, 'Contrast',      4, 200);
+        LG.set(fn, 'Brightness',    5, -30);
+        LG.set(fn, 'Complexity',   16, 1);
+        LG.set(fn, 'Blending Mode', 31, 5);
 
         /* Fractal Noise's "Transform" is a topic marker in the DOM, not a
            group with children — Rotation and the Scale pair are siblings of
            it at the top level. Reaching through it set nothing at all, which
            is why this rendered as a flat tiled check instead of a lamp.
            Indices from tools/effect_probe_report.txt. */
-        safeSet(fn, 'Rotation',        8, -35);
-        safeEx(fn,  'Rotation',        8, 'time * ' + speed);
-        safeSet(fn, 'Uniform Scaling', 9, false);
-        safeSet(fn, 'Scale Width',    11, 1300);
-        safeSet(fn, 'Scale Height',   12, 600);
-
-        safeEx(fn, 'Evolution', 24, 'time * ' + (speed * 10));
-    }
-    
-    var twirl = addFx(s, ["Twirl", "ADBE Twirl"]);
-    if (twirl) {
-        safeSet(twirl, "Angle", 1, 230);
-        safeSet(twirl, "Twirl Radius", 2, 35);
+        LG.set(fn, 'Rotation',        8, -35);
+        LG.expr(fn, 'Rotation',       8, speed !== 0 ? 'time * ' + speed : 'value');
+        LG.set(fn, 'Uniform Scaling', 9, false);
+        LG.set(fn, 'Scale Width',    11, 1300);
+        LG.set(fn, 'Scale Height',   12, 600);
+        LG.expr(fn, 'Evolution', 24, speed !== 0 ? 'time * ' + (speed * 10) : 'value');
     }
 }
 
 function buildStackedSquares(comp, c, ctrl, w, h, dur) {
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 20;
-
     var s = comp.layers.addSolid([1,1,1], "Stacked Background", w, h, 1, dur);
     try { s.property("Transform").property("Scale").setValue([250, 250]); } catch(e) {}
-    safeEx(s.property("Transform").property("Rotation"), "time * " + (speed * 0.75));
 
-    var g4 = addFx(s, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient']);
-    if (g4) {
-        for (var i = 0; i < 4; i++) {
-            safeSet(g4, 'Color ' + (i + 1), null, c[i % c.length]);
-            safeEx(g4, 'Point ' + (i + 1), null, 'wiggle(0.5, 500)');
-        }
-    }
+    addFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
     
     var mt = addFx(s, ['ADBE Tile']);
     if (mt) {
-        safeSet(mt, 'Output Width', 1, 150);
-        safeSet(mt, 'Output Height', 2, 150);
-        safeSet(mt, 'Mirror Edges', 3, true);
+        safeSet(mt, 'Output Width', 4, 150);
+        safeSet(mt, 'Output Height', 5, 150);
+        safeSet(mt, 'Mirror Edges', 6, true);
     }
     
     var twirl1 = addFx(s, ["Twirl", "ADBE Twirl"]);
@@ -5619,11 +6100,8 @@ function buildStackedSquares(comp, c, ctrl, w, h, dur) {
         sq.property("Transform").property("Position").setValue([w/2, h/2]);
         var scaleVal = Math.pow(1.8, j-1) * 100;
         sq.property("Transform").property("Scale").setValue([scaleVal, scaleVal]);
-        
-        var rotOffset = (j - 1) * 2;
-        safeEx(sq.property("Transform").property("Rotation"), "time * " + speed + " - " + rotOffset);
-        
-        var drop = addFx(sq, ["Drop Shadow", "ADBE Drop Shadow"]);
+
+        var drop = addFx(sq, ["ADBE Drop Shadow", "Drop Shadow"]);
         if (drop) {
             safeSet(drop, "Opacity", 2, 255);
             safeSet(drop, "Distance", 4, 0);
@@ -5633,14 +6111,63 @@ function buildStackedSquares(comp, c, ctrl, w, h, dur) {
         if (j !== 3) {
             try { sq.blendingMode = BlendingMode.MULTIPLY; } catch(e) {}
         } else {
-            var g4_copy = addFx(sq, ['4-Color Gradient', '4 Color Gradient', 'ADBE 4-Color Gradient']);
-            if (g4_copy) {
-                for (var i = 0; i < 4; i++) {
-                    safeSet(g4_copy, 'Color ' + (i + 1), null, c[(i+1) % c.length]);
-                    safeEx(g4_copy, 'Point ' + (i + 1), null, 'wiggle(0.5, 500)');
-                }
-            }
+            addFx(sq, ['ADBE 4ColorGradient', '4-Color Gradient']);
         }
+    }
+
+    /* Every square is named "Square N", and the tuner works off that name, so
+       the build and a slider drag walk the same layers by the same route. */
+    tuneStackedSquares(s, c, ctrl);
+    for (var k = 1; k <= 5; k++) {
+        var sqNow = null, li;
+        for (li = 1; li <= comp.numLayers; li++) {
+            if (comp.layer(li).name === "Square " + k) { sqNow = comp.layer(li); break; }
+        }
+        if (sqNow) tuneStackedSquare(sqNow, c, ctrl);
+    }
+}
+
+/* The backdrop: a four-colour field under the stack, rotating slowly. */
+function tuneStackedSquares(s, c, ctrl) {
+    if (!s) return;
+    var speed = num(ctrl.speed, 20);
+    lgWiggleGradient(findFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']), c, 0);
+    lgRotate(s, speed * 0.75, 0);
+}
+
+/* One square. The rotation offset is derived from the name so the five stay
+   fanned out by the same two degrees each after a live update as they were
+   when they were built. */
+function tuneStackedSquare(sq, c, ctrl) {
+    if (!sq) return;
+    var speed = num(ctrl.speed, 20);
+    var j = parseInt(String(sq.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(j)) j = 1;
+    lgRotate(sq, speed, (j - 1) * 2);
+    if (j === 3) lgWiggleGradient(findFx(sq, ['ADBE 4ColorGradient', '4-Color Gradient']), c, 1);
+}
+
+/* A rotation that runs at `speed` degrees a second, offset by `offset`. An
+   empty expression rather than "time * 0" when the speed is zero, so the
+   layer's own Rotation value is what shows. */
+function lgRotate(layer, speed, offset) {
+    var rot = null;
+    try { rot = layer.property("Transform").property("Rotation"); } catch (e) { return; }
+    try {
+        rot.expression = speed !== 0
+            ? "time * " + speed + " - " + (offset || 0)
+            : '';
+    } catch (e) { LG.warn('could not animate the rotation on "' + layer.name + '"'); }
+}
+
+/* Four colours on a 4-Color Gradient, each drifting on its own wiggle.
+   `shift` rotates which palette entry lands on which corner. */
+function lgWiggleGradient(g4, c, shift) {
+    if (!g4) return;
+    var cidx = [3, 5, 7, 9], pidx = [2, 4, 6, 8], i;
+    for (i = 0; i < 4; i++) {
+        LG.set(g4, 'Color ' + (i + 1), cidx[i], c[(i + (shift || 0)) % c.length]);
+        LG.expr(g4, 'Point ' + (i + 1), pidx[i], 'wiggle(0.5, 500)');
     }
 }
 function buildTrailGradient(comp, c, ctrl, w, h, dur) {
@@ -5655,13 +6182,10 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
     var strokeWidth = ctrl.width !== undefined ? parseFloat(ctrl.width) : 60;
     if (strokeWidth < 4) strokeWidth = 4;
     var numStrokes  = Math.ceil(w / strokeWidth) + 4;
-    var startCycle  = ctrl.cycleSpeed !== undefined ? parseFloat(ctrl.cycleSpeed) : 600;
-    var cycleOffset = 20;
 
     var precomp = app.project.items.addComp("Trail Base", w, h, 1, dur, comp.frameRate);
 
     for (var i = 0; i < numStrokes; i++) {
-        var cycleSpeed = startCycle - (i * cycleOffset);
         var xPos = (i - Math.floor(numStrokes / 2)) * strokeWidth + (w / 2);
 
         var s = precomp.layers.addSolid([1, 1, 1], "Trail " + i, strokeWidth, h, 1, dur);
@@ -5677,11 +6201,10 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
 
         var tile = addFx(s, ["ADBE Tile"]);
         if (tile) {
-            safeSet(tile, "Output Height", 5, 400);
-            safeSet(tile, "Mirror Edges",  6, true);
-            safeEx(tile, "Tile Center", 1,
-                   "[value[0], value[1] + (time * " + cycleSpeed + ")]");
+            LG.set(tile, "Output Height", 5, 400);
+            LG.set(tile, "Mirror Edges",  6, true);
         }
+        tuneTrailStroke(s, null, ctrl);
 
         try { s.property("Transform").property("Position").setValue([xPos, h / 2]); }
         catch (e) { LG.warn("TrailGradient: cannot position stroke " + i); }
@@ -5713,41 +6236,47 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
         }
     }
 
-    var warp = addFx(finalLayer, ["ADBE WRPMESH"]);
+    addFx(finalLayer, ["ADBE WRPMESH"]);
+    tuneTrailGradient(finalLayer, c, ctrl);
+}
+
+/* One stroke. The bank reads as a travelling wave because each stroke scrolls
+   a little slower than the one before it, and that offset is derived from the
+   layer's own name so a live update reproduces it exactly. */
+function tuneTrailStroke(s, cols, ctrl) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    var cycleSpeed = num(ctrl.cycleSpeed, 600) - (i * 20);
+
+    var tile = findFx(s, ["ADBE Tile"]);
+    if (!tile) return;
+    LG.expr(tile, "Tile Center", 1,
+            "[value[0], value[1] + (time * " + cycleSpeed + ")]");
+}
+
+/* The finished bank. Trail *width* stays a rebuild — it decides how many
+   strokes there are and how wide each solid is, and a solid cannot be
+   resized after the fact. */
+function tuneTrailGradient(s, c, ctrl) {
+    if (!s) return;
+    var warp = findFx(s, ["ADBE WRPMESH"]);
     if (warp) {
         // Warp Style is a 1-based dropdown; 14 = Squeeze (13 is Inflate).
-        safeSet(warp, "Warp Style", 1, 14);
-        var bend = ctrl.bend !== undefined ? parseFloat(ctrl.bend) : 30;
-        safeSet(warp, "Bend", 3, bend);
+        LG.set(warp, "Warp Style", 1, 14);
+        LG.set(warp, "Bend", 3, num(ctrl.bend, 30));
     }
 }
 
 // --- WEB STUDIO CLONES ---
 
 function buildPrismaticBurst(comp, c, ctrl, w, h, dur) {
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 100;
-    var rayCount = ctrl.rayCount !== undefined ? parseFloat(ctrl.rayCount) : 5;
-    var distort = ctrl.distort !== undefined ? parseFloat(ctrl.distort) : 250;
-
-    var c1 = c[0] || [1,0,0];
-    var c2 = c[1] || [0,1,0];
-    var c3 = c[2] || [0,0,1];
-    var c4 = c[3] || [1,1,0];
-
     // Bottom Layer: Gradient
     var gradLayer = comp.layers.addSolid([1,1,1], "Prismatic Colors", w, h, 1, dur);
     gradLayer.startTime = 0;
     
-    var ramp = addFx(gradLayer, ["ADBE 4-Color Gradient", "4-Color Gradient"]);
-    if (ramp) {
-        var pts = [[w*0.1, h*0.1], [w*0.9, h*0.1], [w*0.1, h*0.9], [w*0.9, h*0.9]];
-        for (var i = 0; i < 4; i++) {
-            safeSet(ramp, "Point " + (i+1), null, pts[i]);
-            var col = (i===0?c1:i===1?c2:i===2?c3:c4);
-            safeSet(ramp, "Color " + (i+1), null, col);
-            safeEx(ramp, "Point " + (i+1), null, "wiggle(" + (speed/50) + ", " + (w/4) + ")");
-        }
-    }
+    addFx(gradLayer, ["ADBE 4ColorGradient", "4-Color Gradient"]);
+    tunePrismaticColors(gradLayer, c, ctrl, w, h);
 
     /* Top Layer: Rays (Matte)
 
@@ -5763,27 +6292,9 @@ function buildPrismaticBurst(comp, c, ctrl, w, h, dur) {
         rayLayer.property("Transform").property("Position").setValue([w / 2, h / 2]);
     } catch (e) { }
     
-    var noise = addFx(rayLayer, ["ADBE Fractal Noise", "Fractal Noise"]);
-    if (noise) {
-        safeSet(noise, "Fractal Type", 1, 1); // Dynamic
-        safeSet(noise, "Noise Type",   2, 1); // Block
-        safeSet(noise, "Contrast",     4, 300);
-        safeSet(noise, "Brightness",   5, 0);
-        safeSet(noise, "Complexity",  16, 4);
+    addFx(rayLayer, ["ADBE Fractal Noise", "Fractal Noise"]);
+    tunePrismaticRays(rayLayer, c, ctrl);
 
-        /* Same as Lava Lamp: "Transform" and "Sub Settings" are topic markers
-           with no children. The rays are made entirely by the extreme
-           width-to-height ratio below, so reaching through an empty group is
-           the difference between rays and undifferentiated block noise. */
-        safeSet(noise, "Uniform Scaling", 9, false);
-        safeSet(noise, "Scale Width",    11, rayCount * 2);
-        safeSet(noise, "Scale Height",   12, 4000);
-
-        safeEx(noise, "Evolution", 24, "time * " + speed);
-
-        // The parameter is called "Sub Influence (%)" on the host.
-        safeSet(noise, "Sub Influence (%)", 18, distort / 5);
-    }
     
     var polar = addFx(rayLayer, ["ADBE Polar Coordinates", "Polar Coordinates"]);
     if (polar) {
@@ -5800,59 +6311,94 @@ function buildPrismaticBurst(comp, c, ctrl, w, h, dur) {
     }
 }
 
-function buildAntigravity(comp, c, ctrl, w, h, dur) {
-    var count = ctrl.count !== undefined ? parseFloat(ctrl.count) : 300;
-    var speed = ctrl.waveSpeed !== undefined ? parseFloat(ctrl.waveSpeed) : 0.4;
-    var pSize = ctrl.particleSize !== undefined ? parseFloat(ctrl.particleSize) : 2;
+/* The rays are a Fractal Noise squeezed to an extreme width-to-height ratio
+   and then wrapped by Rect-to-Polar, so ray density is Scale Width and nothing
+   structural. All three sliders are live. */
+function tunePrismaticRays(s, c, ctrl) {
+    if (!s) return;
+    var noise = findFx(s, ["ADBE Fractal Noise", "Fractal Noise"]);
+    if (!noise) { LG.warn('Prismatic Burst: the ray field is missing'); return; }
 
-    var color1 = c[0] || [1, 0.62, 0.98]; // #FF9FFC
-    var color2 = c[1] || [0.32, 0.15, 1]; // #5227FF
+    LG.set(noise, "Fractal Type", 1, 1); // Basic
+    LG.set(noise, "Noise Type",   2, 1); // Block
+    LG.set(noise, "Contrast",     4, 300);
+    LG.set(noise, "Brightness",   5, 0);
+    LG.set(noise, "Complexity",  16, 4);
 
-    var bg = comp.layers.addSolid([0.07, 0.05, 0.09], "Background Void", w, h, 1, dur);
-    
-    var emitterLayer = comp.layers.addSolid([0,0,0], "Antigravity Particles", w, h, 1, dur);
-    emitterLayer.blendingMode = BlendingMode.ADD;
-    
-    var pw = addFx(emitterLayer, ["CC Particle World"]);
-    if (pw) {
-        safeSet(pw, "Birth Rate", null, count / 100);
-        safeSet(pw, "Longevity (sec)", null, 4);
-        
-        // Emitter
-        safeSetGroup(pw, "Producer", "Radius X", null, 0.2);
-        safeSetGroup(pw, "Producer", "Radius Y", null, 0.2);
-        
-        // Physics
-        safeSetGroup(pw, "Physics", "Velocity", null, speed);
-        safeSetGroup(pw, "Physics", "Gravity", null, 0); // Antigravity!
-        safeSetGroup(pw, "Physics", "Resistance", null, 0.5);
-        
-        // Particle
-        safeSetGroup(pw, "Particle", "Particle Type", null, 2); // Line
-        safeSetGroup(pw, "Particle", "Birth Size", null, pSize / 10);
-        safeSetGroup(pw, "Particle", "Death Size", null, 0);
-        safeSetGroup(pw, "Particle", "Size Variation", null, 100);
-        safeSetGroup(pw, "Particle", "Max Opacity", null, 100);
-        safeSetGroup(pw, "Particle", "Birth Color", null, color1);
-        safeSetGroup(pw, "Particle", "Death Color", null, color2);
-    }
-    
-    var glow = addFx(emitterLayer, ["ADBE Glo2"]);
-    if (glow) {
-        safeSet(glow, "Glow Threshold", 2, 30);   // particles are dim; bite early
-        safeSet(glow, "Glow Radius",    3, 50);
-        safeSet(glow, "Glow Intensity", 4, 1.5);
+    /* "Transform" and "Sub Settings" are topic markers with no children. The
+       rays are made entirely by the ratio below, so reaching through an empty
+       group is the difference between rays and undifferentiated block noise. */
+    LG.set(noise, "Uniform Scaling", 9, false);
+    LG.set(noise, "Scale Width",    11, Math.max(1, num(ctrl.rayCount, 5) * 2));
+    LG.set(noise, "Scale Height",   12, 4000);
+    LG.set(noise, "Sub Influence (%)", 18, num(ctrl.distort, 250) / 5);
+    LG.expr(noise, "Evolution", 24, "time * " + num(ctrl.speed, 100));
+}
+
+function tunePrismaticColors(s, c, ctrl, w, h) {
+    if (!s) return;
+    var ramp = findFx(s, ["ADBE 4ColorGradient", "4-Color Gradient"]);
+    if (!ramp) return;
+    var speed = num(ctrl.speed, 100);
+    var width = w || 1920, height = h || 1080;
+    var pts = [[width * 0.1, height * 0.1], [width * 0.9, height * 0.1],
+               [width * 0.1, height * 0.9], [width * 0.9, height * 0.9]];
+    var idx = [2, 4, 6, 8], cidx = [3, 5, 7, 9], i;
+    for (i = 0; i < 4; i++) {
+        LG.set(ramp, "Point " + (i + 1), idx[i], pts[i]);
+        LG.set(ramp, "Color " + (i + 1), cidx[i], c[i % c.length]);
+        LG.expr(ramp, "Point " + (i + 1), idx[i],
+                "wiggle(" + (speed / 50) + ", " + (width / 4) + ")");
     }
 }
 
-function buildWaves(comp, c, ctrl, w, h, dur) {
-    var speedX = ctrl.waveSpeedX !== undefined ? parseFloat(ctrl.waveSpeedX) : 0.02;
-    var ampX = ctrl.waveAmpX !== undefined ? parseFloat(ctrl.waveAmpX) : 40;
-    var xGap = ctrl.xGap !== undefined ? parseFloat(ctrl.xGap) : 12;
-    
-    var color = c[0] || [0.32, 0.15, 1]; // #5227FF
+function buildAntigravity(comp, c, ctrl, w, h, dur) {
+    comp.layers.addSolid([0.07, 0.05, 0.09], "Background Void", w, h, 1, dur);
 
-    var bg = comp.layers.addSolid([0.07, 0.05, 0.09], "Background", w, h, 1, dur);
+    var emitterLayer = comp.layers.addSolid([0, 0, 0], "Antigravity Particles", w, h, 1, dur);
+    emitterLayer.blendingMode = BlendingMode.ADD;
+
+    addFx(emitterLayer, ["CC Particle World"]);
+
+    var glow = lgFxNamed(emitterLayer, ["ADBE Glo2"], 'Particle Glow');
+    if (glow) {
+        LG.set(glow, "Glow Threshold", 2, 30);   // particles are dim; bite early
+        LG.set(glow, "Glow Radius",    3, 50);
+        LG.set(glow, "Glow Intensity", 4, 1.5);
+    }
+
+    tuneAntigravity(emitterLayer, c, ctrl);
+}
+
+/* Every setting on this one is a CC Particle World parameter, so all three
+   sliders are live. Particle count is a birth *rate* rather than a fixed
+   population, which is why even that does not need a rebuild. */
+function tuneAntigravity(s, c, ctrl) {
+    if (!s) return;
+    var pw = findFx(s, ["CC Particle World"]);
+    if (!pw) { LG.warn('Antigravity: CC Particle World is not on this layer'); return; }
+
+    safeSet(pw, "Birth Rate", null, num(ctrl.count, 500) / 100);
+    safeSet(pw, "Longevity (sec)", null, 4);
+
+    safeSetGroup(pw, "Producer", "Radius X", null, 0.2);
+    safeSetGroup(pw, "Producer", "Radius Y", null, 0.2);
+
+    safeSetGroup(pw, "Physics", "Velocity", null, num(ctrl.waveSpeed, 0.4));
+    safeSetGroup(pw, "Physics", "Gravity", null, 0);        // Antigravity!
+    safeSetGroup(pw, "Physics", "Resistance", null, 0.5);
+
+    safeSetGroup(pw, "Particle", "Particle Type", null, 2); // Line
+    safeSetGroup(pw, "Particle", "Birth Size", null, num(ctrl.particleSize, 2) / 10);
+    safeSetGroup(pw, "Particle", "Death Size", null, 0);
+    safeSetGroup(pw, "Particle", "Size Variation", null, 100);
+    safeSetGroup(pw, "Particle", "Max Opacity", null, 100);
+    safeSetGroup(pw, "Particle", "Birth Color", null, c[0] || [1, 0.62, 0.98]);
+    safeSetGroup(pw, "Particle", "Death Color", null, c[1] || [0.32, 0.15, 1]);
+}
+
+function buildWaves(comp, c, ctrl, w, h, dur) {
+    comp.layers.addSolid([0.07, 0.05, 0.09], "Background", w, h, 1, dur);
     
     var linesLayer = comp.layers.addShape();
     linesLayer.name = "Wave Lines";
@@ -5869,43 +6415,62 @@ function buildWaves(comp, c, ctrl, w, h, dur) {
     pathData.closed = false;
     path.property("Path").setValue(pathData);
     
-    var stroke = gc.addProperty("ADBE Vector Graphic - Stroke");
-    safeSet(stroke, "Color", null, color);
-    safeSet(stroke, "Stroke Width", null, 1.5);
-    
-    var repeater = gc.addProperty("ADBE Vector Filter - Repeater");
-    safeSet(repeater, "Copies", null, Math.ceil((w*2) / xGap));
-    var repTransform = repeater.property("Transform");
-    safeSet(repTransform, "Position", null, [xGap, 0]);
-    
-    linesLayer.property("Transform").property("Position").setValue([-w/2, 0]);
-    
-    var turb = addFx(linesLayer, ["ADBE Turbulent Displace", "Turbulent Displace"]);
+    gc.addProperty("ADBE Vector Graphic - Stroke");
+    gc.addProperty("ADBE Vector Filter - Repeater");
+
+    linesLayer.property("Transform").property("Position").setValue([-w / 2, 0]);
+
+    addFx(linesLayer, ["ADBE Turbulent Displace", "Turbulent Displace"]);
+
+    tuneWaves(linesLayer, c, ctrl, w, h);
+}
+
+/* One shape, one repeater, one displacement — so line gap, amplitude and
+   speed are all values rather than structure, and all three are live. The
+   repeater's copy count follows the gap so the bank always covers the frame
+   however tight it is set. */
+function tuneWaves(s, c, ctrl, w, h) {
+    if (!s) return;
+    var speedX = num(ctrl.waveSpeedX, 0.02);
+    var ampX   = num(ctrl.waveAmpX, 40);
+    var xGap   = Math.max(1, num(ctrl.xGap, 12));
+    var width  = w || 1920;
+
+    var gc = lgShapeContents(s);
+    var stroke = lgShapeItem(gc, "ADBE Vector Graphic - Stroke");
+    if (stroke) {
+        safeSet(stroke, "Color", null, c[0] || [0.32, 0.15, 1]);
+        safeSet(stroke, "Stroke Width", null, 1.5);
+    } else {
+        LG.warn('Waves: could not find the stroke to recolour');
+    }
+
+    var repeater = lgShapeItem(gc, "ADBE Vector Filter - Repeater");
+    if (repeater) {
+        safeSet(repeater, "Copies", null, Math.ceil((width * 2) / xGap));
+        var repTransform = null;
+        try { repTransform = repeater.property("Transform"); } catch (e) { }
+        if (repTransform) safeSet(repTransform, "Position", null, [xGap, 0]);
+    }
+
+    var turb = findFx(s, ["ADBE Turbulent Displace", "Turbulent Displace"]);
     if (turb) {
         // A dropdown, and its options are 1-based; 0 was out of range.
-        safeSet(turb, "Displacement", 1, 1); // Turbulent
-        safeSet(turb, "Amount", null, ampX * 2);
-        safeSet(turb, "Size", null, 250);
-        safeSet(turb, "Complexity", null, 1.5);
-        safeEx(turb, "Evolution", null, "time * " + (speedX * 5000));
-        safeEx(turb, "Offset (Turbulence)", null, "[value[0], value[1] - time * 200]");
+        LG.set(turb, "Displacement", 1, 1); // Turbulent
+        LG.set(turb, "Amount",       2, ampX * 2);
+        LG.set(turb, "Size",         3, 250);
+        LG.set(turb, "Complexity",   5, 2);
+        LG.expr(turb, "Evolution",   6, "time * " + (speedX * 5000));
+        LG.expr(turb, "Offset (Turbulence)", 4, "[value[0], value[1] - time * 200]");
     }
 }
 
 function buildWebThreads(comp, c, ctrl, w, h, dur) {
-    var speed = ctrl.speed !== undefined ? parseFloat(ctrl.speed) : 0.4;
+    /* Thread count is the only setting that is structure rather than a value:
+       each thread is its own shape group. Everything else the expressions read
+       off Expression Controls, and tuneWebThreads writes those. */
     var threadCount = ctrl.threadCount !== undefined ? parseInt(ctrl.threadCount) : 10;
-    var frequency = ctrl.frequency !== undefined ? parseFloat(ctrl.frequency) : 14;
-    var spread = ctrl.spread !== undefined ? parseFloat(ctrl.spread) : 0.06;
-    var taper = ctrl.taper !== undefined ? parseFloat(ctrl.taper) : 3;
-    var pinchPos = ctrl.position !== undefined ? parseFloat(ctrl.position) : 0.59;
-    var thickness = ctrl.thickness !== undefined ? parseFloat(ctrl.thickness) : 1.1;
-    var glowAmt = ctrl.glow !== undefined ? parseFloat(ctrl.glow) : 0.02;
 
-    var c1 = c[0] || [0.13, 0.03, 0.53];
-    var c2 = c[1] || [0.67, 0.02, 0.65];
-    var c3 = c[2] || [0.53, 0.15, 0.15];
-    
     var bg = comp.layers.addSolid([0.05, 0.05, 0.05], "Background", w, h, 1, dur);
     bg.startTime = 0;
 
@@ -5914,16 +6479,19 @@ function buildWebThreads(comp, c, ctrl, w, h, dur) {
     layer.startTime = 0;
     layer.outPoint = dur;
 
-    var speedFx = addFx(layer, ["ADBE Slider Control"]); speedFx.name = "Speed"; safeSet(speedFx, 1, null, speed);
-    var freqFx = addFx(layer, ["ADBE Slider Control"]); freqFx.name = "Frequency"; safeSet(freqFx, 1, null, frequency);
-    var spreadFx = addFx(layer, ["ADBE Slider Control"]); spreadFx.name = "Spread"; safeSet(spreadFx, 1, null, spread);
-    var taperFx = addFx(layer, ["ADBE Slider Control"]); taperFx.name = "Taper"; safeSet(taperFx, 1, null, taper);
-    var posFx = addFx(layer, ["ADBE Slider Control"]); posFx.name = "Pinch Position"; safeSet(posFx, 1, null, pinchPos);
-    var thickFx = addFx(layer, ["ADBE Slider Control"]); thickFx.name = "Thickness"; safeSet(thickFx, 1, null, thickness);
-    
-    var color1Fx = addFx(layer, ["ADBE Color Control"]); color1Fx.name = "Color 1"; safeSet(color1Fx, 1, null, c1);
-    var color2Fx = addFx(layer, ["ADBE Color Control"]); color2Fx.name = "Color 2"; safeSet(color2Fx, 1, null, c2);
-    var color3Fx = addFx(layer, ["ADBE Color Control"]); color3Fx.name = "Color 3"; safeSet(color3Fx, 1, null, c3);
+    /* The controls the expressions read. Applied here, filled in by
+       tuneWebThreads so that dragging a slider afterwards writes the same
+       number to the same place the build did. */
+    var CONTROLS = ['Speed', 'Frequency', 'Spread', 'Taper', 'Pinch Position', 'Thickness'];
+    for (var ci = 0; ci < CONTROLS.length; ci++) {
+        var sfx = addFx(layer, ["ADBE Slider Control"]);
+        if (sfx) { try { sfx.name = CONTROLS[ci]; } catch (e) { } }
+    }
+    for (var cj = 1; cj <= 3; cj++) {
+        var cfx = addFx(layer, ["ADBE Color Control"]);
+        if (cfx) { try { cfx.name = 'Color ' + cj; } catch (e) { } }
+    }
+    tuneWebThreads(layer, c, ctrl);
 
     var contents = layer.property("Contents");
 
@@ -5977,18 +6545,42 @@ function buildWebThreads(comp, c, ctrl, w, h, dur) {
     
     try { layer.property("Transform").property("Position").setValue([w/2, h/2]); } catch(e){}
 
-    var glow = addFx(layer, ["ADBE Glow", "Glow"]);
-    if (glow) {
-        safeSet(glow, "Glow Threshold", null, 40);
-        safeSet(glow, "Glow Radius", null, glowAmt * 1000 + 20);
-        safeSet(glow, "Glow Intensity", null, 1.5);
-    }
-    
     var mirror = addFx(layer, ["ADBE Mirror"]);
     if (mirror) {
         safeSet(mirror, "Reflection Center", null, [w/2, h/2]);
         safeSet(mirror, "Reflection Angle", null, 90);
     }
+    /* After the Mirror, so the glow is not itself mirrored. Tuned rather than
+       set, for the same reason as everything else on this layer. */
+    tuneWebThreadsGlow(layer, ctrl);
+}
+
+/* Every thread's path, width and colour is an expression reading an Expression
+   Control on this layer, so the whole gradient tunes by writing eight numbers.
+   Thread *count* is the exception — each thread is a shape group, and groups
+   are structure, so changing it still rebuilds. */
+function tuneWebThreads(s, c, ctrl) {
+    if (!s) return;
+    lgCtrlSet(s, 'Speed',          num(ctrl.speed, 0.4));
+    lgCtrlSet(s, 'Frequency',      num(ctrl.frequency, 14));
+    lgCtrlSet(s, 'Spread',         num(ctrl.spread, 0.06));
+    lgCtrlSet(s, 'Taper',          num(ctrl.taper, 3));
+    lgCtrlSet(s, 'Pinch Position', num(ctrl.position, 0.59));
+    lgCtrlSet(s, 'Thickness',      num(ctrl.thickness, 1.1));
+    lgCtrlSet(s, 'Color 1', c[0] || [0.13, 0.03, 0.53]);
+    lgCtrlSet(s, 'Color 2', c[1] || [0.67, 0.02, 0.65]);
+    lgCtrlSet(s, 'Color 3', c[2] || [0.53, 0.15, 0.15]);
+    tuneWebThreadsGlow(s, ctrl);
+}
+
+function tuneWebThreadsGlow(s, ctrl) {
+    var glowAmt = num(ctrl.glow, 0.02);
+    var glow = lgFxNamed(s, ['ADBE Glo2'], 'Thread Glow');
+    if (!glow) return;
+    LG.set(glow, 'Glow Threshold', 2, 40);
+    LG.set(glow, 'Glow Radius',    3, glowAmt * 1000 + 20);
+    LG.set(glow, 'Glow Intensity', 4, 1.5);
+    try { glow.enabled = glowAmt > 0; } catch (e) { }
 }
 
 /**

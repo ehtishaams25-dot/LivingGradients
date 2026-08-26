@@ -23,19 +23,6 @@ const GRADIENT_CONTROLS = {
     { id: 'drift',     label: 'Drift',        min: 0,  max: 200, step: 5, default: 30, type: 'slider' },
     { id: 'speed',     label: 'Drift Speed',  min: 0,  max: 60,  step: 1, default: 12, type: 'slider' }
   ],
-  Metallic: [
-    { id: 'finish',      label: 'Finish',
-      options: ['Chrome', 'Iridescent', 'Brushed', 'Y2K Chrome'],
-      default: 'Chrome', type: 'select' },
-    { id: 'bands',       label: 'Reflection Bands', min: 2,  max: 60,  step: 1,  default: 6,   type: 'slider' },
-    { id: 'tilt',        label: 'Band Tilt',        min: 0,  max: 100, step: 1,  default: 12,  type: 'slider' },
-    { id: 'speed',       label: 'Flow Speed',       min: 0,  max: 120, step: 1,  default: 20,  type: 'slider' },
-    { id: 'ripple',      label: 'Liquid Ripple',    min: 0,  max: 500, step: 5,  default: 180, type: 'slider' },
-    { id: 'rippleScale', label: 'Ripple Scale',     min: 20, max: 600, step: 10, default: 260, type: 'slider' },
-    { id: 'swirl',       label: 'Swirl',            min: 0,  max: 300, step: 5,  default: 70,  type: 'slider' },
-    { id: 'sheen',       label: 'Sheen',            min: 0,  max: 100, step: 1,  default: 45,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',         min: 0,  max: 40,  step: 1,  default: 2,   type: 'slider' }
-  ],
   Antigravity: [
     { id: 'count',        label: 'Particles',    min: 50,  max: 2000, step: 50,  default: 500, type: 'slider' },
     { id: 'waveSpeed',    label: 'Drift Speed',  min: 0.05, max: 3,   step: 0.05, default: 0.4, type: 'slider' },
@@ -233,106 +220,30 @@ const GRADIENT_CONTROLS = {
     { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100,  step: 1,  default: 3,   type: 'slider' }
   ],
 
-  /* THE SHADED METALS
-     Eight presets, one shader, so a slider means the same thing on every one
-     of them. These are not texture sliders any more — they are the inputs a
-     renderer takes:
+  /* Snakeskin is the last user of the hammered height field. The metal
+     presets that used to sit around it are gone from the library, but this one
+     is not a metal — it is that dimple lattice lit like skin, and the numbers
+     are the whole difference. Specular 38 and roughness 62 is what stops it
+     looking wet; speed 0 because a drifting reflection is a metal cue and skin
+     does not have one.
 
-       Relief       how deep the surface actually is. 0 is a mirror.
-       Reflections  how much environment the metal has to reflect. Few wide
-                    bands is a showroom; many narrow ones is a workshop.
-       Light Angle / Light Height
-                    where the lamp is. Height is elevation: low is raking
-                    light that finds every scratch, high is overhead and
-                    flattens the surface out.
-       Specular / Roughness
-                    the material response. High specular with low roughness
-                    is a polished mirror; drop specular and raise roughness
-                    and the same surface turns to cast iron.
+     SCALE WENT TOO FAR THE OTHER WAY. It was set to 45 to make the cells read
+     as scales rather than dents, which was the right direction and twice the
+     distance needed. Hammered's dimple lattice is 90px at scale 100, so 45
+     gives cells 40px across — and at 1920 wide, 40px cells are 48 of them
+     across the frame. That is not a field of scales, it is a crinkle, which is
+     exactly what the gradient has been rendering while the card preview showed
+     proper overlapping plates.
 
-     Drift Speed is never 0 by default. A metal that holds perfectly still
-     reads as a photograph of metal rather than as a living background. */
-  Polished: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 7,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 60,  type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 92,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 11,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 25,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
-  ],
-  Brushed: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 80,  type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 0,   type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 300, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 70,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 28,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 14,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
-  ],
-  Gold: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 36,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 120, type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 320, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 45,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 96,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 15,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 8,   type: 'slider' }
-  ],
-  Copper: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 32,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 90,  type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 330, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 48,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 90,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 17,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
-  ],
-  Gunmetal: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 20,  type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 40,  type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 290, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 26,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 45,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
-  ],
-  /* Same sliders as Hammered, different numbers, and the numbers are the whole
-     difference between a beaten copper plate and a snake. Specular 95 -> 38 and
-     roughness 14 -> 62 is what stops it looking wet; scale 100 -> 45 is what
-     makes the cells read as scales rather than dents; speed 6 -> 0 because a
-     drifting reflection is a metal cue and skin does not have one. */
+     110 puts the cells at 99px, about twenty across the frame, which is the
+     proportion the reference boards and the card both show. Existing saved
+     presets keep whatever they stored, so nothing anybody has made changes. */
   Snakeskin: [
-    { id: 'scaleAll',    label: 'Scale Size',    min: 15, max: 200, step: 5, default: 45,  type: 'slider' },
+    { id: 'scaleAll',    label: 'Scale Size',    min: 15, max: 200, step: 5, default: 110, type: 'slider' },
     { id: 'relief',      label: 'Scale Depth',   min: 0,  max: 100, step: 1, default: 74,  type: 'slider' },
     { id: 'bands',       label: 'Banding',       min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
     { id: 'brushLength', label: 'Stretch',       min: 0,  max: 200, step: 5, default: 40,  type: 'slider' },
-    { id: 'warp',        label: 'Body Curve',    min: 0,  max: 400, step: 5, default: 70,  type: 'slider' },
+    { id: 'warp',        label: 'Body Curve',    min: 0,  max: 250, step: 5, default: 70,  type: 'slider' },
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 42,  type: 'slider' },
     { id: 'specular',    label: 'Sheen',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
@@ -340,51 +251,6 @@ const GRADIENT_CONTROLS = {
     { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 1,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 0,   type: 'slider' }
-  ],
-  Hammered: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 6,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 25,  type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 310, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 95,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 14,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
-  ],
-  Foil: [
-    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 70,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 8,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Crumple',       min: 0,  max: 400, step: 5, default: 240, type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 98,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 12,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 10,  type: 'slider' }
-  ],
-  /* Mercury is the same shader with the height field turned into blobs rather
-     than tooling — a liquid, so Relief is high, Roughness near zero, and it
-     moves faster than any of the plates. */
-  Mercury: [
-    { id: 'scaleAll',    label: 'Blob Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 85,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Surface Churn', min: 0,  max: 400, step: 5, default: 160, type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 100, type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 7,   type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Flow Speed',    min: 0,  max: 60,  step: 1, default: 14,  type: 'slider' }
   ],
 
   AnimeCells: [

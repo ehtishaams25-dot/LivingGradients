@@ -352,14 +352,22 @@ class LiquidEther {
         float y1=texture2D(velocity,uv+vec2(0,px.y)).y;
         gl_FragColor=vec4((x1-x0+y1-y0)/2.0/dt);
       }`;
+    /* The 2.0s below are load-bearing. GLSL ES 1.00 has no implicit int-to-float
+       promotion in arithmetic, so `px.x*2` is not a slow way to write
+       `px.x*2.0` — it is a compile error, and one compile error takes the whole
+       program down. These two shaders had it, so the fluid simulation failed to
+       link and the Fluid tab rendered nothing but black while the console
+       carried the reason. (Constructors are the exception: `vec2(0, px.y)`
+       converts and is fine, which is why the same-looking lines elsewhere in
+       this file were never a problem.) */
     const poisson_frag = `
       precision highp float; uniform sampler2D pressure;
       uniform sampler2D divergence; uniform vec2 px; varying vec2 uv;
       void main(){
-        float p0=texture2D(pressure,uv+vec2(px.x*2,0)).r;
-        float p1=texture2D(pressure,uv-vec2(px.x*2,0)).r;
-        float p2=texture2D(pressure,uv+vec2(0,px.y*2)).r;
-        float p3=texture2D(pressure,uv-vec2(0,px.y*2)).r;
+        float p0=texture2D(pressure,uv+vec2(px.x*2.0,0)).r;
+        float p1=texture2D(pressure,uv-vec2(px.x*2.0,0)).r;
+        float p2=texture2D(pressure,uv+vec2(0,px.y*2.0)).r;
+        float p3=texture2D(pressure,uv-vec2(0,px.y*2.0)).r;
         float div=texture2D(divergence,uv).r;
         gl_FragColor=vec4((p0+p1+p2+p3)/4.0-div);
       }`;
@@ -380,10 +388,10 @@ class LiquidEther {
       uniform vec2 px; uniform float dt; varying vec2 uv;
       void main(){
         vec2 old=texture2D(velocity,uv).xy;
-        vec2 n0=texture2D(velocity_new,uv+vec2(px.x*2,0)).xy;
-        vec2 n1=texture2D(velocity_new,uv-vec2(px.x*2,0)).xy;
-        vec2 n2=texture2D(velocity_new,uv+vec2(0,px.y*2)).xy;
-        vec2 n3=texture2D(velocity_new,uv-vec2(0,px.y*2)).xy;
+        vec2 n0=texture2D(velocity_new,uv+vec2(px.x*2.0,0)).xy;
+        vec2 n1=texture2D(velocity_new,uv-vec2(px.x*2.0,0)).xy;
+        vec2 n2=texture2D(velocity_new,uv+vec2(0,px.y*2.0)).xy;
+        vec2 n3=texture2D(velocity_new,uv-vec2(0,px.y*2.0)).xy;
         vec2 nv=4.0*old+v*dt*(n0+n1+n2+n3);
         gl_FragColor=vec4(nv/(4.0*(1.0+v*dt)),0,0);
       }`;

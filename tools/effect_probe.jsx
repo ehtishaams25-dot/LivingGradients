@@ -55,7 +55,38 @@
         ['CC Glass',            'CC Glass'],
         ['CC Blobbylize',       'CC Blobbylize'],
         ['CC Mr. Mercury',      'CC Mr. Mercury'],
-        ['CC Plastic',          'CC Plastic']
+        ['CC Plastic',          'CC Plastic'],
+
+        /* The rest of what jsx/main.jsx writes to. These were not here, and
+           tools/index_audit.js could therefore not check 52 of the file's
+           indexed writes against anything — an audit with a hole in it that
+           big reports PASS for the wrong reason. Everything the builders touch
+           belongs in this list. */
+        ['Wave Warp',           'ADBE Wave Warp'],
+        ['Twirl',               'ADBE Twirl'],
+        ['Directional Blur',    'ADBE Motion Blur'],
+        ['Drop Shadow',         'ADBE Drop Shadow'],
+        ['Mirror',              'ADBE Mirror'],
+        ['Set Matte',           'ADBE Set Matte3'],
+        ['Colorama',            'APC Colorama'],
+        ['Optics Compensation', 'ADBE Optics Compensation'],
+        ['Curves',              'ADBE CurvesCustom'],
+        ['Mosaic',              'ADBE Mosaic'],
+        ['Echo',                'ADBE Echo'],
+        ['Bulge',               'ADBE Bulge'],
+        ['Simple Choker',       'ADBE Simple Choker'],
+        ['Fill',                'ADBE Fill'],
+        ['Warp',                'ADBE WRPMESH'],
+        ['Transform',           'ADBE Geometry2'],
+        ['Gaussian Blur',       'ADBE Gaussian Blur 2'],
+        ['Solid Composite',     'ADBE Solid Composite'],
+        ['Slider Control',      'ADBE Slider Control'],
+        ['Color Control',       'ADBE Color Control'],
+        ['Point Control',       'ADBE Point Control'],
+        ['Angle Control',       'ADBE Angle Control'],
+        ['CC Bubbles',          'CC Bubbles'],
+        ['CC Vector Blur',      'CC Vector Blur'],
+        ['CC Particle World',   'CC Particle World']
     ];
 
     /* Grids to render. Each is [comp name, matchName, property, option count,

@@ -208,22 +208,6 @@ function pvRibbons(d, W, H, pal, bands, stretch) {
   }
 }
 
-/* A ramp folded by mirrored tiling, then bent — Metallic's construction. */
-function pvChrome(d, W, H, pal) {
-  const lut = pvRamp(pvByLuma(pal));
-  for (let y = 0; y < H; y++) {
-    const ny = y / H;
-    for (let x = 0; x < W; x++) {
-      const nx = x / W;
-      const bend = 0.16 * Math.sin(ny * 5.2 + nx * 1.6)
-                 + 0.07 * Math.sin(ny * 12.0 - nx * 3.0);
-      const u = (nx + ny * 0.22 + bend) * 10;
-      const w = Math.abs(((u % 2) + 2) % 2 - 1);
-      pvPut(d, (y * W + x) * 4, pvLut(lut, w));
-    }
-  }
-}
-
 /* Dot profile against a ramp — the same comparison the builder makes. */
 function pvHalftone(d, W, H, pal) {
   const inkLut = pvRamp([pal[0], pal[1 % pal.length]], 64);
@@ -652,17 +636,10 @@ const PREVIEW_FAMILY = {
   ReededGlass:    pvFluted,
   Glass:          pvGlass,
 
-  Metallic:       pvChrome,   // Liquid Chrome is still ribbons, not a plate
-
-  Polished:       pvMetalCard('Polished', { env: 'flow', bands: 5, relief: 0.12, shine: 90, lightAngle: 315, lightHeight: 0.55, ambient: 0.5,  specular: 1.0, tilt: 0.14 }),
-  Brushed:        pvMetalCard('Brushed',  { env: 'plate', bands: 3, relief: 0.30, shine: 22, lightAngle: 300, lightHeight: 0.32, ambient: 0.55, specular: 0.6, tilt: 0.10 }),
-  Gold:           pvMetalCard('Gold',     { env: 'flow', bands: 4, relief: 0.26, shine: 70, lightAngle: 320, lightHeight: 0.45, ambient: 0.5,  specular: 1.1, tilt: 0.18 }),
-  Copper:         pvMetalCard('Copper',   { env: 'flow', bands: 4, relief: 0.22, shine: 60, lightAngle: 330, lightHeight: 0.48, ambient: 0.5,  specular: 0.95, tilt: 0.16 }),
-  Gunmetal:       pvMetalCard('Gunmetal', { env: 'plate', bands: 6, relief: 0.34, shine: 12, lightAngle: 290, lightHeight: 0.26, ambient: 0.62, specular: 0.4, tilt: 0.12 }),
+  /* Snakeskin is the only card left on the metal painter: its scales are
+     the hammered height field, lit like skin. The metal presets it shared it
+     with are gone from the library. */
   Snakeskin:      pvMetalCard('Hammered', { env: 'plate', bands: 3, relief: 0.74, shine: 22, lightAngle: 305, lightHeight: 0.42, ambient: 0.62, specular: 0.38, tilt: 0.30 }),
-  Hammered:       pvMetalCard('Hammered', { env: 'plate', bands: 4, relief: 0.55, shine: 55, lightAngle: 310, lightHeight: 0.38, ambient: 0.5,  specular: 0.9, tilt: 0.16 }),
-  Foil:           pvMetalCard('Foil',     { env: 'flow', bands: 8, relief: 0.70, shine: 80, lightAngle: 305, lightHeight: 0.30, ambient: 0.45, specular: 1.2, tilt: 0.22 }),
-  Mercury:        pvMetalCard('Mercury',  { env: 'flow', bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
 
   AsciiMatrix:    pvGrid,
   StackedSquares: pvGrid,
@@ -680,25 +657,111 @@ function pvPainterFor(type) {
   return PREVIEW_FAMILY[type] || pvMesh;
 }
 
+/* ── Real renders ────────────────────────────────────────────────────
+   css/previews/<type>.png, written by tools/render_cards.jsx: the gradient
+   built at 1920x1080 in After Effects and scaled down. A painter below is an
+   imitation drawn from a description of what the builder ought to do, and it
+   drifts every time a builder changes — Frosted Glass and Snakeskin both
+   looked right in the grid and wrong in the comp for exactly that reason,
+   which is the worst way for a picker to fail.
+
+   So: paint immediately, then upgrade. The card is never blank, a gradient
+   with no render yet keeps its painter forever, and one that has a render
+   shows the truth as soon as the file loads.
+
+   Fixed palettes, deliberately. The cards have always shown each gradient's
+   own defaultColors rather than the live palette — the grid is for choosing
+   between gradients, and they do not all mean the same thing by "colour 3" —
+   so a still image loses nothing that was there. The inspector's own preview
+   is the one that follows the live palette, and it keeps the painter. */
+
+/* WHICH RENDERS EXIST IS ASKED ONCE.
+
+   The obvious implementation requests css/previews/<type>.png for every card
+   and lets the ones that are not there 404. On a checkout where the cards have
+   never been rendered that is forty-eight failed requests every time the panel
+   opens, and forty-eight red lines in the console for anyone debugging
+   something else entirely — which is how a real error gets lost.
+
+   So render_cards.jsx writes an index alongside the images and this asks for
+   that instead. No index means no renders, which means no image requests at
+   all: exactly the behaviour a fresh checkout wants. */
+
+const pvRenders = new Map();          // type -> HTMLImageElement
+let pvIndex = null;                   // Promise<Set<string>>
+
+function pvRenderIndex() {
+  if (pvIndex) return pvIndex;
+  pvIndex = fetch('css/previews/index.json')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => new Set((data && data.cards) || []))
+    .catch(() => new Set());
+  return pvIndex;
+}
+
+function pvRenderFor(type, whenReady) {
+  const cached = pvRenders.get(type);
+  if (cached) { whenReady(cached); return; }
+
+  pvRenderIndex().then((have) => {
+    if (!have.has(type)) return;
+
+    /* Re-check after the await: two cards of the same type can both get here
+       while the index is in flight. */
+    const already = pvRenders.get(type);
+    if (already) { whenReady(already); return; }
+
+    const img = new Image();
+    img.onload = function () {
+      pvRenders.set(type, img);
+      whenReady(img);
+    };
+    img.onerror = function () {
+      /* Listed in the index but not on disk. Worth saying, because it means
+         the two have gone out of step. */
+      console.warn('[Living Gradients] css/previews/' + type +
+                   '.png is in the index but did not load');
+    };
+    img.src = 'css/previews/' + encodeURIComponent(type) + '.png';
+  });
+}
+
 /* ── Public entry ───────────────────────────────────────────────────── */
 
 /* Backing size is fixed rather than tied to devicePixelRatio: the grid holds
    thirty-odd of these and repaints them all whenever the palette changes, so
-   the cost of a repaint has to stay predictable. */
-function paintPreview(canvas, type, colors) {
+   the cost of a repaint has to stay predictable.
+
+   `options.live` says the palette matters more than the render does — the
+   inspector's preview follows the swatches, so it must stay painted. */
+function paintPreview(canvas, type, colors, options) {
   if (!canvas || !canvas.getContext) return;
   const W = canvas.width, H = canvas.height;
   if (!W || !H) return;
 
   const pal = (colors && colors.length ? colors : ['#888888']).map(pvHexToRgb);
   const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(W, H);
 
   try {
+    const img = ctx.createImageData(W, H);
     pvPainterFor(type)(img.data, W, H, pal);
+    ctx.putImageData(img, 0, 0);
   } catch (e) {
     console.warn('[Living Gradients] preview failed for', type, e);
-    return;
+    /* Keep going. A painter that threw is exactly the case where the real
+       render is worth waiting for. */
   }
-  ctx.putImageData(img, 0, 0);
+
+  if (options && options.live) return;
+
+  pvRenderFor(type, function (image) {
+    /* The canvas may have been reused for another gradient while the image was
+       loading — the grid rebuilds on every search keystroke. Check before
+       drawing over it. */
+    if (canvas.dataset && canvas.dataset.previewType &&
+        canvas.dataset.previewType !== type) return;
+    try {
+      ctx.drawImage(image, 0, 0, W, H);
+    } catch (e) { /* decoded but undrawable; the painter is already there */ }
+  });
 }

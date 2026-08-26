@@ -2,7 +2,10 @@
    LIVING GRADIENTS v2 — ULTRA-PREMIUM UI
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+/* The webfonts are loaded by index.html, not @imported here. An @import
+   blocks the rest of this file until the request resolves, and inside After
+   Effects on an offline machine "resolves" means "times out" — the whole panel
+   painted nothing for as long as that took. See the comment on the <link>. */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -457,6 +460,20 @@ html, body {
 }
 .color-pick:hover { transform: scale(1.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.32), 0 2px 6px rgba(0,0,0,0.5); }
 .color-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* While After Effects' colour picker is up, the swatch that opened it says so.
+   The host dialog is modal and lives outside the panel, so without this the
+   panel just sits there looking ignored — and on a second monitor the dialog
+   can open somewhere the user is not looking. */
+.color-pick.is-picking {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  animation: lg-picking 1.1s ease-in-out infinite;
+}
+@keyframes lg-picking {
+  0%, 100% { outline-color: var(--accent); }
+  50%      { outline-color: rgba(255,255,255,0.25); }
+}
 
 .color-hex {
   flex: none;
@@ -959,13 +976,19 @@ html, body {
 
 
 /* ── Batch selection ──────────────────────────────────────────────── */
+/* Sticky, and full-bleed on purpose. It used to stick at top:-16px while
+   keeping the panel's 16px padding outside its own box, so the 16px strip
+   above it was transparent and cards scrolled through it — a row of gradients
+   appeared to float above the toolbar. Negative margins pull the bar out to
+   the panel edges and the same amount of padding puts its contents back where
+   they were, so the opaque background now covers the whole strip. */
 .browse-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 2px 2px 14px;
-  margin-bottom: 2px;
+  margin: -16px -16px 2px;
+  padding: 16px 16px 14px;
   position: sticky;
   top: -16px;                       /* view-panel has 16px padding */
   z-index: 5;

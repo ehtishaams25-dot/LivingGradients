@@ -72,6 +72,33 @@ host where the name already missed.
 Corollary: keep the index in the call anyway. It costs nothing and it is the
 only thing standing between a localised host and a dead panel.
 
+**And check them, because you cannot see them here.** A wrong index is invisible
+on an English host by construction — the name resolved, so the index was never
+consulted. `node tools/index_audit.js` walks every indexed write in
+`jsx/main.jsx`, works out which effect each variable holds, and compares against
+`tools/effect_probe_report.txt`. The first run found **fifty** wrong ones:
+
+| what | had | should be | what it actually set |
+| --- | --- | --- | --- |
+| Motion Tile `Output Width` (×5) | 1 | 4 | Tile Center |
+| Turbulent Displace `Evolution` (×6) | 5 | 6 | Complexity |
+| Fractal Noise `Complexity` | 8 | 16 | Rotation |
+| Fractal Noise `Evolution` (×2) | 10 | 24 | Scale |
+| 4-Color Gradient points/colours (×20) | n | n+1 | the neighbouring stop |
+| Extract `Black Point` etc. (×4) | 1–4 | 3–6 | Histogram, Channel |
+
+Two of those are not just wrong indices but wrong *names*, which is worse
+because the index then becomes the only route:
+
+- The **Noise** effect has no `Use Color Noise`. The DOM calls it `Noise Type`
+  (property 2). The global Grain slider was never forcing monochrome.
+- **Cell Pattern** has no `Contrast`. The DOM calls property 3
+  `Contextual Slider` — it is Contrast or Sharpness depending on the pattern.
+
+If you add an effect the probe does not cover, add it to the list in
+`tools/effect_probe.jsx` and re-run it. An audit with a hole in it reports PASS
+for the wrong reason.
+
 ---
 
 ## 3. `setValue` throws past a parameter's range. It does not clamp.
@@ -332,6 +359,54 @@ And:
   were. Derive the budget from the same constant the builder oversizes by, so
   the two cannot drift apart.
 
+  **`Amount` is not the reach.** The budget above assumed it was, and the holes
+  came back three times. On a 1920×1080 build, Metal Twist at Amount 77 and
+  Metal Environment at 268 against 432px of overhang tore roughly half the
+  frame away — a reach of about 2.8× the Amount, not 1×. The budget divides by
+  `LG_REACH_PER_AMOUNT` for that reason, and `tools/reach_calibrate.jsx` plus
+  `node tools/reach_measure.js` measure it rather than inferring it: After
+  Effects renders a sweep of Amount × Size × mode onto a flat opaque solid, and
+  Node decodes the alpha and reports how far in from the edge transparency got.
+
+  **And back it up anyway.** A budget is only as good as the constant behind it.
+  Put an undisplaced copy of the same content on a layer beneath the displaced
+  one, so a tear reveals a soft version of what should have been there instead
+  of nothing. That guarantee does not depend on any constant being right, and it
+  turns the worst failure mode — a black void through the middle of a gradient —
+  into a soft patch nobody files a bug about.
+
+---
+
+## 11a. Height is lighting. Displacement is bending. Only one of them shreds.
+
+On CC Glass these read like two strengths of the same idea and they are not:
+
+- **Height** scales the normals — how hard the surface is *lit*. It has no
+  natural ceiling; a strong Height on a coarse map is just a strongly lit
+  surface.
+- **Displacement** offsets the *picture* along those normals. Displace further
+  than the distance between one bump and the next and the reflection tears
+  across the surface instead of flowing over it. The result reads as crinkle,
+  crumple, or wrinkled foil.
+
+So Displacement has a ceiling that Relief knows nothing about, and it is set by
+the height field's own finest structure:
+
+```javascript
+// Fractal Noise carries `complexity` octaves, each half the width of the one
+// above; the narrower axis binds. A Cell Pattern is one smooth octave, so its
+// cell size IS its wavelength. Then: whatever the blur left behind.
+var finest = Math.max(base / Math.pow(2, complexity - 1), blurRadius * 2);
+displacement = Math.min(relief * 0.8, finest * 0.6);
+```
+
+This was measured, not reasoned: `tools/bisect/06_CC_Toner.png` is smooth
+flowing ribbons and `07_CC_Glass.png`, whose only difference is that one effect
+switching on, is wrinkled foil. Foil's field is about 16px across and the build
+was asking CC Glass to displace by 56.
+
+Cap Displacement and leave Height alone. The surface stays as lit as it was.
+
 ---
 
 ## 12. The exposure budget
@@ -504,7 +579,9 @@ numbered, which is faster than guessing what option 7 looks like.
 
 1. Probe the host; never write parameter code from memory.
 2. Groups are decoration — properties are flat siblings.
-3. Name first, index last, always keep both.
+3. Name first, index last, always keep both — and audit the indices, because a
+   wrong one is invisible on an English host and sets a different parameter on
+   every other one. `node tools/index_audit.js`.
 4. `setValue` throws past range. Clamp once, at the writer.
 5. Layer params are indices. Finish the stack, then re-find by name, then assign.
 6. Never let a failure be silent.
@@ -513,7 +590,10 @@ numbered, which is faster than guessing what option 7 looks like.
 9. Displacement Size vs. feature size decides flow-or-fray. Size, not Amount.
 10. Wrap Back's band count is emergent. Fold a ramp when the count matters.
 11. Never leave a flat region under a tight specular lobe.
-12. Blur height fields; oversize anything you displace.
+12. Blur height fields; oversize anything you displace. `Amount` is not the
+    reach — measure it, budget it, and put an undisplaced copy underneath so a
+    tear can never be a void. Cap Displacement by the field's finest feature;
+    leave Height alone.
 13. Ambient + Diffuse ≤ 90.
 14. One function for build and for live update.
 15. Render it. Look at it at 1:1 — and when 1:1 still leaves you guessing,

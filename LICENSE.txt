@@ -1,0 +1,170 @@
+LIVING GRADIENTS
+End User Licence Agreement
+
+Version 2.1.0
+Digivero
+
+--------------------------------------------------------------------------
+Please read this before installing. Installing or using Living Gradients
+means you accept these terms. If you do not accept them, do not install it,
+and contact Digivero for a refund in line with the refund policy of the store
+you bought it from.
+--------------------------------------------------------------------------
+
+
+1. WHAT YOU ARE BUYING
+
+Living Gradients is a panel extension for Adobe After Effects. You are buying
+a licence to use it. You are not buying the software itself, and ownership of
+it stays with Digivero.
+
+One purchase covers one person. That person may install and use Living
+Gradients on any number of computers they personally work on — a desktop and a
+laptop, a machine at home and one at a studio — provided they are the only one
+using it.
+
+
+2. WHAT YOU MAY DO
+
+  - Use Living Gradients for personal, commercial and client work, with no
+    limit on the number of projects.
+
+  - Keep and use everything it produces. THE GRADIENTS YOU MAKE ARE YOURS.
+    Digivero claims no rights over any composition, render, still or video you
+    create with this panel, and no attribution is required. You may use them
+    in paid client work, in products you sell, and in work you licence on to
+    someone else.
+
+  - Include renders made with Living Gradients in a project file you hand to a
+    client, and hand over the After Effects project that contains them.
+
+  - Make backup copies of the installer for your own use.
+
+
+3. WHAT YOU MAY NOT DO
+
+  - Share, resell, sublicence, rent, lend or give away the panel, the .zxp
+    installer, or your licence key.
+
+  - Install it on machines belonging to other people so that they can use it.
+    A studio needs one licence per person using the panel. Volume licences are
+    available; ask.
+
+  - Publish or redistribute the panel's source, in whole or in substantial
+    part, or a modified version of it.
+
+  - Decompile it, reverse-engineer it, or work around the licence check.
+
+  - Represent the panel itself — as distinct from the work you make with it —
+    as your own product, or sell it as part of a bundle or template pack.
+
+Point 2's "the gradients you make are yours" and point 3's "you may not
+redistribute the panel" are the two halves of the same line. Selling a video
+you made with Living Gradients is fine. Selling Living Gradients is not.
+
+
+4. LICENCE KEY AND ACTIVATION
+
+Your licence key is personal to you. Activation contacts Gumroad once to check
+the key. If you change machines, deactivate on the old one from the panel's
+settings, or just activate on the new one — the key is not machine-locked.
+
+Treat the key like a password. A key found in public is deactivated, and
+Digivero will replace it once for the person who bought it.
+
+
+5. WHAT THE PANEL SENDS
+
+Living Gradients contacts a server in three situations, and no others:
+
+  - An update check, which sends only the panel's version number.
+  - A message check, which sends only the panel's version number.
+  - Feedback, when and only when you write some and press send. That sends
+    what you typed, plus the context block shown to you in the dialog before
+    it goes.
+
+Both checks can be turned off in settings. There is no telemetry, no usage
+counting and no identifier of any kind. Your presets, palettes, project files
+and renders never leave your machine.
+
+Licence activation contacts Gumroad and is subject to Gumroad's own privacy
+policy.
+
+
+6. UPDATES
+
+Updates to version 2.x are included. A future major version may be a separate
+purchase, usually with an upgrade price for existing customers.
+
+Digivero is not obliged to keep releasing updates, or to keep the panel working
+with future versions of After Effects — though the intent is plainly to do
+both.
+
+
+7. NO WARRANTY
+
+LIVING GRADIENTS IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+In plain terms: it is a tool that runs inside someone else's application on
+your computer, and it may not do what you want on every version of After
+Effects, on every operating system, or in every project. Try it on your own
+setup before you depend on it for a deadline.
+
+
+8. LIMITATION OF LIABILITY
+
+To the fullest extent permitted by law, Digivero's total liability for any
+claim arising out of Living Gradients is limited to the amount you paid for
+it. Digivero is not liable for lost work, lost time, lost profits, or any
+indirect or consequential loss.
+
+Keep backups of your After Effects projects. That is good practice with any
+third-party panel, this one included.
+
+
+9. TERMINATION
+
+This licence ends if you breach it. On termination, stop using the panel and
+remove it from your machines. Anything you already made with it stays yours —
+section 2 survives termination.
+
+
+10. GENERAL
+
+This is the entire agreement between you and Digivero about Living Gradients,
+and it replaces anything said elsewhere. If any part of it is unenforceable,
+the rest still stands.
+
+
+--------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+
+Living Gradients includes the following, under their own licences. Nothing in
+this agreement changes your rights under those licences.
+
+  three.js — r128
+  Copyright 2010-2021 three.js Authors
+  MIT Licence. https://github.com/mrdoob/three.js
+  Used by the Fluid tab. Vendored into lib/ rather than fetched from a CDN so
+  the panel works without an internet connection.
+
+  CSInterface.js
+  Copyright Adobe Inc. Distributed by Adobe as part of the Common
+  Extensibility Platform (CEP) and used under Adobe's terms for CEP
+  extension development.
+
+  Instrument Sans, Instrument Serif, JetBrains Mono
+  SIL Open Font Licence 1.1. Loaded from Google Fonts at run time; the panel
+  falls back to system faces when offline.
+
+After Effects and Adobe are trademarks of Adobe Inc. Living Gradients is not
+affiliated with, endorsed by, or sponsored by Adobe.
+
+--------------------------------------------------------------------------
+
+Questions, volume licences, or a key that has gone astray:
+https://digivero.gumroad.com/l/livinggradients
+
+(c) 2026 Digivero. All rights reserved.

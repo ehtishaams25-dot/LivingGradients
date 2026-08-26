@@ -118,7 +118,11 @@ var LGShelf = (function () {
     canvas.width = THUMB_W;
     canvas.height = THUMB_H;
     try {
-      paintPreview(canvas, type, colors);
+      /* live: the painter only. This reads the canvas back synchronously on
+         the next line, so an image that arrives later could never be in it —
+         and a saved preset carries its own palette, which a render of the
+         gradient's defaults would contradict. */
+      paintPreview(canvas, type, colors, { live: true });
       return canvas.toDataURL('image/jpeg', 0.86);
     } catch (e) { return null; }
   }
@@ -682,7 +686,9 @@ var LGShelf = (function () {
     } else if (rec.kind === 'gradient' && typeof paintPreview === 'function') {
       var canvas = document.createElement('canvas');
       canvas.width = 240; canvas.height = 135;
-      try { paintPreview(canvas, rec.type, rec.colors); } catch (e) { }
+      /* live: a saved preset has its own palette, so the render of this
+         gradient's defaults would show the wrong colours. */
+      try { paintPreview(canvas, rec.type, rec.colors, { live: true }); } catch (e) { }
       art.appendChild(canvas);
     } else {
       var strip = LGUI.el('div', 'lg-card-strip');

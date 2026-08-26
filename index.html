@@ -5,8 +5,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Living Gradients v2</title>
+  <!-- The brand's faces, from Google Fonts.
+
+       LOADED HERE RATHER THAN @imported FROM styles.css, and that is not
+       tidiness. An @import at the top of a stylesheet blocks everything after
+       it in that file until the request resolves — and this panel runs inside
+       After Effects, on machines that are frequently offline, where "resolves"
+       means "times out". The panel was painting nothing at all for as long as
+       that took. As a link with media="print" flipped to "all" on load, the
+       request is off the critical path entirely: the panel paints immediately
+       in the fallback stack and swaps when (or if) the fonts arrive.
+
+       Every var(--font-*) in styles.css names a real local fallback for the
+       same reason, so an offline panel looks intentional rather than broken. -->
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" />
+
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/shelf.css" />
+  <link rel="stylesheet" href="css/picker.css" />
 </head>
 
 <body>
@@ -465,22 +482,23 @@
   <!-- Load order matters and is documented in js/boot.js. Foundations first
        (disk, then the model, then the interface primitives), features next,
        boot last — it assumes every name below is already defined. -->
-  <script src="js/store.js?v=13"></script>
-  <script src="js/library.js?v=13"></script>
-  <script src="js/ui.js?v=13"></script>
-  <script src="js/service.js?v=13"></script>
+  <script src="js/store.js?v=15"></script>
+  <script src="js/library.js?v=15"></script>
+  <script src="js/ui.js?v=15"></script>
+  <script src="js/service.js?v=15"></script>
 
-  <script src="js/license.js?v=13"></script>
-  <script src="js/presets.js?v=13"></script>
-  <script src="js/controls.js?v=13"></script>
-  <script src="js/preview.js?v=13"></script>
-  <script src="js/liquidEther.js?v=13"></script>
+  <script src="js/license.js?v=15"></script>
+  <script src="js/presets.js?v=15"></script>
+  <script src="js/controls.js?v=15"></script>
+  <script src="js/preview.js?v=15"></script>
+  <script src="js/colorpicker.js?v=15"></script>
+  <script src="js/liquidEther.js?v=15"></script>
 
-  <script src="js/shelf.js?v=13"></script>
-  <script src="js/footer.js?v=13"></script>
+  <script src="js/shelf.js?v=15"></script>
+  <script src="js/footer.js?v=15"></script>
 
-  <script src="js/main.js?v=13"></script>
-  <script src="js/boot.js?v=13"></script>
+  <script src="js/main.js?v=15"></script>
+  <script src="js/boot.js?v=15"></script>
 
 </body>
 

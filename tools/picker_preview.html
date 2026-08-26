@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Living Gradients — colour picker harness</title>
+
+<!--
+  A browser harness for js/colorpicker.js.
+
+  The picker is pure Chromium, so it can be developed and checked without
+  After Effects anywhere in the loop. This page loads the real stylesheet and
+  the real module against the real design tokens and gives them a row of
+  swatches to drive, exactly as the inspector does.
+
+    python -m http.server 8099
+    http://127.0.0.1:8099/tools/picker_preview.html
+
+  The log underneath records every onChange and onCommit, which is the part
+  that matters: onChange is what makes the comp track a drag, and if it is not
+  firing continuously the picker looks right and behaves like the dialog it
+  replaced.
+
+  Not shipped — tools/ is outside the build allowlist in tools/build.ps1.
+-->
+
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="../css/picker.css">
+<style>
+  body { background: var(--bg-app); color: var(--text-main);
+         font-family: var(--font-sans); padding: 24px; }
+  h1 { font-family: var(--font-display); font-weight: 400; font-size: 26px; margin-bottom: 4px; }
+  p.sub { color: var(--text-muted); font-size: var(--fs-body); margin-bottom: 20px; }
+  .wrap { max-width: 340px; }
+  .color-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .ctrl-row { display: flex; align-items: center; gap: 8px;
+              background: var(--bg-panel); border: 1px solid var(--border-light);
+              border-radius: var(--radius-sm); padding: 5px 8px; }
+  .ctrl-label { flex: 1; font-size: var(--fs-label); color: var(--text-muted); }
+  .color-pick { width: 26px; height: 22px; border: none; border-radius: 5px;
+                cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
+  .color-hex { width: 76px; height: 22px; background: var(--bg-input);
+               border: 1px solid var(--border-light); border-radius: 5px;
+               color: var(--text-main); font-family: var(--font-mono);
+               font-size: 10.5px; text-align: center; }
+  #log { margin-top: 20px; background: var(--bg-sunken); border-radius: var(--radius-sm);
+         padding: 10px; font-family: var(--font-mono); font-size: 10.5px;
+         color: var(--text-muted); height: 190px; overflow: auto; white-space: pre; }
+  .counts { margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Colour picker</h1>
+  <p class="sub">Click a swatch. Drag in the field and watch the change count climb.</p>
+  <div class="color-row" id="color-row"></div>
+  <div class="counts" id="counts">onChange 0 · onCommit 0</div>
+  <div id="log"></div>
+</div>
+
+<script src="../js/colorpicker.js"></script>
+<script>
+  /* Stand-ins for the panel globals the picker reaches for. */
+  window.lgHostReady = function () { return false; };
+  window.LGUI = { toast: function (m) { say('toast: ' + m); } };
+
+  var selectedType = 'Polished';
+  var ROLES = ['Shadow', 'Base Metal', 'Bright', 'Highlight'];
+  var state = { colors: ['#2B2118', '#8C7A5E', '#D9C7A3', '#FFF6E4'] };
+
+  var changes = 0, commits = 0;
+  var logEl = document.getElementById('log');
+  function say(msg) {
+    logEl.textContent = msg + '\n' + logEl.textContent;
+  }
+  function counts() {
+    document.getElementById('counts').textContent =
+      'onChange ' + changes + ' · onCommit ' + commits;
+  }
+
+  var row = document.getElementById('color-row');
+
+  function render() {
+    row.innerHTML = '';
+    for (var i = 0; i < state.colors.length; i++) {
+      var item = document.createElement('div');
+      item.className = 'ctrl-row';
+
+      var label = document.createElement('span');
+      label.className = 'ctrl-label';
+      label.textContent = ROLES[i];
+      item.appendChild(label);
+
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'color-pick';
+      chip.dataset.index = String(i);
+      chip.style.backgroundColor = state.colors[i];
+      item.appendChild(chip);
+
+      var field = document.createElement('input');
+      field.className = 'color-hex';
+      field.dataset.index = String(i);
+      field.value = state.colors[i];
+      item.appendChild(field);
+
+      row.appendChild(item);
+    }
+  }
+
+  function openFor(i) {
+    var chip = row.querySelector('.color-pick[data-index="' + i + '"]');
+    LGPicker.open({
+      anchor: chip,
+      hex: state.colors[i],
+      index: i,
+      label: ROLES[i],
+      palette: state.colors.slice(0),
+      roles: ROLES,
+      onChange: function (hex) {
+        changes++; counts();
+        state.colors[i] = hex;
+        chip.style.backgroundColor = hex;
+        var f = row.querySelector('.color-hex[data-index="' + i + '"]');
+        if (f) f.value = hex;
+      },
+      onCommit: function (hex) {
+        commits++; counts();
+        state.colors[i] = hex;
+        say('commit  slot ' + i + '  ' + hex);
+        render();
+      },
+      onSlot: function (next) { say('moved to slot ' + next); openFor(next); }
+    });
+  }
+
+  row.addEventListener('click', function (e) {
+    var b = e.target.closest('.color-pick');
+    if (!b) return;
+    openFor(parseInt(b.dataset.index, 10));
+  });
+
+  render();
+  say('ready');
+</script>
+</body>
+</html>
