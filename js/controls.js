@@ -23,6 +23,22 @@ const GRADIENT_CONTROLS = {
     { id: 'drift',     label: 'Drift',        min: 0,  max: 200, step: 5, default: 30, type: 'slider' },
     { id: 'speed',     label: 'Drift Speed',  min: 0,  max: 60,  step: 1, default: 12, type: 'slider' }
   ],
+  /* SATIN WAVES (id 'Metallic'). Nothing here changed when it moved out of
+     Metal — the sliders always described a folded ramp being bent, which is
+     what a wave is. Only the label and the section did. */
+  Metallic: [
+    { id: 'finish',      label: 'Finish',
+      options: ['Chrome', 'Iridescent', 'Brushed', 'Y2K Chrome'],
+      default: 'Chrome', type: 'select' },
+    { id: 'bands',       label: 'Fold Count',       min: 2,  max: 60,  step: 1,  default: 6,   type: 'slider' },
+    { id: 'tilt',        label: 'Fold Tilt',        min: 0,  max: 100, step: 1,  default: 12,  type: 'slider' },
+    { id: 'speed',       label: 'Flow Speed',       min: 0,  max: 120, step: 1,  default: 20,  type: 'slider' },
+    { id: 'ripple',      label: 'Liquid Ripple',    min: 0,  max: 500, step: 5,  default: 180, type: 'slider' },
+    { id: 'rippleScale', label: 'Ripple Scale',     min: 20, max: 600, step: 10, default: 260, type: 'slider' },
+    { id: 'swirl',       label: 'Swirl',            min: 0,  max: 300, step: 5,  default: 70,  type: 'slider' },
+    { id: 'sheen',       label: 'Sheen',            min: 0,  max: 100, step: 1,  default: 45,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',         min: 0,  max: 40,  step: 1,  default: 2,   type: 'slider' }
+  ],
   Antigravity: [
     { id: 'count',        label: 'Particles',    min: 50,  max: 2000, step: 50,  default: 500, type: 'slider' },
     { id: 'waveSpeed',    label: 'Drift Speed',  min: 0.05, max: 3,   step: 0.05, default: 0.4, type: 'slider' },
@@ -220,37 +236,153 @@ const GRADIENT_CONTROLS = {
     { id: 'speed',     label: 'Evolution Speed', min: 0,  max: 100,  step: 1,  default: 3,   type: 'slider' }
   ],
 
-  /* Snakeskin is the last user of the hammered height field. The metal
-     presets that used to sit around it are gone from the library, but this one
-     is not a metal — it is that dimple lattice lit like skin, and the numbers
-     are the whole difference. Specular 38 and roughness 62 is what stops it
-     looking wet; speed 0 because a drifting reflection is a metal cue and skin
-     does not have one.
+  /* SNAKESKIN NOW *IS* HAMMERED, and that is the whole point of the change.
 
-     SCALE WENT TOO FAR THE OTHER WAY. It was set to 45 to make the cells read
-     as scales rather than dents, which was the right direction and twice the
-     distance needed. Hammered's dimple lattice is 90px at scale 100, so 45
-     gives cells 40px across — and at 1920 wide, 40px cells are 48 of them
-     across the frame. That is not a field of scales, it is a crinkle, which is
-     exactly what the gradient has been rendering while the card preview showed
-     proper overlapping plates.
+     These were two entries on one recipe. Snakeskin ran
+     buildMetalTexture(..., 'Hammered') with the shine dropped and the drift
+     stopped, on the theory that the same dimple lattice reads as scales when
+     it is lit like skin rather than like copper. Hammered Metal ran it with
+     the shine up. Two presets, one height field, and the pair of them close
+     enough that keeping both was offering the same gradient twice.
 
-     110 puts the cells at 99px, about twenty across the frame, which is the
-     proportion the reference boards and the card both show. Existing saved
-     presets keep whatever they stored, so nothing anybody has made changes. */
+     Hammered is gone from the library and its settings are here. Specular is
+     back at 95 and roughness at 14 — the hard, low-roughness response that
+     made it the one tile on the first contact sheet anybody believed — and
+     the drift is running again at 6, because a surface that holds perfectly
+     still reads as a photograph of a surface.
+
+     Scale stays at 110, which is the one number that was genuinely Snakeskin's
+     rather than inherited. Hammered's lattice is 90px at scale 100, so 110
+     puts the cells at 99px — about twenty across a 1920 frame, which is the
+     proportion the reference boards show. The 45 it was set to before gave 48
+     cells across, and 48 cells is a crinkle, not a field of scales.
+
+     Existing saved presets keep whatever they stored, so nothing anybody has
+     already made changes. */
   Snakeskin: [
     { id: 'scaleAll',    label: 'Scale Size',    min: 15, max: 200, step: 5, default: 110, type: 'slider' },
-    { id: 'relief',      label: 'Scale Depth',   min: 0,  max: 100, step: 1, default: 74,  type: 'slider' },
-    { id: 'bands',       label: 'Banding',       min: 1,  max: 40,  step: 1, default: 3,   type: 'slider' },
-    { id: 'brushLength', label: 'Stretch',       min: 0,  max: 200, step: 5, default: 40,  type: 'slider' },
-    { id: 'warp',        label: 'Body Curve',    min: 0,  max: 250, step: 5, default: 70,  type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 305, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 42,  type: 'slider' },
-    { id: 'specular',    label: 'Sheen',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 62,  type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 8,   type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 1,   type: 'slider' },
-    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 0,   type: 'slider' }
+    { id: 'relief',      label: 'Scale Depth',   min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 4,   type: 'slider' },
+    { id: 'brushLength', label: 'Stretch',       min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Irregularity',  min: 0,  max: 250, step: 5, default: 25,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 310, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 95,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 14,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 6,   type: 'slider' }
+  ],
+
+  /* THE MOLTEN METALS — Copper, Gold, Silver.
+
+     One shader, one geometry, three palettes. The defaults below are not
+     chosen numbers, they are the positions at which the sliders reproduce the
+     recipe that was tuned by hand in After Effects and read back off the
+     layer — see MOLTEN in jsx/main.jsx. Moving one moves away from a metal
+     that is known to work, which is a fine thing to do deliberately and a bad
+     thing to do by accident, so they are all here rather than hidden.
+
+       Relief       scales the shader's Height and Displacement together, and
+                    those are NEGATIVE on these three. It changes how deep the
+                    surface is without flipping the sign that makes the bright
+                    band fall into the trough of a fold instead of sitting on
+                    its ridge.
+       Reflections  33 by default, not the 6 the old metals used. Six wide
+                    bands is a showroom mirror; thirty-three narrow ones is
+                    what a curved liquid surface does to a window.
+       Crumple      adds to the measured displacement rather than replacing
+                    it, so 0 is the tuned pour and up is more violent. */
+  Copper: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 60,  step: 1, default: 33,  type: 'slider' },
+    { id: 'warp',        label: 'Extra Churn',   min: 0,  max: 250, step: 5, default: 0,   type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 58,  type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 45,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 90,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 17,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 28,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
+  ],
+  Gold: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 60,  step: 1, default: 33,  type: 'slider' },
+    { id: 'warp',        label: 'Extra Churn',   min: 0,  max: 250, step: 5, default: 0,   type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 72,  type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 52,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 96,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 14,  type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 34,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
+  ],
+  Silver: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 60,  step: 1, default: 33,  type: 'slider' },
+    { id: 'warp',        label: 'Extra Churn',   min: 0,  max: 250, step: 5, default: 0,   type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 44,  type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 40,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 98,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 9,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 22,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 7,   type: 'slider' }
+  ],
+
+  /* CRUMPLED FOIL takes a different set, because most of the metal sliders
+     drive a reflection stage this preset does not have. Crease Depth and
+     Crease Size are the two that matter — Size is a Turbulent Displace at
+     around two pixels, and it is genuinely that small: at 10 the creases turn
+     back into ordinary wobbles. */
+  Foil: [
+    { id: 'scaleAll',    label: 'Sheet Scale',   min: 20, max: 300,  step: 5, default: 100, type: 'slider' },
+    { id: 'crumpleAmount', label: 'Crease Depth', min: 0, max: 1200, step: 10, default: 718, type: 'slider' },
+    { id: 'crumpleSize', label: 'Crease Size',   min: 1,  max: 40,   step: 1, default: 2,   type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100,  step: 1, default: 30,  type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360,  step: 1, default: 305, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100,  step: 1, default: 67,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100,  step: 1, default: 63,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100,  step: 1, default: 1,   type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,   step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,   step: 1, default: 5,   type: 'slider' }
+  ],
+
+  /* BRUSHED STEEL, rebuilt against the foil rather than against the metals
+     that never worked. Brush Length is the one that defines it: the blur runs
+     along the grain and leaves the surface sharp across it. */
+  Brushed: [
+    { id: 'scaleAll',    label: 'Surface Scale', min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 30,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 80,  type: 'slider' },
+    { id: 'warp',        label: 'Crumple',       min: 0,  max: 250, step: 5, default: 0,   type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 300, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 55,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 1,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 10,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
+  ],
+
+  /* Liquid Mercury is untouched and is the user's to change. */
+  Mercury: [
+    { id: 'scaleAll',    label: 'Blob Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
+    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 85,  type: 'slider' },
+    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
+    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
+    { id: 'warp',        label: 'Surface Churn', min: 0,  max: 250, step: 5, default: 160, type: 'slider' },
+    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
+    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
+    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 100, type: 'slider' },
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 7,   type: 'slider' },
+    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
+    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
+    { id: 'speed',       label: 'Flow Speed',    min: 0,  max: 60,  step: 1, default: 14,  type: 'slider' }
   ],
 
   AnimeCells: [
@@ -323,18 +455,26 @@ const GRADIENT_CONTROLS = {
     { id: 'centerX',       label: 'Centre X',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' },
     { id: 'centerY',       label: 'Centre Y',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' }
   ],
-  LiquidWaves: [
-    { id: 'speed',      label: 'Flow Speed',   min: 1,  max: 200, step: 1,  default: 30,  type: 'slider' },
-    { id: 'scale',      label: 'Wave Scale',   min: 20, max: 900, step: 10, default: 260, type: 'slider' },
-    { id: 'turbulence', label: 'Turbulence',   min: 0,  max: 600, step: 10, default: 140, type: 'slider' },
-    { id: 'bands',      label: 'Band Density', min: 40, max: 600, step: 10, default: 200, type: 'slider' },
-    { id: 'complexity', label: 'Complexity',   min: 1,  max: 10,  step: 1,  default: 4,   type: 'slider' },
-    { id: 'blur',       label: 'Softness',     min: 0,  max: 100, step: 1,  default: 6,   type: 'slider' }
-  ],
   TrailGradient: [
-    { id: 'width', label: 'Trail Width', min: 10, max: 200, step: 5, default: 60, type: 'slider' },
-    { id: 'cycleSpeed', label: 'Cycle Speed', min: 100, max: 2000, step: 50, default: 600, type: 'slider' },
-    { id: 'bend', label: 'Arc Bend', min: -100, max: 100, step: 1, default: 30, type: 'slider' }
+    /* Trail Width is the only rebuild here: it sets how many strokes there
+       are and how wide each solid is, and a solid cannot be resized after the
+       fact. Everything below is an effect property or an expression, so it
+       lands on the drag. */
+    { id: 'width',      label: 'Trail Width',  min: 10,  max: 200,  step: 5,  default: 60,  type: 'slider' },
+    { id: 'cycleSpeed', label: 'Cycle Speed',  min: 100, max: 2000, step: 50, default: 600, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Linear', 'Sine', 'Mirror', 'Random', 'Counterflow'],
+      default: 'Linear', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 100, type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Squeeze', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
+                'Rise', 'Fisheye', 'Inflate', 'Twist', 'Flat'],
+      default: 'Squeeze', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -100, max: 100, step: 1,  default: 30,  type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
   ],
   CellularMosaic: [
     { id: 'pattern',    label: 'Pattern Type',
@@ -355,11 +495,17 @@ const GRADIENT_CONTROLS = {
   SonduckLiquid: [
     { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 20, type: 'slider' }
   ],
-  TwirlShapes: [
-    { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 20, type: 'slider' }
-  ],
   LavaLamp: [
-    { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 15, type: 'slider' }
+    { id: 'blobSize', label: 'Blob Size',   min: 100, max: 900, step: 10, default: 420, type: 'slider' },
+    /* Melt is Fractal Noise Contrast. Low, the field stays a cloud; high, the
+       bright parts break into separate islands. It is the difference between
+       a haze and a lamp, so it leads. */
+    { id: 'melt',     label: 'Melt',        min: 80,  max: 400, step: 5,  default: 190, type: 'slider' },
+    { id: 'rise',     label: 'Rise Speed',  min: 0,   max: 200, step: 5,  default: 45,  type: 'slider' },
+    { id: 'wobble',   label: 'Wobble',      min: 0,   max: 300, step: 5,  default: 70,  type: 'slider' },
+    { id: 'morph',    label: 'Morph Speed', min: 0,   max: 60,  step: 1,  default: 12,  type: 'slider' },
+    { id: 'softness', label: 'Softness',    min: 0,   max: 60,  step: 1,  default: 10,  type: 'slider' },
+    { id: 'heat',     label: 'Heat Glow',   min: 0,   max: 100, step: 1,  default: 35,  type: 'slider' }
   ],
   StackedSquares: [
     { id: 'speed', label: 'Speed', min: 1, max: 100, step: 1, default: 20, type: 'slider' }

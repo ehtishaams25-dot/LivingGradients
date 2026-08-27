@@ -15,7 +15,7 @@
 const COLOR_ROLES = {
   Halftone:       ['Ink A', 'Ink B', 'Paper'],
   Sunburst:       ['Ray A', 'Ray B', 'Backdrop'],
-  LiquidWaves:    ['Deep', 'Mid', 'Bright', 'Crest'],
+  LavaLamp:       ['Lamp Fluid', 'Blob Edge', 'Blob Body', 'Blob Core'],
   Glass:          ['Shadow', 'Body', 'Sheen', 'Flare'],
   ReededGlass:    ['Deep', 'Mid', 'Bright', 'Crest'],
   CellularMosaic: ['Void', 'Wall', 'Cell', 'Core'],
@@ -28,6 +28,33 @@ const COLOR_ROLES = {
   Fur:            ['Undercoat', 'Guard Hair'],
   Leopard:        ['Coat', 'Rosette Ring', 'Rosette Core'],
   Snakeskin:      ['Deep Scale', 'Body', 'Bright Scale', 'Sheen'],
+
+  /* Liquid Chrome was a metal, was never a plate, and is now filed with the
+     waves it always looked like. Its roles say so: this is a ramp folded into
+     ribbons, so the slots are the ribbon's tones and not a lit surface's. */
+  Metallic:       ['Deep', 'Mid', 'Bright', 'Crest'],
+
+  /* THE MOLTEN METALS TAKE THREE COLOURS, AND THAT IS NOT A SIMPLIFICATION.
+
+     CC Toner in Tritone has three stops. It was being handed five, and two of
+     them — Brights and Darktones — are inert in that mode, so two of the four
+     swatches on these gradients moved nothing at all. Three named slots is
+     what the shader actually consumes:
+
+       Shadow      what the surface reflects where nothing is lighting it
+       Base Metal  the body colour — the part that says copper, not steel
+       Highlight   the specular hit itself
+
+     A four-colour preset saved before this still works: the builder takes the
+     first, the middle and the last. */
+  Copper:         ['Shadow', 'Base Metal', 'Highlight'],
+  Gold:           ['Shadow', 'Base Metal', 'Highlight'],
+  Silver:         ['Shadow', 'Base Metal', 'Highlight'],
+
+  /* The other three still run the five-stop ramp, so they keep four. */
+  Brushed:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
+  Foil:           ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
+  Mercury:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
 
   /* The only gradient in the library whose first swatch is the BACKGROUND
      rather than a stop in a ramp. In this look the background is most of what
@@ -46,10 +73,24 @@ const GRADIENT_LIBRARY = [
      Anything that reads as moving liquid or a travelling wave. Grouped by
      what it looks like, not by where the recipe came from. */
   { id: 'Wavy', category: 'Waves & Flow', label: 'Wavy', cssClass: 'preview-living', defaultColors: ['#0055FF', '#FF0055', '#5500FF', '#000000'] },
-  { id: 'LiquidWaves', category: 'Waves & Flow', label: 'Liquid Waves', cssClass: 'preview-liquid', defaultColors: ['#FF0055', '#5500FF', '#00DDFF', '#FFAA00'] },
   { id: 'SonduckLiquid', category: 'Waves & Flow', label: 'Liquid Ribbons', cssClass: 'preview-sonduckliquid', defaultColors: ['#FF3366', '#33CCFF', '#111111', '#111111'] },
   { id: 'Waves', category: 'Waves & Flow', label: 'Waves', cssClass: 'preview-waves', defaultColors: ['#5227FF', '#000000', '#111111', '#111111'] },
   { id: 'Fluid', category: 'Waves & Flow', label: 'Fluid Gradient', cssClass: 'preview-liquid', defaultColors: ['#0099CC', '#0033FF', '#CC00FF', '#4A0080'] },
+
+  /* SATIN WAVES — filed by what it looks like, which is the rule everywhere
+     else in this library and was not being applied to this one.
+
+     It was called Liquid Chrome and sat at the top of Metal. It is a ramp
+     folded into a mirrored triangle wave and then bent: bands of tone pouring
+     over each other, which is a wave. It has no height field, no shader and
+     no light, so it is not a lit surface and never was — the only thing metal
+     about it was the palette it shipped with.
+
+     THE ID IS STILL 'Metallic' ON PURPOSE. Every saved preset and every
+     LIVING_GRADIENT_DATA stamp on a layer somebody has already built refers
+     to it by that id. Renaming the id would orphan all of them to rename a
+     label. */
+  { id: 'Metallic', category: 'Waves & Flow', label: 'Satin Waves', cssClass: 'preview-pulse', defaultColors: ['#05070C', '#3E5A78', '#B9D4E8', '#FFFFFF'] },
 
   /* SILKFLARE ENGINE
      One builder, seven presets. These are finished — do not refactor them
@@ -67,8 +108,7 @@ const GRADIENT_LIBRARY = [
   { id: 'OklabSmooth', category: 'Ambient & Organic', label: 'Oklab Smooth', cssClass: 'preview-living', defaultColors: ['#FF0000', '#00FFFF', '#FF00FF', '#FFFF00'] },
   { id: 'living', category: 'Ambient & Organic', label: 'Living Gradient', cssClass: 'preview-living', defaultColors: ['#FF6B35', '#FF3366', '#CC00FF', '#0033FF'] },
   { id: 'TrailGradient', category: 'Ambient & Organic', label: 'Trail Gradient', cssClass: 'preview-trail', defaultColors: ['#FF0055', '#5500FF', '#00DDFF', '#FFAA00'] },
-  { id: 'LavaLamp', category: 'Ambient & Organic', label: 'Lava Lamp', cssClass: 'preview-lavalamp', defaultColors: ['#FFCC00', '#FF3300', '#990000', '#009900'] },
-  { id: 'TwirlShapes', category: 'Ambient & Organic', label: 'Twirl Shapes', cssClass: 'preview-twirlshapes', defaultColors: ['#00FF99', '#FF0055', '#111111', '#111111'] },
+  { id: 'LavaLamp', category: 'Ambient & Organic', label: 'Lava Lamp', cssClass: 'preview-lavalamp', defaultColors: ['#1A0033', '#8C1A00', '#FF4400', '#FFDD44'] },
 
   /* LIGHT & ENERGY
      Rays, bursts, threads and heat — anything whose subject is the light
@@ -134,15 +174,28 @@ const GRADIENT_LIBRARY = [
   { id: 'Glass', category: 'Glass', label: 'Frosted Glass', cssClass: 'preview-glass', defaultColors: ['#0B1622', '#3E6E8C', '#BFE3F0', '#FFFFFF'] },
   { id: 'ReededGlass', category: 'Glass', label: 'Reeded Glass', cssClass: 'preview-reeded', defaultColors: ['#003366', '#0099CC', '#00CED1', '#E6E6FA'] },
 
-  /* The metals used to live here — Liquid Chrome and Liquid Mercury, then
-     seven shaded plates on CC Glass's Blinn-Phong shader. They are removed.
-     Every attempt to make them read as lit metal rather than as a striped
-     ramp either failed outright or only held at one comp size, and shipping a
-     look that is convincing in the card and wrong in the render is worse than
-     not shipping it.
+  /* METAL
+     Six, down from nine, and the three at the top are the only ones that were
+     ever going to work — because they were not derived, they were measured.
+     The panel built a copper, it was tuned by hand in After Effects until it
+     read as poured metal, and the finished effect stack was read back off the
+     layer into MOLTEN in jsx/main.jsx. Gold and Silver are that same pour with
+     a different palette and a few degrees of light.
 
-     The builders are still in jsx/main.jsx because Snakeskin runs on
-     buildMetalTexture's 'Hammered' height field. Nothing else reaches them.
-     Presets a customer already saved on a metal still carry their own recipe
-     and still rebuild — the library just no longer offers a new one. */
+     The three that are gone: Polished Chrome and Gunmetal, which never came
+     good, and Hammered Metal, which Snakeskin already was — Snakeskin now
+     carries Hammered's settings and Hammered is no longer offered twice.
+
+     Molten first, then the three surfaces. */
+  { id: 'Copper', category: 'Metal', label: 'Molten Copper', cssClass: 'preview-pulse', defaultColors: ['#2A0E06', '#C2622B', '#FFD9BE'] },
+  { id: 'Gold', category: 'Metal', label: 'Molten Gold', cssClass: 'preview-pulse', defaultColors: ['#2B1A05', '#C99A2E', '#FFF2C4'] },
+  { id: 'Silver', category: 'Metal', label: 'Molten Silver', cssClass: 'preview-pulse', defaultColors: ['#0B0E12', '#7E8B99', '#FFFFFF'] },
+
+  /* Crumpled Foil is the one that turned out to need almost none of the
+     stack: no ramp, no fold, no twist, no environment. Just the height map —
+     fractal noise shredded by a two-pixel cross displacement — with the
+     shader on top of it. See METAL_SURFACES.Foil. */
+  { id: 'Foil', category: 'Metal', label: 'Crumpled Foil', cssClass: 'preview-pulse', defaultColors: ['#0A0C0F', '#6E7A86', '#C6D2DC', '#FFFFFF'] },
+  { id: 'Brushed', category: 'Metal', label: 'Brushed Steel', cssClass: 'preview-pulse', defaultColors: ['#16191C', '#5C6570', '#AEB8C2', '#F2F6FA'] },
+  { id: 'Mercury', category: 'Metal', label: 'Liquid Mercury', cssClass: 'preview-pulse', defaultColors: ['#04070A', '#6C7A85', '#C3D2DB', '#FFFFFF'] }
 ];

@@ -7,10 +7,10 @@ Current as of **2026-08-25, v2.1.0**.
 
 ## What this is
 
-A CEP panel for After Effects that builds 39 procedural gradients out of
-native effects — glass, halftone, animal prints, anime cel water, aurora, silk,
-SaaS blooms. No footage; everything is resolution-independent and recolourable.
-Sold by Digivero, licensed through Gumroad.
+A CEP panel for After Effects that builds 46 procedural gradients out of
+native effects — molten metal, glass, halftone, animal prints, anime cel water,
+aurora, silk, SaaS blooms. No footage; everything is resolution-independent and
+recolourable. Sold by Digivero, licensed through Gumroad.
 
 ```
 index.html          the panel
@@ -31,6 +31,7 @@ jsx/main.jsx        the builders (~6300 lines)
 jsx/presets.jsx     capture, thumbnail render, apply
 server/worker.js    Cloudflare Worker: /version /messages /feedback
 tools/build.ps1     stage, stamp, check, sign, package, install
+tools/recipe_dump.jsx  read a hand-tuned comp back out as text
 ```
 
 **Three static audits gate the build.** They check things that are invisible on
@@ -211,6 +212,65 @@ replacing 6 `alert()`/`confirm()` calls; the footer bell + menu; the diagnostics
 banners; three.js vendored to `lib/` (was a CDN fetch, so the Fluid tab needed
 internet); the licence bypass turned from buried dead code into a guarded flag;
 the build/sign pipeline; **Snakeskin** added to Animal Prints.
+
+**Done 2026-08-26 (later) — the metals came back, measured instead of derived.**
+
+The metals were cut earlier the same day because no amount of reasoning about
+Blinn-Phong was producing metal. They are back, and the reason they work now is
+a change of method rather than a change of numbers: the panel built a copper,
+it was tuned by hand in After Effects until it read as poured metal, and the
+finished effect stack was read back off the layer into `MOLTEN` in
+`jsx/main.jsx`. **Where the derivation and the measurement disagree, the
+measurement wins.** That is the rule this section is really about.
+
+The four settings that mattered, none of which the derived version would have
+found:
+
+| | derived | measured |
+| --- | --- | --- |
+| Motion Tile height | 100 | **25** — the fold is squeezed before it is bent |
+| Metal Twist mode | Twist Smoother | **Bulge Smoother** — pushes out along the normal instead of rotating |
+| Metal Environment mode | Turbulent Smoother | **Turbulent** — hard enough to break the fold's regularity |
+| Reflection bands | 6 | **33** — a thin bright line down the fold, not a wash across it |
+
+- **Molten Copper, Molten Gold, Molten Silver** are one recipe with three
+  palettes and a few degrees of light between them. Deliberately: they are the
+  same pour, and giving each its own geometry is what made the last set look
+  like unrelated accidents.
+- **Crumpled Foil needs almost none of the stack.** No ramp, no fold, no twist,
+  no environment, no toner, no bloom — `bare: true` switches the whole
+  reflection stage off. Everything that makes foil foil is in the height map,
+  and the height map is Fractal Noise through a **Cross Displacement at Size 2**.
+  A displacement finer than the field shreds it instead of bending it — the
+  same mechanism as Fur, found from the other end.
+- **Snakeskin absorbed Hammered Metal.** They were two entries on one recipe;
+  Snakeskin now carries Hammered's own settings (specular 95, roughness 14,
+  drift 6) and Hammered is gone from the library.
+- **Liquid Chrome is Satin Waves, in Waves & Flow.** It has no height field, no
+  shader and no light — it is a folded ramp being bent, which is a wave. The
+  id stays `Metallic` so every saved preset and every `LIVING_GRADIENT_DATA`
+  stamp keeps resolving.
+- **Polished Chrome and Gunmetal stay cut.** Their recipes remain in
+  `METAL_SURFACES` and in `SHADED` so presets saved on them still build and
+  still update live; nothing offers them.
+- **CC Toner index 3 is Tritone, not Pentone**, and the comment saying Pentone
+  had been wrong for a long time. Brights and Darktones are inert in that
+  mode — so two of the five stops the panel writes have never done anything, on
+  every metal, print and glass it has ever made. The molten metals now use
+  `lgToneTri()` and take three colours because three is what the shader eats.
+- **A measured recipe is not budgeted.** `lgDisplaceBudget` converts overhang
+  into an Amount at a flat 3.2px per unit; the molten stack asks for 433 + 229,
+  which that model says needs 2118px of overhang against the 972px that exists
+  — and the hand-tuned comp has no holes anywhere. Reach depends on the mode
+  and the Size, neither of which the model looks at. What actually makes holes
+  impossible is **Pin All**, which `lgTurbSet` sets on every one of them. Specs
+  that state their amounts get them; specs that derive amounts from the Crumple
+  slider still go through the budget, because those are guesses.
+- **`tools/recipe_dump.jsx`** — select layers, run it, and it writes every
+  effect on every one of them with its enabled flag and every property value,
+  following precomps one level down. It exists because a screenshot cannot show
+  whether an effect is switched on or which option a dropdown is really set to,
+  and those are the two things that decide a look.
 
 **Done 2026-08-26 — the metals removed, the picker handed back to the host.**
 

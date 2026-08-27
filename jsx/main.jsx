@@ -679,19 +679,19 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'AnimeCells':
             buildAnimeCells(comp, c, controls, w, h, dur);
             break;
-        case 'Polished':
-        case 'Brushed':
-        case 'Gold':
         case 'Copper':
-        case 'Gunmetal':
-        case 'Hammered':
+        case 'Gold':
+        case 'Silver':
+        case 'Brushed':
         case 'Foil':
         case 'Mercury':
             buildMetalTexture(comp, c, controls, w, h, dur, type);
             break;
-        /* Shares the Hammered height field on purpose — see the note beside
-           this preset in js/presets.js. It is an animal print by palette and
-           lighting, not by geometry. */
+        /* Hammered is no longer a preset of its own — Snakeskin is the only
+           thing that builds it, and it now carries Hammered's own settings
+           rather than the reptile tuning it used to have. The 'Hammered' kind
+           stays as the name of the recipe because every layer name, live
+           tuner and saved preset already refers to it. */
         case 'Snakeskin':
             buildMetalTexture(comp, c, controls, w, h, dur, 'Hammered');
             break;
@@ -706,9 +706,6 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'Sunburst':
             buildSunburst(comp, c, controls, w, h, dur);
             break;
-        case 'LiquidWaves':
-            buildLiquidWaves(comp, c, controls, w, h, dur);
-            break;
         case 'CellularMosaic':
             buildCellularMosaic(comp, c, controls, w, h, dur);
             break;
@@ -720,9 +717,6 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
             break;
         case 'SonduckLiquid':
             buildSonduckLiquid(comp, c, controls, w, h, dur);
-            break;
-        case 'TwirlShapes':
-            buildTwirlShapes(comp, c, controls, w, h, dur);
             break;
         case 'LavaLamp':
             buildLavaLamp(comp, c, controls, w, h, dur);
@@ -2411,7 +2405,6 @@ function updateGradientLive(paramsStr) {
            rule that stops a slider meaning one thing on build and another on a
            drag. */
         var LIVE_TUNERS = {
-            LiquidWaves:    { layer: 'Liquid Waves',    fn: tuneLiquidWaves },
             Metallic:       { layer: 'Metallic',        fn: tuneMetallic },
             CellularMosaic: { layer: 'Cellular Mosaic', fn: tuneCellularMosaic },
             AnimeWater:     { layer: 'Anime Water',     fn: tuneAnimeWater },
@@ -2426,12 +2419,8 @@ function updateGradientLive(paramsStr) {
             Antigravity:    { layer: 'Antigravity Particles', fn: tuneAntigravity },
 
             SonduckLiquid:  { layers: [
-                { name: 'Sonduck Shapes', fn: tuneSonduckLiquid },
-                { name: 'Sonduck Null',   fn: tuneSonduckNull }
-            ] },
-            TwirlShapes:    { layers: [
-                { name: 'Twirl Shapes', fn: tuneSonduckLiquid },
-                { name: 'Twirl Null',   fn: tuneTwirlNull }
+                { name: 'Sonduck Shapes',      fn: tuneSonduckLiquid },
+                { match: /^Ribbon [0-9]+$/,    fn: tuneRibbonDrift }
             ] },
             PrismaticBurst: { layers: [
                 { name: 'Prismatic Rays Matte', fn: tunePrismaticRays },
@@ -2496,8 +2485,11 @@ function updateGradientLive(paramsStr) {
            picture and never the height field would move the colour and leave
            the surface exactly as it was — Relief, Brush Length and Crumple all
            live on the map, not on what you can see. */
-        var SHADED = { Polished: 1, Brushed: 1, Gold: 1, Copper: 1,
-                       Gunmetal: 1, Hammered: 1, Foil: 1, Mercury: 1 };
+        var SHADED = { Copper: 1, Gold: 1, Silver: 1, Brushed: 1,
+                       Foil: 1, Mercury: 1, Hammered: 1,
+                       /* Still reachable so a preset saved on one of the
+                          removed metals goes on updating live. */
+                       Polished: 1, Gunmetal: 1 };
         if (SHADED[liveKind]) {
             var kind = liveKind;
             app.beginUndoGroup('Update ' + ctrl.type);
@@ -4147,102 +4139,185 @@ function lgGlassSurface(fx, bumpLayerIndex, o) {   /* @effect fx = CC Glass */
    there to pull — which is what turned the first Frosted Glass into a white
    trapezoid on black. A layer 30% larger than the comp always has more of
    itself to give. */
+/* THE THREE MOLTEN METALS ARE A MEASURED RECIPE, NOT A DERIVED ONE.
+
+   Everything above this line was worked out from first principles and looked
+   wrong in the render every time. The numbers below were found the other way
+   round: the panel built a copper, it was opened in After Effects and tuned by
+   hand until it read as poured metal, and the finished stack was then read
+   back off the layer. Where a number here disagrees with the reasoning in the
+   comments above, the number wins — it is the one that was looked at.
+
+   The four that actually mattered, none of which the derived version would
+   ever have produced:
+
+     Tile Height 25, not 100. The fold is squeezed vertically before it is
+     bent, so the bands arrive as short wide lozenges rather than as full-
+     height stripes, and a displacement through them makes folds instead of
+     wobbly columns.
+
+     Metal Twist on BULGE Smoother, not Twist Smoother. Twist rotates the
+     bands around a centre. Bulge pushes them outward along their own normals,
+     which is what the surface of something poured does.
+
+     Metal Environment on plain Turbulent, not Turbulent Smoother. The smooth
+     variant is too gentle at this size to break the regularity of the fold;
+     the hard one keeps the flow irregular the way a real reflection is.
+
+     33 reflection bands, not 6. Six wide bands is a mirror in a showroom.
+     Thirty-three narrow ones is what a curved liquid surface does to a
+     window, and it is what makes the highlight run as a thin bright line down
+     the fold rather than washing across half of it.
+
+   The three differ only in palette and in a few degrees of light. That is
+   deliberate: they are the same metal poured, and pretending otherwise by
+   giving each one its own geometry is what made the last set look like eight
+   unrelated accidents. */
+var MOLTEN = {
+    recipe: 'molten',
+    env: 'flow', field: 'noise',
+
+    /* The fold. */
+    tilt: 18, bands: 33, foldHeight: 25,
+
+    /* The two displacements, by menu index — 5 is Bulge Smoother and 1 is
+       plain Turbulent. See the note above; these two lines are most of the
+       difference between metal and a striped ramp. */
+    twistMode: 5, twistAmount: 433, twistSize: 351,
+    envMode:   1, envAmount:  229, envSize:  620,
+
+    /* Tritone. CC Toner's Brights and Darktones are inactive in this mode, so
+       the palette is genuinely three colours — and the panel offers three
+       rather than four with two of them quietly doing nothing. */
+    tritone: true,
+
+    /* CC Glass, negative on both. A negative Height inverts the normals, so
+       the tooling reads as raised where the map is dark; a negative
+       Displacement bends the reflection against the slope, which pulls the
+       bright band down into the trough of a fold instead of leaving it
+       sitting on the ridge. Positive on both is the plate look. */
+    glassSoftness: 4.3, glassHeight: -58, glassDisplacement: -48,
+
+    hWidth: 480, hHeight: 430, hContrast: 120, hComplexity: 3,
+    smooth: 9, metal: 100, ambient: 36, diffuse: 50,
+    lightIntensity: 94, lightHeight: 45, specular: 90, roughness: 17,
+    sheen: 28, speed: 7
+};
+
+/* One molten metal, with only what makes it that metal changed. */
+function lgMolten(over) {
+    var out = {}, k;
+    for (k in MOLTEN) if (MOLTEN.hasOwnProperty(k)) out[k] = MOLTEN[k];
+    for (k in over)   if (over.hasOwnProperty(k))   out[k] = over[k];
+    return out;
+}
+
 var METAL_SURFACES = {
-    Polished: {
-        env: 'flow', field: 'noise',
-        hWidth: 700, hHeight: 620, hContrast: 110, hComplexity: 2,
-        smooth: 6, tilt: 14, metal: 100, ambient: 34, diffuse: 48
-    },
-    Brushed: {
-        /* Wide and very short: the noise is long horizontal filaments before
-           the directional blur ever touches it. Blurring along one axis only
-           is the whole difference between brushed and mirrored — it smears
-           the reflection down the grain and leaves it sharp across it. */
-        env: 'plate', field: 'noise',
-        hWidth: 1400, hHeight: 3, hContrast: 150, hComplexity: 6,
-        brushDirection: 90, smooth: 1, tilt: 10, metal: 100, ambient: 44, diffuse: 46
-    },
-    Gold: {
-        env: 'flow', field: 'noise',
-        hWidth: 420, hHeight: 380, hContrast: 130, hComplexity: 3,
-        smooth: 8, tilt: 18, metal: 100, ambient: 36, diffuse: 50
-    },
-    Copper: {
-        env: 'flow', field: 'noise',
-        hWidth: 480, hHeight: 430, hContrast: 120, hComplexity: 3,
-        smooth: 9, tilt: 16, metal: 100, ambient: 36, diffuse: 50
-    },
-    Gunmetal: {
-        /* Sandblasted, and the one that runs on CC Plastic. Plastic is the
-           only one of the four shaders with a Dust term — a matte scatter
-           laid over the whole surface — and a scattering surface is exactly
-           what sandblasting produces. Low specular, high roughness, and the
-           Dust doing the rest. */
-        shader: 'plastic', dust: 34,
-        env: 'plate', field: 'noise',
-        hWidth: 90, hHeight: 80, hContrast: 160, hComplexity: 5,
-        smooth: 2, tilt: 12, metal: 85, ambient: 50, diffuse: 52
-    },
-    Hammered: {
-        /* Dimples. These numbers came back as the one tile on the first
-           contact sheet that already read as a lit metal object, so they are
-           the reference the other seven were pulled towards rather than
-           something to improve. */
-        env: 'plate', field: 'cells', pattern: 'Bubbles',
-        cellSize: 90, cellContrast: 150,
-        smooth: 5, tilt: 16, metal: 100, ambient: 44, diffuse: 50
-    },
+    Copper:  lgMolten({ lightAngle: 58 }),
+
+    /* Gold sits its light a little higher and further round, and runs
+       slightly hotter. Deliberately a small change: this is the same pour,
+       and the palette is what says gold. */
+    Gold:    lgMolten({ lightAngle: 72, lightHeight: 52, specular: 96,
+                        roughness: 14, sheen: 34 }),
+
+    /* Silver is the cold one. Lower ambient so the shadows stay dark instead
+       of going grey, tighter roughness for a harder highlight, and no warmth
+       anywhere in the palette. */
+    Silver:  lgMolten({ lightAngle: 44, lightHeight: 40, specular: 98,
+                        roughness: 9, ambient: 30, sheen: 22 }),
+
+    /* CRUMPLED FOIL — the same discovery from the other end.
+
+       Foil turned out not to need the environment at all. No ramp, no fold,
+       no twist, no toner, no bloom: just the height map, shaded. Everything
+       that makes foil foil is in the map, and the map is Fractal Noise put
+       through a CROSS DISPLACEMENT at Size 2 — a displacement whose noise is
+       a couple of pixels across shreds the field into creases instead of
+       bending it, which is the same trick that turned a failed gold into Fur.
+
+       So this recipe switches the environment stage off rather than setting
+       it to something quiet. An effect that is off cannot drift, and half the
+       stack not being there is also half the render time. */
     Foil: {
-        /* Creases: mid-scale, then displaced hard.
-
-           hContrast was 200 and the probe caught what that does. This field is
-           Fractal Type 1, which is symmetric and therefore gets no bias
-           correction, so the contrast is unopposed — at 200 the distribution
-           is squeezed into its own top and bottom and Soft Clamp holds it
-           there. The dump read Contrast 200 / Brightness 0 / Overflow 2, which
-           is a height map with almost no usable mid-range left in it. CC Glass
-           shades the *slope* of this map, and a map that is flat-white here
-           and flat-black there has no slope to shade over most of its area.
-
-           Creases want a steep field, not a clipped one. */
-        env: 'flow', field: 'noise',
-        hWidth: 150, hHeight: 130, hContrast: 135, hComplexity: 4,
-        smooth: 2, tilt: 22, metal: 100, ambient: 32, diffuse: 44
+        recipe: 'crinkle',
+        bare: true,                       // no ramp, fold, twist, env, toner, bloom
+        field: 'noise',
+        hWidth: 150, hHeight: 130, hContrast: 103, hComplexity: 4,
+        crumpleMode: 9,                   // Cross Displacement
+        crumpleAmount: 718, crumpleSize: 2,
+        smooth: 0,
+        glassSoftness: 0, glassHeight: 10, glassDisplacement: 10,
+        lightIntensity: 215, lightAngle: 305, lightHeight: 67,
+        ambient: 63, diffuse: 16, specular: 63, roughness: 0.083, metal: 100,
+        sheen: 0, speed: 5
     },
+
+    /* BRUSHED STEEL, rethought against the foil.
+
+       It keeps the wide-and-short noise that makes the grain run one way, and
+       it takes the foil's lesson everywhere else: the shading block is the
+       foil's rather than the old derived one, and the environment is quiet
+       rather than absent — a brushed plate does reflect a room, it just
+       reflects it softly. Crumple is off; the grain is the tooling. */
+    Brushed: {
+        env: 'plate', field: 'noise',
+        tilt: 10, bands: 5, foldHeight: 100,
+        twistMode: 5, envMode: 1,
+        hWidth: 1400, hHeight: 3, hContrast: 150, hComplexity: 6,
+        brushDirection: 90, smooth: 1,
+        glassSoftness: 0, glassHeight: 14, glassDisplacement: 6,
+        lightIntensity: 180, lightAngle: 300, lightHeight: 55,
+        ambient: 58, diffuse: 20, specular: 60, roughness: 0.4, metal: 100,
+        sheen: 10, speed: 4
+    },
+
+    /* Untouched, and the user's to change. */
     Mercury: {
-        /* The one that uses CC Blobbylize instead of CC Glass, because
-           Blobbylize is the shader that is actually about liquid: it does not
-           just light a height field, it rounds it, pulling the map's contours
-           into surface-tension shapes that merge where they meet. That is
-           what mercury does and no amount of tuning a bump map gets there.
+        /* CC Blobbylize rather than CC Glass, because Blobbylize is the
+           shader that is actually about liquid: it does not just light a
+           height field, it rounds it, pulling the map's contours into
+           surface-tension shapes that merge where they meet.
 
-           Same Light and Shading block underneath — Ambient, Diffuse,
-           Specular, Roughness, Metal — sitting one index lower than CC
-           Glass's, because Blobbylize has a single Cut Away where CC Glass
-           has both a Height and a Displacement.
-
-           THE HOLES CAME FROM HERE. Two settings on this preset combined into
-           them, and both are gone.
-
-           Cut Away does not darken the layer, it *discards* it — every pixel
-           below the threshold stops existing. Over nothing, that is a
-           hard-edged black void, which is exactly what a hole is. At 32 it was
-           removing a third of the height range.
-
-           Wrap Back then supplied the large low regions for it to cut. Wrap
-           Back is a discontinuity by construction: wherever the field crosses
-           the wrap point it snaps from white to black across a single pixel.
-           That is the hard edge around the void, and on an evolving field it
-           is also the strobing — a whole region crossing the wrap on the same
-           frame reads as a blink, not a flicker.
-
-           Soft Clamp keeps the contours without the cliff, and Blobbylize
-           still rounds them into surface-tension shapes, which was always the
-           reason to use it over CC Glass. */
+           Cut Away stays at 0. It does not darken the layer, it *discards*
+           it — every pixel below the threshold stops existing, which over
+           nothing is a hard-edged black void. That was the holes. */
         shader: 'blobbylize', blobCut: 0,
         env: 'flow', field: 'noise', overflow: 2,
+        tilt: 10, bands: 3, foldHeight: 100,
+        twistMode: 6, envMode: 4,
         hWidth: 300, hHeight: 280, hContrast: 140, hComplexity: 2,
-        smooth: 22, tilt: 10, metal: 100, ambient: 30, diffuse: 46
+        smooth: 22, metal: 100, ambient: 30, diffuse: 46
+    },
+
+    /* HAMMERED — no longer a preset, still a recipe.
+
+       Snakeskin is the only thing that builds this, and it now builds it with
+       these settings rather than the reptile tuning it used to carry. The
+       dimple lattice was always the same geometry; what said "metal" was the
+       lighting, and the lighting is back. */
+    Hammered: {
+        env: 'plate', field: 'cells', pattern: 'Bubbles',
+        cellSize: 90, cellContrast: 150,
+        tilt: 16, bands: 4, foldHeight: 100,
+        twistMode: 6, envMode: 4,
+        smooth: 5, metal: 100, ambient: 44, diffuse: 50
+    },
+
+    /* Kept only so a preset somebody saved before these left the library
+       still builds and still updates. Nothing offers them. */
+    Polished: {
+        env: 'flow', field: 'noise',
+        tilt: 14, bands: 5, foldHeight: 100, twistMode: 6, envMode: 4,
+        hWidth: 700, hHeight: 620, hContrast: 110, hComplexity: 2,
+        smooth: 6, metal: 100, ambient: 34, diffuse: 48
+    },
+    Gunmetal: {
+        shader: 'plastic', dust: 34,
+        env: 'plate', field: 'noise',
+        tilt: 12, bands: 6, foldHeight: 100, twistMode: 6, envMode: 4,
+        hWidth: 90, hHeight: 80, hContrast: 160, hComplexity: 5,
+        smooth: 2, metal: 85, ambient: 50, diffuse: 52
     }
 };
 
@@ -4344,13 +4419,26 @@ function tuneMetalHeight(s, ctrl, kind) {
     var crumpleMax = lgDisplaceBudget(HEIGHT_PAD, 0);
     if (warp > crumpleMax) warp = crumpleMax;
 
+    /* A spec may state the crumple outright instead of taking it from the
+       slider, and Foil does. Its Amount is 718 at a Size of TWO — a
+       displacement whose noise is two pixels across does not bend the field,
+       it shreds it, and shredded fractal noise is exactly what the inside of
+       a crumpled sheet of foil looks like. That is the same mechanism as Fur,
+       reached from the opposite direction, and no amount of moving a Crumple
+       slider between 20 and 250 would ever have found it — which is why the
+       size floor of 20 below is bypassed rather than lowered for everyone. */
+    var crumpleAmt  = (o.crumpleAmount !== undefined) ? num(o.crumpleAmount, 0) : warp;
+    var crumpleSize = (o.crumpleSize !== undefined)
+                        ? Math.max(1, num(o.crumpleSize, 2) * scale)
+                        : Math.max(20, 180 * scale);
+
     var td = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Crumple');
     if (td) {
         lgTurbSet(td, {
-            mode: 4, amount: warp,
-            size: Math.max(20, 180 * scale), speed: speed * 0.6
+            mode: num(o.crumpleMode, 4), amount: crumpleAmt, complexity: 1,
+            size: crumpleSize, speed: speed * 0.6
         });
-        try { td.enabled = warp > 0; } catch (e) { }
+        try { td.enabled = crumpleAmt > 0; } catch (e) { }
     }
 
     /* The brush. Applied to the height field rather than to the picture,
@@ -4365,8 +4453,16 @@ function tuneMetalHeight(s, ctrl, kind) {
     }
 
     /* Normals are a derivative, so any pixel-level noise left in the height
-       field arrives in the shading multiplied. This blur is not cosmetic. */
-    lgBlur(s, Math.max(0.5, num(o.smooth, 5) * scale));
+       field arrives in the shading multiplied. This blur is not cosmetic —
+       on every finish whose tooling is larger than a pixel.
+
+       Foil is the exception and asks for zero. Its creases ARE pixel-level
+       structure: the whole look is a two-pixel cross displacement, and a blur
+       wide enough to be worth applying would erase the only thing on the map.
+       So the floor of 0.5 applies to a spec that says nothing and not to one
+       that says none. */
+    var smoothPx = num(o.smooth, 5) * scale;
+    lgBlur(s, (o.smooth === 0) ? 0 : Math.max(0.5, smoothPx));
 }
 
 /* What the metal reflects, and the shader that lights it. */
@@ -4387,6 +4483,17 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     var sheen  = num(o.sheen, 20);
     var flow   = o.env === 'flow';
     var scale  = num(o.scaleAll, 100) / 100;
+
+    /* CRUMPLED FOIL NEEDS NONE OF THE ENVIRONMENT.
+
+       Every other finish here is a reflection with a surface in front of it.
+       Foil is only the surface: the creases in its height map are the whole
+       look, and a ramp folded into bands behind them made it worse rather
+       than better. `bare` switches the reflection stage off — ramp, fold,
+       twist, environment, toner, bloom — instead of setting each one to
+       something quiet. Off is a state that cannot drift, and it is also half
+       the render. */
+    var bare = o.bare === true;
 
     /* 1. The environment — one construction for all eight now.
 
@@ -4417,6 +4524,7 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
                  pouring looks like. */
     var ramp = lgFxNamed(s, ['ADBE Ramp'], 'Metal Ramp');
     if (ramp) {
+        try { ramp.enabled = !bare; } catch (e) { }
         LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
         LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
         LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
@@ -4427,8 +4535,11 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
        against each other and shears the reflection instead of drifting it. */
     var tile = lgFxNamed(s, ['ADBE Tile'], 'Metal Fold');
     if (tile) {
+        try { tile.enabled = !bare; } catch (e) { }
         LG.set(tile, 'Tile Width',    2, 100 / bands);
-        LG.set(tile, 'Tile Height',   3, 100);
+        /* 25 on the molten metals, 100 everywhere else, and it is one of the
+           four numbers that separate a pour from a stripe — see MOLTEN. */
+        LG.set(tile, 'Tile Height',   3, num(o.foldHeight, 100));
         LG.set(tile, 'Output Width',  4, 100);
         LG.set(tile, 'Output Height', 5, 100);
         LG.set(tile, 'Mirror Edges',  6, true);
@@ -4485,11 +4596,39 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     var glassSoften = Math.max(1, relief * 0.12);
     var budget = lgDisplaceBudget(overhang, glassDisp + glassSoften);
 
-    var twistAmt = flow ? 70 + num(o.warp, 0) * 0.25 : 0;
-    var envAmt   = flow ? 260 + num(o.warp, 0) * 0.8 : num(o.warp, 0) * 0.6;
-    var fitted   = lgFitDisplace([twistAmt, envAmt], budget);
-    twistAmt = fitted[0];
-    envAmt   = fitted[1];
+    var twistAmt, envAmt;
+
+    if (o.twistAmount !== undefined || o.envAmount !== undefined) {
+        /* A MEASURED RECIPE IS NOT BUDGETED, AND THAT IS DELIBERATE.
+
+           The budget above converts overhang into an Amount at a flat 3.2px of
+           reach per unit. That constant was measured on one mode at one size
+           and it is pessimistic here: the molten stack asks for 433 + 229,
+           which the model says needs 2118px of overhang against the 972px that
+           exists — and the hand-tuned comp those numbers came off has no holes
+           in it anywhere. Reach depends on the displacement mode and its Size,
+           neither of which the model looks at.
+
+           What actually makes holes impossible is Pin All, which lgTurbSet
+           sets on every one of these: an out-of-bounds fetch returns the
+           nearest real pixel instead of transparency, so there is nothing to
+           tear. The budget is a second belt on top of that braces, and here it
+           would cost the look to buy safety that Pin All already provides.
+
+           So: a spec that states its amounts gets them. A spec that derives
+           them from the Crumple slider still goes through the budget, because
+           there the numbers are guesses and a guess should be capped. */
+        twistAmt = flow ? num(o.twistAmount, 0) : 0;
+        envAmt   = num(o.envAmount, 0);
+        var extra = num(o.warp, 0);
+        if (extra) { twistAmt += extra * 0.25; envAmt += extra * 0.8; }
+    } else {
+        twistAmt = flow ? 70 + num(o.warp, 0) * 0.25 : 0;
+        envAmt   = flow ? 260 + num(o.warp, 0) * 0.8 : num(o.warp, 0) * 0.6;
+        var fitted = lgFitDisplace([twistAmt, envAmt], budget);
+        twistAmt = fitted[0];
+        envAmt   = fitted[1];
+    }
 
     /* Twist Smoother rather than Twist: plain Twist winds tight spirals whose
        centres compress the bands into a vortex, and a vortex is the other
@@ -4497,30 +4636,44 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     var twist = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Twist');
     if (twist) {
         lgTurbSet(twist, {
-            mode: 6, amount: twistAmt,
-            size: Math.max(300, 1000 * scale), speed: speed * -0.2
+            mode: num(o.twistMode, 6), amount: twistAmt, complexity: 1,
+            size: Math.max(1, num(o.twistSize, Math.max(300, 1000 * scale)) * scale),
+            speed: speed * -0.2
         });
-        try { twist.enabled = twistAmt > 0; } catch (e) { }
+        try { twist.enabled = !bare && twistAmt > 0; } catch (e) { }
     }
 
     var env = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Environment');
     if (env) {
         lgTurbSet(env, {
-            mode: 4, amount: envAmt,
-            size: Math.max(240, (flow ? 620 : 300) * scale), speed: speed * 0.3
+            mode: num(o.envMode, 4), amount: envAmt, complexity: 1,
+            size: Math.max(1, num(o.envSize, flow ? 620 : 300) * scale),
+            speed: speed * 0.3
         });
-        try { env.enabled = envAmt > 0; } catch (e) { }
+        try { env.enabled = !bare && envAmt > 0; } catch (e) { }
     }
 
-    // 3. The palette, in role order: Shadow, Base Metal, Bright, Highlight.
-    lgToneColors(lgFx(s, ['CC Toner']), c, true);
+    /* 3. The palette.
+
+          Tritone is three colours and says so. CC Toner's Brights and
+          Darktones do nothing in that mode, so writing five stops into it —
+          which is what this used to do for every metal — meant two of the
+          four swatches in the panel were decorative. The molten metals now
+          declare `tritone` and take three roles: Shadow, Base Metal,
+          Highlight, straight onto Shadows, Midtones and Highlights.
+
+          Everything else keeps the five-stop ramp it had. */
+    var toner = lgFx(s, ['CC Toner']);
+    if (o.tritone) lgToneTri(toner, c);
+    else           lgToneColors(toner, c, true);
+    if (toner) { try { toner.enabled = !bare; } catch (e) { } }
 
     /* 4. The shader. One of two, fixed per preset — never switched at run
           time, so the effect stack a live update walks is the one the build
           made. */
     var specular = num(o.specular, 80);
     var material = {
-        intensity:   60 + specular * 0.35,
+        intensity:   num(o.lightIntensity, 60 + specular * 0.35),
         lightAngle:  num(o.lightAngle, 315),
         lightHeight: num(o.lightHeight, 45),
         ambient:     num(o.ambient, 40),
@@ -4567,10 +4720,20 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
                the surface is lit and Displacement is how far the picture is
                bent; only the second one shreds, so capping it keeps the metal
                as lit as it ever was and stops the crinkle. */
+            /* A measured recipe states all three. Height and Displacement
+               are signed on the molten metals — negative inverts the normals
+               and bends the reflection against the slope, which is what puts
+               the bright band in the trough of a fold instead of on its ridge.
+               Relief still scales them, so the slider keeps working: it moves
+               the depth without flipping the sign that makes it metal. */
+            var reliefScale = relief / 30;
             lgGlassSurface(glass, bumpIndex, {
-                softness:     glassSoften,
-                height:       relief,
-                displacement: glassDisp
+                softness:     o.glassSoftness !== undefined
+                                ? num(o.glassSoftness, 0) : glassSoften,
+                height:       o.glassHeight !== undefined
+                                ? num(o.glassHeight, 40) * reliefScale : relief,
+                displacement: o.glassDisplacement !== undefined
+                                ? num(o.glassDisplacement, 60) * reliefScale : glassDisp
             });
             lgShadeSet(glass, material, 'CC Glass');
         }
@@ -4583,7 +4746,7 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
         LG.set(g, 'Glow Radius',    3, 12 + sheen * 0.9);
         LG.set(g, 'Glow Intensity', 4, sheen / 110);
         LG.set(g, 'Glow Colors',    7, 1);                       // Original Colors
-        try { g.enabled = sheen > 0; } catch (e) { }
+        try { g.enabled = !bare && sheen > 0; } catch (e) { }
     }
 
     lgBlur(s, num(o.softness, 0));
@@ -5116,7 +5279,9 @@ function tuneMetallic(s, c, ctrl, w, h) {
     var tile = lgFx(s, ['ADBE Tile']);
     if (tile) {
         LG.set(tile, 'Tile Width',    2, 100 / bands);
-        LG.set(tile, 'Tile Height',   3, 100);
+        /* 25 on the molten metals, 100 everywhere else, and it is one of the
+           four numbers that separate a pour from a stripe — see MOLTEN. */
+        LG.set(tile, 'Tile Height',   3, num(o.foldHeight, 100));
         LG.set(tile, 'Output Width',  4, 100);
         LG.set(tile, 'Output Height', 5, 100);
         LG.set(tile, 'Mirror Edges',  6, true);
@@ -5164,7 +5329,7 @@ function tuneMetallic(s, c, ctrl, w, h) {
             LG.set(g, 'Color A',      12, pal[4]);
             LG.set(g, 'Color B',      13, pal[1]);
         }
-        try { g.enabled = sheen > 0; } catch (e) { }
+        try { g.enabled = !bare && sheen > 0; } catch (e) { }
     }
 
     lgBlur(s, soft);
@@ -5249,12 +5414,47 @@ function lgToneColors(toner, c, ordered, hard) {   /* @effect toner = CC Toner *
     if (!toner) return null;
     var src = ordered ? c : lgByLuma(c);
     var s = hard ? lgSteps5(src) : lgRamp5(src);
-    LG.set(toner, 'Tones',      1, 3);                       // 3 = Pentone (probe grid 4)
+    /* 3 IS TRITONE, NOT PENTONE. The comment here said Pentone for a long
+       time and the effect controls of anything this panel built say Tritone,
+       which means Brights and Darktones have been inert on every metal, every
+       animal print and every glass the panel has ever made — two of the five
+       stops below are written and then ignored. Left at 3 because that is
+       what all of those looks were tuned against; see lgToneTri for the
+       version that admits it. */
+    LG.set(toner, 'Tones',      1, 3);                       // 3 = Tritone
     LG.set(toner, 'Shadows',    6, s[0]);
     LG.set(toner, 'Darktones',  5, s[1]);
     LG.set(toner, 'Midtones',   4, s[2]);
     LG.set(toner, 'Brights',    3, s[3]);
     LG.set(toner, 'Highlights', 2, s[4]);
+    return toner;
+}
+
+/* THREE STOPS, WRITTEN AS THREE.
+
+   CC Toner in Tritone uses Shadows, Midtones and Highlights and ignores the
+   other two. This takes a three-colour palette and puts each colour where it
+   goes — no ramp, no luminance sort, no fifth stop quietly discarded. Shadow
+   is what the surface reflects with nothing lighting it, Base Metal is the
+   body colour that says copper rather than steel, and Highlight is the
+   specular hit.
+
+   A palette with more than three colours still works: the first, the middle
+   and the last are taken, which is what a saved four-colour metal preset
+   needs in order to keep looking like itself. */
+function lgToneTri(toner, c) {   /* @effect toner = CC Toner */
+    if (!toner) return null;
+    var n = (c && c.length) ? c.length : 0;
+    if (!n) return toner;
+
+    var shadow    = c[0];
+    var body      = c[Math.floor((n - 1) / 2)];
+    var highlight = c[n - 1];
+
+    LG.set(toner, 'Tones',      1, 3);                       // Tritone
+    LG.set(toner, 'Shadows',    6, shadow);
+    LG.set(toner, 'Midtones',   4, body);
+    LG.set(toner, 'Highlights', 2, highlight);
     return toner;
 }
 
@@ -5741,49 +5941,6 @@ function buildSunburst(comp, c, ctrl, w, h, dur) {
     setTrackMatteSafely(colour, raysLayer, 'ALPHA');
 }
 
-function buildLiquidWaves(comp, c, ctrl, w, h, dur) {
-    var s = comp.layers.addSolid([0.5, 0.5, 0.5], 'Liquid Waves', w, h, 1, dur);
-    tuneLiquidWaves(s, c, ctrl);
-}
-
-/* Banded ribbons that fold through each other. Contrast is exposed as "Band
-   Density" because that is what it does once Overflow is wrapping: each extra
-   turn of contrast pushes another fold of the noise past white and back down,
-   and each fold is another ribbon. */
-function tuneLiquidWaves(s, c, ctrl) {
-    if (!s) return;
-    var speed = num(ctrl.speed, 30);
-    var scale = num(ctrl.scale, 260);
-
-    lgFractalSet(lgFx(s, ['ADBE Fractal Noise']), {
-        fractalType: 2,
-        contrast:    num(ctrl.bands, 200),
-        brightness:  0,
-        /* Soft Clamp, not Wrap Back. Wrap Back was chosen to make the bands —
-           each fold of the field past white and back down is another ribbon —
-           and it does, but it makes them out of a hard discontinuity. As the
-           field evolves, every pixel in a region crosses the wrap point on the
-           same frame and the whole area flips black at once. That is the
-           strobing, and it is also why a single frame could come back as one
-           flat colour: the frame was caught mid-fold. Soft Clamp folds the
-           same field without the cliff. */
-        overflow:    2,
-        complexity:  num(ctrl.complexity, 4),
-        scale:       scale,
-        scaleWidth:  scale * 1.6,
-        subInfluence: 70,
-        speed:       speed * 0.6
-    });
-    lgTurbSet(lgFx(s, ['ADBE Turbulent Displace']), {
-        mode:   3,                               // Twist
-        amount: num(ctrl.turbulence, 140),
-        size:   Math.max(20, scale * 0.7),
-        speed:  speed * 0.4
-    });
-    lgToneColors(lgFx(s, ['CC Toner']), c, true);
-    lgBlur(s, num(ctrl.blur, 6));
-}
-
 function buildCellularMosaic(comp, c, ctrl, w, h, dur) {
     var s = comp.layers.addSolid([1, 1, 1], 'Cellular Mosaic', w, h, 1, dur);
     tuneCellularMosaic(s, c, ctrl);
@@ -5843,42 +6000,56 @@ function tuneCellularMosaic(s, c, ctrl) {
 // SONDUCKFILM TUTORIAL GRADIENTS
 // ============================================
 
+/* -- LIQUID RIBBONS ---------------------------------------------------
+   THE RIBBONS USED TO RUN OUT.
+
+   Every shape was parented to one null and that null slid left forever, at
+   speed * 50 px/sec -- 1000 px/sec on the default. A CC RepeTile adjustment
+   layer above them was meant to make that endless, and it does not: RepeTile
+   expands a layer's bounds, and the comp still only ever shows the frame. So
+   the field simply left. 4000 px of Expand Left at 1000 px/sec is four
+   seconds, which is exactly when the ribbons vanished.
+
+   Each shape now carries its own drift and wraps itself: it leaves the left
+   edge and re-enters from the right, a full margin outside the frame in both
+   directions so nothing pops into view inside it. No null, no RepeTile, and
+   no end. */
+var SONDUCK_COUNT  = 15;    // ribbons in the band
+var SONDUCK_MARGIN = 400;   // how far past each edge a ribbon lives before wrapping
+
 function buildSonduckLiquid(comp, c, ctrl, w, h, dur) {
     var fps = comp.frameRate;
-
     var shapesComp = app.project.items.addComp("Sonduck Shapes", w, h, 1, dur, fps);
-    var nullLayer = shapesComp.layers.addNull(dur);
-    nullLayer.name = "Sonduck Null";
-    tuneShapeDrift(nullLayer, ctrl, lgSonduckDriftExpr);
+    var band = w + SONDUCK_MARGIN * 2;
 
-    for (var i = 0; i < 15; i++) {
-        var isWhite = i < 8;
-        var starColor = isWhite ? [1,1,1] : [0,0,0];
+    for (var i = 0; i < SONDUCK_COUNT; i++) {
         var star = shapesComp.layers.addShape();
-        var contents = star.property("Contents");
-        var grp = contents.addProperty("ADBE Vector Group");
-        var gc = grp.property("Contents");
+        /* Named, because the live path finds each one by name -- and a ribbon
+           that keeps its index in its name is a ribbon whose drift a live
+           update can reproduce exactly. */
+        star.name = "Ribbon " + i;
+        var gc = star.property("Contents")
+                     .addProperty("ADBE Vector Group").property("Contents");
         var path = gc.addProperty("ADBE Vector Shape - Star");
-        safeSet(path, "Type", 1, 1);
-        safeSet(path, "Points", 2, 5);
+        safeSet(path, "Type",         1, 1);
+        safeSet(path, "Points",       2, 5);
         safeSet(path, "Inner Radius", 4, 100);
         safeSet(path, "Outer Radius", 5, 250);
         var fill = gc.addProperty("ADBE Vector Graphic - Fill");
-        safeSet(fill, "Color", 4, starColor);
-        
-        star.property("Transform").property("Position").setValue([Math.random() * w, Math.random() * h]);
-        star.parent = nullLayer;
+        safeSet(fill, "Color", 4, i < Math.ceil(SONDUCK_COUNT / 2) ? [1, 1, 1] : [0, 0, 0]);
+
+        /* Spread evenly across the band instead of dropped at random. Fifteen
+           random positions leave holes wide enough to read as a gap travelling
+           through the frame, which is half of why the old one looked like it
+           was emptying even before it did. */
+        var x = -SONDUCK_MARGIN + (i + 0.5) * (band / SONDUCK_COUNT);
+        var y = (((i * 7) % SONDUCK_COUNT) / SONDUCK_COUNT) * h;
+        try { star.property("Transform").property("Position").setValue([x, y]); }
+        catch (e) { LG.warn("SonduckLiquid: cannot position ribbon " + i); }
+
+        tuneRibbonDrift(star, null, ctrl);
     }
-    
-    var adj = shapesComp.layers.addSolid([1,1,1], "Repetile", w, h, 1, dur);
-    adj.adjustmentLayer = true;
-    var repeTile = addFx(adj, ["CC RepeTile"]);
-    if (repeTile) {
-        safeSet(repeTile, "Expand Right", 1, 4000);
-        safeSet(repeTile, "Expand Left", 2, 4000);
-        safeSet(repeTile, "Expand Down", 3, 2000);
-        safeSet(repeTile, "Expand Up", 4, 2000);
-    }
+
     comp.layers.addSolid([0.1, 0, 0.2], "Background", w, h, 1, dur);
     var shapesLayer = comp.layers.add(shapesComp);
     shapesLayer.name = "Sonduck Shapes";
@@ -5887,48 +6058,43 @@ function buildSonduckLiquid(comp, c, ctrl, w, h, dur) {
 
     var dirBlur = addFx(shapesLayer, ["ADBE Motion Blur", "Directional Blur"]);
     if (dirBlur) {
-        LG.set(dirBlur, "Direction", 1, 30);
+        LG.set(dirBlur, "Direction",   1, 30);
         LG.set(dirBlur, "Blur Length", 2, 700);
     }
 
     var twirl = addFx(shapesLayer, ["ADBE Twirl", "Twirl"]);
     if (twirl) {
-        LG.set(twirl, "Angle", 1, 60);
+        LG.set(twirl, "Angle",        1, 60);
         LG.set(twirl, "Twirl Radius", 2, 60);
     }
 
     tuneSonduckLiquid(shapesLayer, c, ctrl);
 }
 
-/* The drift lives on a null inside the precomp, and lgScope flattens precomps
-   into the same list as the top level, so the live path reaches it by name in
-   exactly the way it reaches anything else. */
-function lgSonduckDriftExpr(v) {
-    return "var s = time * " + (v * 50) + "; [value[0] - s, value[1]]";
-}
-function lgTwirlDriftExpr(v) {
-    return "var s = time * " + (v * 30) +
-           "; [value[0] + Math.cos(s)*500, value[1] + Math.sin(s)*500]";
-}
-
-function tuneShapeDrift(nullLayer, ctrl, exprFor) {
-    if (!nullLayer) return;
+/* One ribbon's endless drift. The wrap is modulo the band, so the shape is
+   always somewhere in [-margin, width + margin) however long the comp runs,
+   and the jump happens a full margin outside the frame where nothing can see
+   it. The double modulo is not superstition: JavaScript's % keeps the sign of
+   the left operand, so a plain % turns negative the moment the drift passes
+   the origin and the ribbon leaves for good -- the same failure in a new
+   costume. */
+function tuneRibbonDrift(layer, cols, ctrl) {
+    if (!layer) return;
     var speed = num(ctrl.speed, 20);
     var pos = null;
-    try { pos = nullLayer.property("Transform").property("Position"); } catch (e) { }
+    try { pos = layer.property("Transform").property("Position"); } catch (e) { }
     if (!pos) return;
     try {
-        pos.expression = speed !== 0 ? exprFor(speed) : '';
+        pos.expression = speed !== 0
+            ? ("var m = " + SONDUCK_MARGIN + ", band = thisComp.width + m * 2;\n" +
+               "var x = value[0] - time * " + (speed * 50) + ";\n" +
+               "x = ((((x + m) % band) + band) % band) - m;\n" +
+               "[x, value[1]]")
+            : "";
     } catch (e) {
-        LG.warn('could not set the drift on "' + nullLayer.name + '"');
+        LG.warn('could not set the drift on "' + layer.name + '"');
     }
 }
-
-/* Bound signatures for the live dispatch, which calls every tuner the same
-   way. Keeping them here rather than inline in the table means the build and
-   the drag run the identical expression builder. */
-function tuneSonduckNull(layer, cols, ctrl) { tuneShapeDrift(layer, ctrl, lgSonduckDriftExpr); }
-function tuneTwirlNull(layer, cols, ctrl)   { tuneShapeDrift(layer, ctrl, lgTwirlDriftExpr); }
 
 function tuneSonduckLiquid(s, c, ctrl) {
     if (!s) return;
@@ -5939,122 +6105,91 @@ function tuneSonduckLiquid(s, c, ctrl) {
     }
 }
 
-function buildTwirlShapes(comp, c, ctrl, w, h, dur) {
-    var fps = comp.frameRate;
+/* -- LAVA LAMP --------------------------------------------------------
+   What was here was not a lava lamp and could not have become one.
 
-    var shapesComp = app.project.items.addComp("Twirl Shapes", w, h, 1, dur, fps);
-    var nullLayer = shapesComp.layers.addNull(dur);
-    /* Named, because the live path finds it by name. An unnamed null is
-       "Null 1", which is also what any null the user added is called. */
-    nullLayer.name = "Twirl Null";
-    tuneShapeDrift(nullLayer, ctrl, lgTwirlDriftExpr);
+   CC RepeTile ran FIRST, ahead of the gradient. RepeTile expands the layer's
+   bounds -- 2000 px right, 1000 px on the other three -- so every effect after
+   it worked on a canvas about 4900x3080 while the comp only ever showed the
+   middle 1920x1080 of it. The 4-Color Gradient spread its four points across
+   that whole expanded canvas, so the frame saw one corner of one colour, and
+   Twirl's 35% radius, measured on the same expanded canvas, swung a spiral far
+   wider than the frame. On top of that sat Fractal Noise at Contrast 200 and
+   Brightness -30 in a darkening blending mode, which crushes nearly the whole
+   field to black. A black frame with two enormous arcs across it. That is
+   precisely what it rendered.
 
-    for (var i = 0; i < 20; i++) {
-        var isWhite = i % 2 === 0;
-        var shapeColor = isWhite ? [1,1,1] : [0,0,0];
-        var star = shapesComp.layers.addShape();
-        var contents = star.property("Contents");
-        var grp = contents.addProperty("ADBE Vector Group");
-        var gc = grp.property("Contents");
-        var path = gc.addProperty("ADBE Vector Shape - Star");
-        safeSet(path, "Type", 1, 2);
-        safeSet(path, "Points", 2, 6);
-        safeSet(path, "Outer Radius", 4, 150 + Math.random() * 150);
-        var fill = gc.addProperty("ADBE Vector Graphic - Fill");
-        safeSet(fill, "Color", 4, shapeColor);
-        
-        star.property("Transform").property("Position").setValue([Math.random() * w, Math.random() * h]);
-        star.parent = nullLayer;
-    }
-    
-    var adj = shapesComp.layers.addSolid([1,1,1], "Repetile", w, h, 1, dur);
-    adj.adjustmentLayer = true;
-    var repeTile = addFx(adj, ["CC RepeTile"]);
-    if (repeTile) {
-        safeSet(repeTile, "Expand Right", 1, 4000);
-        safeSet(repeTile, "Expand Left", 2, 4000);
-        safeSet(repeTile, "Expand Down", 3, 2000);
-        safeSet(repeTile, "Expand Up", 4, 2000);
-    }
-    comp.layers.addSolid([0, 0, 0], "Background", w, h, 1, dur);
-    var shapesLayer = comp.layers.add(shapesComp);
-    shapesLayer.name = "Twirl Shapes";
-
-    addFx(shapesLayer, ["ADBE Tint", "Tint"]);
-
-    var dirBlur = addFx(shapesLayer, ["ADBE Motion Blur", "Directional Blur"]);
-    if (dirBlur) {
-        LG.set(dirBlur, "Direction", 1, -45);
-        LG.set(dirBlur, "Blur Length", 2, 500);
-    }
-
-    var twirl = addFx(shapesLayer, ["ADBE Twirl", "Twirl"]);
-    if (twirl) {
-        LG.set(twirl, "Angle", 1, -120);
-        LG.set(twirl, "Twirl Radius", 2, 80);
-    }
-
-    /* Same tuner as Sonduck: both are a tinted field of shapes, and the only
-       thing either exposes is the tint. */
-    tuneSonduckLiquid(shapesLayer, c, ctrl);
-}
-
+   A lava lamp is blobs: round, slow, rising, necking apart and merging back.
+   None of that comes from a gradient with noise laid over it. It comes from
+   one smooth noise field thresholded hard enough that the bright parts break
+   into separate islands, panned upward so they rise, bulged so they pinch,
+   and coloured by luminance so the cores read hot and the fluid around them
+   reads deep. That is what this builds -- on the same solid-plus-Toner spine
+   every other working gradient in this file uses. */
 function buildLavaLamp(comp, c, ctrl, w, h, dur) {
     var s = comp.layers.addSolid([0, 0, 0], "Lava Lamp", w, h, 1, dur);
-
-    var repeTile = addFx(s, ["CC RepeTile"]);
-    if (repeTile) {
-        LG.set(repeTile, "Expand Right", 1, 2000);
-        LG.set(repeTile, "Expand Left",  2, 1000);
-        LG.set(repeTile, "Expand Down",  3, 1000);
-        LG.set(repeTile, "Expand Up",    4, 1000);
-    }
-
-    addFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
-    addFx(s, ['ADBE Fractal Noise', 'Fractal Noise']);
-
-    var twirl = addFx(s, ["ADBE Twirl", "Twirl"]);
-    if (twirl) {
-        LG.set(twirl, "Angle", 1, 230);
-        LG.set(twirl, "Twirl Radius", 2, 35);
-    }
-
     tuneLavaLamp(s, c, ctrl);
 }
 
+/* Every knob is an effect property or an expression on one layer, so all of
+   them are live. Nothing here needs a rebuild. */
 function tuneLavaLamp(s, c, ctrl) {
     if (!s) return;
-    var speed = num(ctrl.speed, 15);
 
-    var g4 = findFx(s, ['ADBE 4ColorGradient', '4-Color Gradient']);
-    if (g4) {
-        var cidx = [3, 5, 7, 9], pidx = [2, 4, 6, 8], i;
-        for (i = 0; i < 4; i++) {
-            LG.set(g4, 'Color ' + (i + 1), cidx[i], c[i % c.length]);
-            LG.expr(g4, 'Point ' + (i + 1), pidx[i], 'wiggle(0.5, 500)');
-        }
-    }
+    var size  = num(ctrl.blobSize, 420);
+    var melt  = num(ctrl.melt, 190);
+    var rise  = num(ctrl.rise, 45);
+    var morph = num(ctrl.morph, 12);
 
-    var fn = findFx(s, ['ADBE Fractal Noise', 'Fractal Noise']);
-    if (fn) {
-        LG.set(fn, 'Noise Type',    2, 1);
-        LG.set(fn, 'Contrast',      4, 200);
-        LG.set(fn, 'Brightness',    5, -30);
-        LG.set(fn, 'Complexity',   16, 1);
-        LG.set(fn, 'Blending Mode', 31, 5);
+    /* Fractal Type 1 (Basic) on purpose. It is the one type symmetric about
+       mid-grey, so Contrast lifts the peaks and drops the troughs by the same
+       amount instead of driving the whole field into the ceiling -- and
+       Contrast is the only thing here separating a cloud from a blob. The
+       brightness offset holds the field centred as Contrast climbs, the same
+       correction lgFractalSet applies to the turbulent types, and the reason
+       this can sit at Overflow Clip without blowing out.
 
-        /* Fractal Noise's "Transform" is a topic marker in the DOM, not a
-           group with children — Rotation and the Scale pair are siblings of
-           it at the top level. Reaching through it set nothing at all, which
-           is why this rendered as a flat tiled check instead of a lamp.
-           Indices from tools/effect_probe_report.txt. */
-        LG.set(fn, 'Rotation',        8, -35);
-        LG.expr(fn, 'Rotation',       8, speed !== 0 ? 'time * ' + speed : 'value');
-        LG.set(fn, 'Uniform Scaling', 9, false);
-        LG.set(fn, 'Scale Width',    11, 1300);
-        LG.set(fn, 'Scale Height',   12, 600);
-        LG.expr(fn, 'Evolution', 24, speed !== 0 ? 'time * ' + (speed * 10) : 'value');
-    }
+       Complexity 2 keeps the islands round; more octaves fray their edges back
+       into cloud. Taller than wide, because a rising blob stretches. */
+    var fn = lgFx(s, ['ADBE Fractal Noise']);
+    lgFractalSet(fn, {
+        fractalType: 1,
+        contrast:    melt,
+        brightness:  -(melt - 100) * 0.30,
+        overflow:    1,
+        complexity:  2,
+        scale:       size,
+        scaleWidth:  size,
+        scaleHeight: size * 1.7,
+        speed:       morph
+    });
+
+    /* The rise. Offset Turbulence pans the field itself, so blobs travel up
+       through the frame while Evolution reshapes them on the way -- which is
+       the difference between a lamp and a texture that happens to be moving. */
+    LG.expr(fn, 'Offset Turbulence', 13, rise !== 0
+        ? '[value[0], value[1] - time * ' + rise + ']'
+        : 'value');
+
+    /* Bulge, not Turbulent. Turbulent shivers the whole edge at once; Bulge
+       pushes regions in and out, which is what makes a blob neck down, split,
+       and swallow its neighbour. Size tracks the blob so the distortion is the
+       scale of the thing it is distorting rather than noise laid on top. */
+    lgTurbSet(lgFx(s, ['ADBE Turbulent Displace']), {
+        mode:   2,
+        amount: num(ctrl.wobble, 70),
+        size:   Math.min(1000, Math.max(60, size * 0.9)),
+        speed:  morph * 0.5
+    });
+
+    lgBlur(s, num(ctrl.softness, 10));
+
+    /* Sorted by luminance, not by slot order: the darkest colour becomes the
+       fluid the blobs hang in and the brightest becomes the core, whatever
+       order the four swatches happen to be in. A lamp with its hot colour in
+       the background is not a lamp. */
+    lgToneColors(lgFx(s, ['CC Toner']), c, false);
+    lgGlow(s, num(ctrl.heat, 35), 2.0);
 }
 
 function buildStackedSquares(comp, c, ctrl, w, h, dur) {
@@ -6204,7 +6339,7 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
             LG.set(tile, "Output Height", 5, 400);
             LG.set(tile, "Mirror Edges",  6, true);
         }
-        tuneTrailStroke(s, null, ctrl);
+        tuneTrailStroke(s, null, ctrl, w);
 
         try { s.property("Transform").property("Position").setValue([xPos, h / 2]); }
         catch (e) { LG.warn("TrailGradient: cannot position stroke " + i); }
@@ -6213,21 +6348,18 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
     var finalLayer = comp.layers.add(precomp);
     finalLayer.name = "Trail Animation";
 
-    /* Map the greyscale trail onto the four picked colours. CC Toner is the
-       cleanest stock route: it maps luminance across five tonal stops. */
-    var toner = addFx(finalLayer, ["CC Toner"]);
-    if (toner) {
-        var c1 = c[0],
-            c2 = c[1] || c[0],
-            c3 = c[2] || c[1] || c[0],
-            c4 = c[3] || c[2] || c[0];
-        safeSet(toner, "Tones",      1, 3);   // Pentatone
-        safeSet(toner, "Highlights", 2, c1);
-        safeSet(toner, "Brights",    3, c2);
-        safeSet(toner, "Midtones",   4, c3);
-        safeSet(toner, "Darktones",  5, c4);
-        safeSet(toner, "Shadows",    6, c1);
-    } else {
+    /* Map the greyscale trail onto the picked colours.
+
+       This used to write the five CC Toner stops by hand with Tones set to 3
+       and a comment calling it Pentatone. 3 is Tritone -- lgToneColors has
+       said so for a while -- and Tritone reads Shadows, Midtones and
+       Highlights and ignores the other two. Both of the stops that were being
+       skipped were Colour 2 and Colour 4, which is why moving either of them
+       did nothing at all to this gradient. Going through lgToneColors ramps
+       the whole palette into the stops that are actually read, the same way
+       every other gradient in this file does. */
+    var toner = lgFx(finalLayer, ["CC Toner"]);
+    if (!toner) {
         // No Cycore on this host — tint the extremes instead of leaving it grey.
         var tint = addFx(finalLayer, ["ADBE Tint"]);
         if (tint) {
@@ -6241,31 +6373,101 @@ function buildTrailGradient(comp, c, ctrl, w, h, dur) {
 }
 
 /* One stroke. The bank reads as a travelling wave because each stroke scrolls
-   a little slower than the one before it, and that offset is derived from the
-   layer's own name so a live update reproduces it exactly. */
-function tuneTrailStroke(s, cols, ctrl) {
+   at its own speed, and that speed is derived from the layer's own name so a
+   live update reproduces exactly what the build made.
+
+   Phase Pattern is the shape of that speed across the bank, and it is the one
+   knob that changes this gradient most: same strokes, same colours, entirely
+   different motion. Spread is how hard the pattern is pushed -- at 0 every
+   stroke moves together and the bank is a flat scrolling sheet. */
+function tuneTrailStroke(s, cols, ctrl, w) {
     if (!s) return;
     var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
     if (isNaN(i)) i = 0;
-    var cycleSpeed = num(ctrl.cycleSpeed, 600) - (i * 20);
+
+    var base   = num(ctrl.cycleSpeed, 600);
+    var spread = num(ctrl.spread, 100) / 100;
+    /* The stroke count is not stored anywhere, but it is not a free variable
+       either: the builder derives it from the comp width and the trail width,
+       and both of those are still here. Recomputing it is how Mirror and Sine
+       find the middle of a bank they were not told the size of. */
+    var width  = Math.max(4, num(ctrl.width, 60));
+    var count  = Math.ceil(num(w, 1920) / width) + 4;
+    var speed;
+
+    switch (ctrl.phase) {
+        case 'Sine':
+            /* Two full turns across the bank, so the whole thing breathes in
+               and out instead of shearing one way. */
+            speed = base * (1 + 0.6 * spread * Math.sin((i / count) * Math.PI * 4));
+            break;
+        case 'Mirror':
+            // Symmetric about the middle: a chevron opening from the centre.
+            speed = base - Math.abs(i - count / 2) * 40 * spread;
+            break;
+        case 'Random':
+            /* Seeded off the index, never Math.random. A live update has to
+               land on the same number the build did or every drag reshuffles
+               the whole bank into a different look. */
+            speed = base * (0.35 + 1.30 * lgTrailHash(i) * spread);
+            break;
+        case 'Counterflow':
+            // Alternate strokes run the other way. Reads as a braid.
+            speed = (i % 2 === 0 ? 1 : -1) * (base - (i * 20 * spread));
+            break;
+        default:   // Linear, the original, and still the right default
+            speed = base - (i * 20 * spread);
+            break;
+    }
 
     var tile = findFx(s, ["ADBE Tile"]);
     if (!tile) return;
     LG.expr(tile, "Tile Center", 1,
-            "[value[0], value[1] + (time * " + cycleSpeed + ")]");
+            "[value[0], value[1] + (time * " + speed + ")]");
 }
 
-/* The finished bank. Trail *width* stays a rebuild — it decides how many
-   strokes there are and how wide each solid is, and a solid cannot be
-   resized after the fact. */
+/* A stable pseudo-random in [0,1) from a stroke index -- the same hash the
+   preview painters use, for the same reason: it has to be the same number
+   every time it is asked. */
+function lgTrailHash(i) {
+    var n = (i * 1619 + 31337) & 0x7fffffff;
+    n = (n >> 13) ^ n;
+    return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 0x7fffffff;
+}
+
+/* AE's Warp styles, in menu order. Flat is not one of them -- it is Squeeze
+   with the bend taken to zero, which is the only way to switch the distortion
+   off without removing an effect the live path expects to find. */
+var TRAIL_WARPS = {
+    'Flat':    0,  'Arc':     1,  'Arch':    4,  'Bulge':   5,
+    'Flag':    8,  'Wave':    9,  'Fish':   10,  'Rise':   11,
+    'Fisheye': 12, 'Inflate': 13, 'Squeeze': 14, 'Twist':  15
+};
+
+/* The finished bank. Trail *width* stays a rebuild -- it decides how many
+   strokes there are and how wide each solid is, and a solid cannot be resized
+   after the fact. Everything else on this layer is free to drag. */
 function tuneTrailGradient(s, c, ctrl) {
     if (!s) return;
+
     var warp = findFx(s, ["ADBE WRPMESH"]);
     if (warp) {
-        // Warp Style is a 1-based dropdown; 14 = Squeeze (13 is Inflate).
-        LG.set(warp, "Warp Style", 1, 14);
-        LG.set(warp, "Bend", 3, num(ctrl.bend, 30));
+        var style = TRAIL_WARPS[ctrl.warpStyle];
+        if (style === undefined) style = 14;          // Squeeze, the original
+        LG.set(warp, "Warp Style", 1, style || 14);
+        /* Warp Axis flips which way the bend runs. On a bank of vertical
+           strokes the two axes are not variations on each other -- one arcs
+           the strokes and the other arcs the bank. */
+        LG.set(warp, "Warp Axis",  2, ctrl.warpAxis === 'Vertical' ? 2 : 1);
+        LG.set(warp, "Bend",       3, style === 0 ? 0 : num(ctrl.bend, 30));
     }
+
+    /* Palette order or luminance order. Ordered keeps Colour 1 at the shadow
+       end whatever it is, which is what you want when the palette was chosen
+       as a sequence; sorted puts the darkest colour in the dark, which is what
+       you want when it was chosen as a set. */
+    var toner = findFx(s, ["CC Toner"]);
+    if (toner) lgToneColors(toner, c, ctrl.colorOrder !== 'By Luminance');
 }
 
 // --- WEB STUDIO CLONES ---

@@ -208,6 +208,24 @@ function pvRibbons(d, W, H, pal, bands, stretch) {
   }
 }
 
+/* A ramp folded by mirrored tiling, then bent — Satin Waves' construction,
+   and the reason that gradient is filed with the waves rather than the metals:
+   there is no height field and no light anywhere in it. */
+function pvChrome(d, W, H, pal) {
+  const lut = pvRamp(pvByLuma(pal));
+  for (let y = 0; y < H; y++) {
+    const ny = y / H;
+    for (let x = 0; x < W; x++) {
+      const nx = x / W;
+      const bend = 0.16 * Math.sin(ny * 5.2 + nx * 1.6)
+                 + 0.07 * Math.sin(ny * 12.0 - nx * 3.0);
+      const u = (nx + ny * 0.22 + bend) * 10;
+      const w = Math.abs(((u % 2) + 2) % 2 - 1);
+      pvPut(d, (y * W + x) * 4, pvLut(lut, w));
+    }
+  }
+}
+
 /* Dot profile against a ramp — the same comparison the builder makes. */
 function pvHalftone(d, W, H, pal) {
   const inkLut = pvRamp([pal[0], pal[1 % pal.length]], 64);
@@ -636,10 +654,29 @@ const PREVIEW_FAMILY = {
   ReededGlass:    pvFluted,
   Glass:          pvGlass,
 
-  /* Snakeskin is the only card left on the metal painter: its scales are
-     the hammered height field, lit like skin. The metal presets it shared it
-     with are gone from the library. */
-  Snakeskin:      pvMetalCard('Hammered', { env: 'plate', bands: 3, relief: 0.74, shine: 22, lightAngle: 305, lightHeight: 0.42, ambient: 0.62, specular: 0.38, tilt: 0.30 }),
+  Metallic:       pvChrome,   // Satin Waves — ribbons, not a plate
+
+  /* THE MOLTEN THREE. One geometry, three palettes, and the card says so:
+     the same flowing environment and the same tight band count, with only the
+     light moved. If these three cards look like the same metal in different
+     colours, that is the gradient being described accurately.
+
+     bands is 12 rather than the builder's 33 because a 104px card cannot
+     resolve 33 bands — it would alias into grey. The card's job is to show
+     which gradient this is, and the render is the truth. */
+  Copper:         pvMetalCard('Copper', { env: 'flow', bands: 12, relief: 0.30, shine: 28, lightAngle: 58,  lightHeight: 0.45, ambient: 0.36, specular: 0.90, tilt: 0.18 }),
+  Gold:           pvMetalCard('Gold',   { env: 'flow', bands: 12, relief: 0.30, shine: 34, lightAngle: 72,  lightHeight: 0.52, ambient: 0.36, specular: 0.96, tilt: 0.18 }),
+  Silver:         pvMetalCard('Polished', { env: 'flow', bands: 12, relief: 0.30, shine: 22, lightAngle: 44, lightHeight: 0.40, ambient: 0.30, specular: 0.98, tilt: 0.18 }),
+
+  /* Foil has no environment at all — its card is the height field shaded, and
+     nothing else, which is exactly what the builder now makes. */
+  Foil:           pvMetalCard('Foil',    { env: 'plate', bands: 1, relief: 0.70, shine: 0,  lightAngle: 305, lightHeight: 0.67, ambient: 0.63, specular: 0.63, tilt: 0.0 }),
+  Brushed:        pvMetalCard('Brushed', { env: 'plate', bands: 5, relief: 0.30, shine: 10, lightAngle: 300, lightHeight: 0.55, ambient: 0.58, specular: 0.60, tilt: 0.10 }),
+  Mercury:        pvMetalCard('Mercury', { env: 'flow', bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
+
+  /* Snakeskin is the hammered height field, and now it is hammered's lighting
+     too — the two presets became one. */
+  Snakeskin:      pvMetalCard('Hammered', { env: 'plate', bands: 4, relief: 0.55, shine: 22, lightAngle: 310, lightHeight: 0.38, ambient: 0.5, specular: 0.95, tilt: 0.16 }),
 
   AsciiMatrix:    pvGrid,
   StackedSquares: pvGrid,
@@ -647,7 +684,6 @@ const PREVIEW_FAMILY = {
   WebThreads:     pvThreads,
   Waves:          pvThreads,
   Antigravity:    pvThreads,
-  LiquidWaves:    (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 2.2, 1.4),
   Heatmap:        (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 1.6, 1.0),
   Fiber:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 4.5, 3.0),
   Prism:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 3.2, 1.8)
