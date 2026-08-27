@@ -163,26 +163,33 @@ if (Test-Path $debugFile) { Remove-Item $debugFile -Force; Say '  - .debug' 'Dar
 # The budget is a hard failure, not a warning. Forty-eight stills is exactly the
 # kind of thing that grows a megabyte at a time until somebody notices the .zxp
 # is 40MB, and by then it has shipped.
-$PreviewBudgetKB = 6144
+#
+# Raised from 6144 when the hover loops arrived. The whole library is roughly
+# 11MB of VP9 plus 6.5MB of posters, so 24576 leaves headroom without leaving
+# so much that the number stops meaning anything.
+$PreviewBudgetKB = 24576
 
 $previews = Join-Path $StageDir 'css\previews'
 if (Test-Path $previews) {
     $indexFile = Join-Path $previews 'index.json'
     $keep = @()
     if (Test-Path $indexFile) {
-        $indexRaw = Get-Content $indexFile -Raw -Encoding utf8
-        foreach ($m in [regex]::Matches($indexRaw, '"([A-Za-z0-9_]+)"')) {
-            $name = $m.Groups[1].Value
-            if ($name -ne 'cards' -and $name -ne 'rendered') { $keep += ($name + '.png') }
-        }
+        # Parsed as JSON rather than regexed for quoted words. The index now
+        # carries two arrays that mean different things - "cards" are posters
+        # and "loops" are videos - and a gradient can legitimately be in the
+        # first and not the second, so which list a name came from decides
+        # which extension it is allowed to ship with.
+        $index = Get-Content $indexFile -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($name in @($index.cards)) { $keep += ($name + '.png') }
+        foreach ($name in @($index.loops)) { $keep += ($name + '.webm') }
         $keep += 'index.json'
     }
 
     if ($keep.Count -le 1) {
-        # No index, or an index naming nothing. Either way there are no cards to
+        # No index, or an index naming nothing. Either way there is nothing to
         # ship and the painters in js/preview.js cover every gradient.
         Remove-Item $previews -Recurse -Force
-        Say '  - css/previews (no index.json; run tools/render_cards.jsx)' 'DarkGray'
+        Say '  - css/previews (no index.json; run tools/render_loops.jsx)' 'DarkGray'
     } else {
         $droppedKB = 0; $dropped = 0
         Get-ChildItem $previews -Recurse -File | ForEach-Object {
@@ -197,9 +204,11 @@ if (Test-Path $previews) {
 
         $remaining = @(Get-ChildItem $previews -Recurse -File)
         $keptKB = [math]::Round(($remaining | Measure-Object Length -Sum).Sum / 1KB)
-        Say "  + css/previews ($($remaining.Count - 1) cards, $keptKB KB)"
+        $posters = @($remaining | Where-Object { $_.Extension -eq '.png' }).Count
+        $vids = @($remaining | Where-Object { $_.Extension -eq '.webm' }).Count
+        Say "  + css/previews ($posters posters, $vids loops, $keptKB KB)"
         if ($keptKB -gt $PreviewBudgetKB) {
-            throw "css/previews is $keptKB KB, over the $PreviewBudgetKB KB budget. Lower CARD_W/CARD_H in tools/render_cards.jsx and re-run it."
+            throw "css/previews is $keptKB KB, over the $PreviewBudgetKB KB budget. Re-run tools/encode_loops.ps1 with a higher -Crf (say 36); no AE re-render is needed."
         }
     }
 }

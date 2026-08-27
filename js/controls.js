@@ -346,7 +346,10 @@ const GRADIENT_CONTROLS = {
     { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360,  step: 1, default: 305, type: 'slider' },
     { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100,  step: 1, default: 67,  type: 'slider' },
     { id: 'specular',    label: 'Specular',      min: 0,  max: 100,  step: 1, default: 63,  type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100,  step: 1, default: 1,   type: 'slider' },
+    /* 42, not 1. The control default overrides the preset table, so a
+       Roughness of 1 here pinned the foil to a mirror no matter what
+       METAL_SURFACES.Foil said — see the units note beside it. */
+    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100,  step: 1, default: 42,  type: 'slider' },
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,   step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,   step: 1, default: 5,   type: 'slider' }
   ],

@@ -2492,12 +2492,27 @@ function updateGradientLive(paramsStr) {
         if (SHADED[liveKind]) {
             var kind = liveKind;
             app.beginUndoGroup('Update ' + ctrl.type);
-            var metalLayer = null, heightLayer = null, baseLayer = null, mi2;
+            var metalLayer = null, heightLayer = null, staleBase = null, mi2;
             for (mi2 = 1; mi2 <= comp.numLayers; mi2++) {
                 var ml = comp.layer(mi2);
                 if (ml.name === kind + ' Metal')  metalLayer = ml;
                 else if (ml.name === kind + ' Height') heightLayer = ml;
-                else if (ml.name === kind + ' Base')   baseLayer = ml;
+                else if (ml.name === kind + ' Base')   staleBase = ml;
+            }
+
+            /* A metal built before the backstop was removed still has one.
+               Take it out on the first live update rather than leaving a
+               third layer in a comp that is documented as having two — and
+               do it before anything else touches the stack, so the bump
+               index re-found further down is the finished one. */
+            if (staleBase) {
+                try { staleBase.remove(); } catch (e) { }
+                metalLayer = null; heightLayer = null;
+                for (mi2 = 1; mi2 <= comp.numLayers; mi2++) {
+                    var ml2 = comp.layer(mi2);
+                    if (ml2.name === kind + ' Metal')  metalLayer = ml2;
+                    else if (ml2.name === kind + ' Height') heightLayer = ml2;
+                }
             }
             if (heightLayer && heightLayer.source && heightLayer.source instanceof CompItem
                 && heightLayer.source.numLayers > 0) {
@@ -2508,15 +2523,6 @@ function updateGradientLive(paramsStr) {
                                  heightLayer ? heightLayer.index : 0);
             } else {
                 LG.warn(ctrl.type + ': no "' + kind + ' Metal" layer here to update.');
-            }
-            /* The backstop carries the same bands and the same palette, so it
-               has to move when they do — a base still showing the old colours
-               would be the most visible thing in the frame the first time a
-               displacement did tear. Layers built before it existed simply do
-               not match, and nothing happens. */
-            if (baseLayer) {
-                tuneMetalBase(baseLayer, lcols, lctrl, kind,
-                              realComp.width, realComp.height);
             }
             app.endUndoGroup();
             return;
@@ -4056,7 +4062,22 @@ function lgShadeSet(fx, o, which) {
     }
 
     LG.set(fx, 'Using',           ix.using,     1);                    // Effect Light
-    LG.set(fx, 'Light Intensity', ix.intensity, pc(o.intensity, 100));
+
+    /* LIGHT INTENSITY IS NOT ONE OF THE 0..100 ONES. Ambient, Diffuse,
+       Specular and Metal are percentages of a fixed budget and genuinely stop
+       at 100. Light Intensity is a lamp, and a lamp is allowed to be brighter
+       than "all of it" — the tuned foil runs at 215.3, which is most of what
+       makes a crumpled sheet read as bright metal rather than as grey paper.
+
+       Clamping it with the others silently halved that on the one preset that
+       needed it, and the clamp was added for a warning that named Specular,
+       not this. Clamped separately and generously: the point of the clamp is
+       that setValue throws past the end of a property's range rather than
+       saturating, so there still has to be a ceiling. */
+    var intensity = num(o.intensity, 100);
+    if (intensity < 0)   intensity = 0;
+    if (intensity > 500) intensity = 500;
+    LG.set(fx, 'Light Intensity', ix.intensity, intensity);
     LG.set(fx, 'Light Color',     ix.color,     o.lightColor || [1, 1, 1]);
     LG.set(fx, 'Light Type',      ix.type,      num(o.lightType, 1));  // 1 Distant, 2 Point
     LG.set(fx, 'Light Height',    ix.height,    pc(o.lightHeight, 45));
@@ -4176,30 +4197,76 @@ var MOLTEN = {
     recipe: 'molten',
     env: 'flow', field: 'noise',
 
-    /* The fold. */
-    tilt: 0, bands: 0, foldHeight: 25,
+    /* The fold, read straight back off the hand-tuned comp rather than left
+       to the panel's sliders to supply.
+
+         tilt 18   End of Ramp is [5376, 544.3] on a 5376 x 3024 layer, and
+                   544.3 is 18% of 3024 exactly.
+         bands 33  Motion Tile's Tile Width is 3.0, and 3.0 is 100/33. The
+                   note above already argues for thirty-three; this states it,
+                   so a build with no controls attached (a contact sheet, a
+                   saved preset from before the slider existed) gets the fold
+                   instead of getting Tile Width 100 and no fold at all. */
+    tilt: 18, bands: 33, foldHeight: 25,
 
     /* The two displacements, by menu index — 5 is Bulge Smoother and 1 is
        plain Turbulent. See the note above; these two lines are most of the
        difference between metal and a striped ramp. */
-    twistMode: 5, twistAmount: 0, twistSize: 351,
-    envMode:   1, envAmount:  0, envSize:  620,
+    /* THE AMOUNTS WERE ZERO AND THE WHOLE FILE TALKS AS IF THEY WERE NOT.
+
+       Every note here — the budget that reserves overhang for "433 + 229",
+       the argument that Pin All is what makes a hand-tuned comp with those
+       numbers safe — describes a pour that this table was not asking for. Both
+       Amounts read 0, alongside a tilt of 0 and a band count of 0, so what the
+       three molten metals actually built was a black-to-white ramp with no
+       slope, no fold and no displacement: a flat grey wash. The values below
+       are the ones on the tuned comp, and they are what the rest of the file
+       has been assuming all along. */
+    twistMode: 5, twistAmount: 433,   twistSize: 351,
+    envMode:   1, envAmount:  229.1,  envSize:  620,
 
     /* Tritone. CC Toner's Brights and Darktones are inactive in this mode, so
        the palette is genuinely three colours — and the panel offers three
        rather than four with two of them quietly doing nothing. */
     tritone: true,
 
-    /* CC Glass, negative on both. A negative Height inverts the normals, so
-       the tooling reads as raised where the map is dark; a negative
-       Displacement bends the reflection against the slope, which pulls the
-       bright band down into the trough of a fold instead of leaving it
-       sitting on the ridge. Positive on both is the plate look. */
+    /* NO SHADER, AND NO HEIGHT MAP EITHER.
+
+       This is the correction the tuned comp actually carries, and it is the
+       one that is hardest to believe from reading the file: the molten stack
+       ends at CC Toner. There is no CC Glass on it and no bloom after it.
+
+       The reasoning above — that a metal is a height field handed to a real
+       Blinn-Phong shader — is right about Foil, Brushed and Hammered, whose
+       whole look IS their tooling. It is wrong about a pour. What makes
+       poured metal read as metal is the shape of the reflection, and the
+       reflection here is already fully formed by the time the shader would
+       see it: a ramp, folded into thirty-three mirrored bands, bent twice by
+       large-size turbulence. CC Glass on top of that only re-lights an image
+       that was never a surface, and the bloom only spreads the highlight it
+       has already got.
+
+       So the shader stage is switched off rather than tuned quiet, on the
+       same argument Foil's `bare` uses from the other end — and because
+       nothing then reads the height field, buildMetalTexture does not build
+       the height comp for these three at all. A molten metal is one solid in
+       one comp.
+
+       The three glass numbers below are kept as the record of what the
+       shader was set to when it was still on. They are inert while
+       `shader: 'none'`; delete the line above and they take effect again
+       exactly as they did. */
+    shader: 'none', bloom: false,
     glassSoftness: 4.3, glassHeight: -58, glassDisplacement: -48.2,
 
     hWidth: 480, hHeight: 430, hContrast: 130, hComplexity: 3,
     crumpleMode: 1, crumpleAmount: 120, crumpleSize: 180,
-    smooth: 8, metal: 100, ambient: 36, diffuse: 50,
+    /* Smooth 0, not 8. The tuned comp's height map carries a Fast Box Blur at
+       radius 0 — the crumple here is Turbulent at Size 180, so its finest
+       structure is already far wider than a pixel and there is nothing left
+       for a blur to remove except contrast. Same reasoning as Foil's zero,
+       reached from the opposite end of the size range. */
+    smooth: 0, metal: 100, ambient: 36, diffuse: 50,
     lightIntensity: 93.6, lightHeight: 45, lightAngle: 58, specular: 90, roughness: 17,
     sheen: 28, speed: 7,
     
@@ -4239,13 +4306,24 @@ var METAL_SURFACES = {
         crumpleMode: 9,                   // Cross Displacement
         crumpleAmount: 718, crumpleSize: 2,
         smooth: 0,
-        tilt: 0, bands: 0, foldHeight: 0,
+        /* End of Ramp is [5376, 665.3] on the tuned sheet, and 665.3 is 22%
+           of 3024. Foil has no fold, so the ramp is the whole environment and
+           its slope is the only thing setting where the sheet is lit from. */
+        tilt: 22, bands: 0, foldHeight: 0,
         twistMode: 6, twistAmount: 0, twistSize: 1000,
         envMode: 1, envAmount: 0, envSize: 999,
         toner: false, noiseType: 3,
         glassSoftness: 0, glassHeight: 10, glassDisplacement: 10,
         lightIntensity: 215.3, lightAngle: 305, lightHeight: 67,
-        ambient: 63, diffuse: 16, specular: 63, roughness: 0.083, metal: 100,
+        /* Roughness 42, which lands on the tuned sheet's 0.084.
+
+           This number was 0.083 — the value read straight off CC Glass in the
+           tuned comp — and it is in the wrong units. Roughness reaches the
+           effect as slider/500 (see lgShadeSet), so 0.083 arrived as 0.000166:
+           a perfect mirror, on the one finish whose whole character is a soft
+           broad sheen. Everything else in this table is already slider-space;
+           this was the one field written in effect-space. */
+        ambient: 63, diffuse: 16, specular: 63, roughness: 42, metal: 100,
         sheen: 0, speed: 5
     },
 
@@ -4411,7 +4489,8 @@ function tuneMetalHeight(s, ctrl, kind) {
                         ? Math.max(1, num(o.crumpleSize, 2) * scale)
                         : Math.max(20, 180 * scale);
 
-    var td = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Crumple');
+    var td = lgFxStage(s, ['ADBE Turbulent Displace'], 'Metal Crumple',
+                       crumpleAmt > 0);
     if (td) {
         lgTurbSet(td, {
             mode: num(o.crumpleMode, 4), amount: crumpleAmt, complexity: 1,
@@ -4424,7 +4503,7 @@ function tuneMetalHeight(s, ctrl, kind) {
        because a brushed surface is a surface whose *shape* runs one way —
        smearing the finished image would only blur the render. */
     var brushLen = num(o.brushLength, 0);
-    var brush = lgFxNamed(s, ['ADBE Motion Blur'], 'Metal Brush');
+    var brush = lgFxStage(s, ['ADBE Motion Blur'], 'Metal Brush', brushLen > 0);
     if (brush) {
         LG.set(brush, 'Direction',   1, num(o.brushDirection, 90));
         LG.set(brush, 'Blur Length', 2, brushLen * scale);
@@ -4512,9 +4591,10 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
 
     /* Sliding Tile Center rather than Phase — Phase offsets alternate tiles
        against each other and shears the reflection instead of drifting it. */
-    var tile = lgFxNamed(s, ['ADBE Tile'], 'Metal Fold');
+    var wantFold = !bare && num(o.bands, 0) > 0;
+    var tile = lgFxStage(s, ['ADBE Tile'], 'Metal Fold', wantFold);
     if (tile) {
-        try { tile.enabled = !bare && (num(o.bands, 0) > 0); } catch (e) { }
+        try { tile.enabled = wantFold; } catch (e) { }
         LG.set(tile, 'Tile Width',    2, 100 / Math.max(1, num(o.bands, 1)));
         /* 25 on the molten metals, 100 everywhere else, and it is one of the
            four numbers that separate a pour from a stripe — see MOLTEN. */
@@ -4612,24 +4692,26 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     /* Twist Smoother rather than Twist: plain Twist winds tight spirals whose
        centres compress the bands into a vortex, and a vortex is the other
        thing an earlier sheet was full of. */
-    var twist = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Twist');
+    var wantTwist = !bare && twistAmt > 0;
+    var twist = lgFxStage(s, ['ADBE Turbulent Displace'], 'Metal Twist', wantTwist);
     if (twist) {
         lgTurbSet(twist, {
             mode: num(o.twistMode, 6), amount: twistAmt, complexity: 1,
             size: Math.max(1, num(o.twistSize, Math.max(300, 1000 * scale)) * scale),
             speed: speed * -0.2
         });
-        try { twist.enabled = !bare && twistAmt > 0; } catch (e) { }
+        try { twist.enabled = wantTwist; } catch (e) { }
     }
 
-    var env = lgFxNamed(s, ['ADBE Turbulent Displace'], 'Metal Environment');
+    var wantEnv = !bare && envAmt > 0;
+    var env = lgFxStage(s, ['ADBE Turbulent Displace'], 'Metal Environment', wantEnv);
     if (env) {
         lgTurbSet(env, {
             mode: num(o.envMode, 4), amount: envAmt, complexity: 1,
             size: Math.max(1, num(o.envSize, flow ? 620 : 300) * scale),
             speed: speed * 0.3
         });
-        try { env.enabled = !bare && envAmt > 0; } catch (e) { }
+        try { env.enabled = wantEnv; } catch (e) { }
     }
 
     /* 3. The palette.
@@ -4642,10 +4724,13 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
           Highlight, straight onto Shadows, Midtones and Highlights.
 
           Everything else keeps the five-stop ramp it had. */
-    var toner = lgFx(s, ['CC Toner']);
-    if (o.tritone) lgToneTri(toner, c);
-    else           lgToneColors(toner, c, true);
-    if (toner) { try { toner.enabled = !bare && (o.toner !== false); } catch (e) { } }
+    var wantToner = !bare && (o.toner !== false);
+    var toner = lgFxOn(s, ['CC Toner'], wantToner);
+    if (toner) {
+        if (o.tritone) lgToneTri(toner, c);
+        else           lgToneColors(toner, c, true);
+        try { toner.enabled = wantToner; } catch (e) { }
+    }
 
     /* 4. The shader. One of two, fixed per preset — never switched at run
           time, so the effect stack a live update walks is the one the build
@@ -4662,7 +4747,16 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
         metal:       num(o.metal, 100)
     };
 
-    if (o.shader === 'plastic') {
+    if (o.shader === 'none') {
+        /* The molten metals. Nothing to light — see MOLTEN. All three
+           shaders are named here rather than just the one this preset would
+           have used, because a layer built by an earlier version could be
+           carrying any of them and a live shader on a stack nobody sets any
+           more is the same failure as the dead Fractal Noise was. */
+        lgFxOn(s, ['CC Glass'],      false);
+        lgFxOn(s, ['CC Plastic'],    false);
+        lgFxOn(s, ['CC Blobbylize'], false);
+    } else if (o.shader === 'plastic') {
         var plastic = lgFx(s, ['CC Plastic']);
         if (plastic) {
             if (bumpIndex) LG.set(plastic, 'Bump Layer', 2, bumpIndex);
@@ -4719,16 +4813,24 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     }
 
     // 5. Bloom on the specular, then the optional final soften.
-    var g = lgFxNamed(s, ['ADBE Glo2'], 'Metal Bloom');
+    var wantBloom = !bare && o.bloom !== false
+                          && (sheen > 0 || num(o.bloomIntensity, 0) > 0);
+    var g = lgFxStage(s, ['ADBE Glo2'], 'Metal Bloom', wantBloom);
     if (g) {
         LG.set(g, 'Glow Threshold', 2, o.bloomThreshold !== undefined ? o.bloomThreshold : Math.max(0, 100 - sheen * 0.4));
         LG.set(g, 'Glow Radius',    3, o.bloomRadius !== undefined ? o.bloomRadius : 12 + sheen * 0.9);
         LG.set(g, 'Glow Intensity', 4, o.bloomIntensity !== undefined ? o.bloomIntensity : sheen / 110);
         LG.set(g, 'Glow Colors',    7, 1);                       // Original Colors
-        try { g.enabled = !bare && (sheen > 0 || o.bloomIntensity > 0); } catch (e) { }
+        try { g.enabled = wantBloom; } catch (e) { }
     }
 
-    lgBlur(s, num(o.softness, 0));
+    /* The final soften is zero on every metal in the library. A Fast Box Blur
+       at radius zero is still a row in the panel and still a pass over an
+       oversized layer, so it is applied only when the slider asks for one — or
+       when the layer already carries one, in which case the slider goes on
+       driving it down to zero and back the way it always did. */
+    var soften = num(o.softness, 0);
+    if (soften > 0 || findFx(s, ['ADBE Box Blur2'])) lgBlur(s, soften);
 }
 
 /* Every displaced layer is built larger than the comp so there is image
@@ -4821,50 +4923,23 @@ function lgOversize(n) { return Math.round(n * LG_OVERSIZE); }
    size and that would take it past 44 megapixels for a map nobody looks at. */
 var HEIGHT_PAD = 800;
 
-/* What shows through if a displacement tears after all.
+/* THE BACKSTOP IS GONE, and this is what used to be here.
 
-   The same reflection the metal is built from — the ramp, folded by Motion
-   Tile into the same number of bands, mapped through the same palette — with
-   none of the bending and a heavy blur over it. Blurred because it must read
-   as something behind the surface rather than as a second surface competing
-   with it, and because a torn edge against a soft field is far less legible
-   than a torn edge against a sharp one.
+   A third layer sat under the metal: the same ramp, folded into the same
+   bands, through the same palette, heavily blurred — so that if a
+   displacement ever tore, the hole fell through to soft out-of-focus metal
+   instead of to nothing. It was insurance against a reach model that had
+   been wrong three times.
 
-   BAND WIDTH IS MATCHED, NOT COPIED. Motion Tile's Tile Width is a percentage
-   of its own layer, and this layer is comp-sized while the metal is
-   LG_OVERSIZE times bigger. Reusing 100/bands here would put the bands at
-   1/LG_OVERSIZE of the width they have on the metal and the mismatch would be
-   the most visible thing in the frame. */
-function tuneMetalBase(s, c, ctrl, kind, w, h) {
-    if (!s) return;
-    var spec  = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
-    var o     = lgDefaults(spec, ctrl);
-    var bands = Math.max(1, num(o.bands, 5));
-    var speed = num(o.speed, 6);
+   It is removed because a build is now two layers and only two — the metal
+   solid and the comp holding its height map — and a backstop nobody ever
+   sees is still a comp-sized layer carrying a ramp, a tile and a toner on
+   every metal ever built. The molten stack has been rendered at delivery
+   size with Amounts of 433 and 229 against 972px of overhang and it does not
+   tear.
 
-    var ramp = lgFxNamed(s, ['ADBE Ramp'], 'Base Ramp');
-    if (ramp) {
-        LG.set(ramp, 'Start of Ramp', 1, [0, 0]);
-        LG.set(ramp, 'End of Ramp',   3, [w, h * (num(o.tilt, 14) / 100)]);
-        LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
-        LG.set(ramp, 'End Color',     4, [1, 1, 1]);
-    }
-
-    var tile = lgFxNamed(s, ['ADBE Tile'], 'Base Fold');
-    if (tile) {
-        LG.set(tile, 'Tile Width',    2, (100 / bands) * LG_OVERSIZE);
-        LG.set(tile, 'Tile Height',   3, 100);
-        LG.set(tile, 'Output Width',  4, 100);
-        LG.set(tile, 'Output Height', 5, 100);
-        LG.set(tile, 'Mirror Edges',  6, true);
-        LG.expr(tile, 'Tile Center', 1, speed !== 0
-            ? '[value[0] + time * ' + (speed * 6) + ', value[1]]'
-            : 'value');
-    }
-
-    lgToneColors(lgFx(s, ['CC Toner']), c, true);
-    lgBlur(s, Math.max(24, Math.min(w, h) * 0.03));
-}
+   If the tearing does come back, the fix is the overhang or the Amount, not
+   a layer painted underneath to hide it. */
 
 function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
     var fps = comp.frameRate;
@@ -4891,38 +4966,30 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
        the height map and on the finished gradient.
 
        HEIGHT_PAD is the overhang, sized past the largest Crumple the panel can
-       ask for so the tear always happens off-comp where nothing can see it. */
-    var heightComp = app.project.items.addComp(kind + ' Height Map', OW, OH, 1, dur, fps);
-    var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height',
-                                                 OW + HEIGHT_PAD * 2,
-                                                 OH + HEIGHT_PAD * 2, 1, dur);
-    tuneMetalHeight(heightSolid, ctrl, kind);
+       ask for so the tear always happens off-comp where nothing can see it.
 
-    // 2. The layers into the target comp, bottom-most first.
-    var bump = comp.layers.add(heightComp);
-    bump.name = kind + ' Height';
-    bump.enabled = false;            // a bump source, not a picture
+       AND IT IS SKIPPED ENTIRELY WHEN NOTHING READS IT. A height map exists to
+       be some shader's bump source. The molten metals have no shader — see
+       MOLTEN — so building the comp for them would leave a disabled layer in
+       the project pointing at a full-size, fully-animated Fractal Noise that
+       renders for nobody. */
+    var spec = METAL_SURFACES[kind] || METAL_SURFACES.Polished;
+    if (spec.shader !== 'none') {
+        var heightComp = app.project.items.addComp(kind + ' Height Map', OW, OH, 1, dur, fps);
+        var heightSolid = heightComp.layers.addSolid([0.5, 0.5, 0.5], 'Height',
+                                                     OW + HEIGHT_PAD * 2,
+                                                     OH + HEIGHT_PAD * 2, 1, dur);
+        tuneMetalHeight(heightSolid, ctrl, kind);
 
-    /* THE BACKSTOP, and the reason the holes can no longer be a black void
-       even if the reach model above is wrong again.
+        // 2. The layers into the target comp, bottom-most first.
+        var bump = comp.layers.add(heightComp);
+        bump.name = kind + ' Height';
+        bump.enabled = false;        // a bump source, not a picture
+    }
 
-       Everything else about the transparent regions is a budget: work out how
-       far a displacement reaches, make the layer bigger than that, keep the
-       tear off-comp. That is the right fix and it has now been wrong three
-       times, because the reach was a guess each time.
-
-       This is not a budget. It is a second, undisplaced copy of the same
-       reflection sitting underneath the metal, so a torn pixel does not fall
-       through to nothing — it falls through to soft out-of-focus metal in the
-       same palette. If the displacement never tears, nothing here is ever
-       seen. If it tears, the failure is a soft patch instead of a hole, and a
-       soft patch does not stop a release.
-
-       It costs one comp-sized layer carrying a ramp, a tile and a toner. No
-       displacement, no shader, nothing expensive. */
-    // var base = comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Base', w, h, 1, dur);
-    // tuneMetalBase(base, c, ctrl, kind, w, h);
-
+    /* And the metal itself. Two layers in the comp for a shaded finish, one
+       for a molten one, and that is the whole build — see the note by
+       HEIGHT_PAD for the backstop that used to make it three. */
     comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', OW, OH, 1, dur);
 
     /* 3. Only now is the stack final, so only now is the bump index safe.
@@ -5258,9 +5325,19 @@ function tuneMetallic(s, c, ctrl, w, h) {
     var tile = lgFx(s, ['ADBE Tile']);
     if (tile) {
         LG.set(tile, 'Tile Width',    2, 100 / bands);
-        /* 25 on the molten metals, 100 everywhere else, and it is one of the
-           four numbers that separate a pour from a stripe — see MOLTEN. */
-        LG.set(tile, 'Tile Height',   3, num(o.foldHeight, 100));
+        /* 100, as a literal. This line was pasted in from tuneMetalSurface,
+           which reads `o.foldHeight` off a surface spec it looks up through
+           lgDefaults() — and there is no `o` in this function and no
+           foldHeight in METAL_FINISHES, so building Satin Waves threw
+           "ReferenceError: o is undefined" every time, in the panel as much as
+           in the render tools.
+
+           100 is the right number rather than just the safe one: foldHeight is
+           25 on the molten metals and 100 everywhere else (see MOLTEN), Satin
+           Waves is not a molten metal, and 100 is what the pasted expression's
+           own fallback would have produced had `o` merely been empty instead of
+           absent. */
+        LG.set(tile, 'Tile Height',   3, 100);
         LG.set(tile, 'Output Width',  4, 100);
         LG.set(tile, 'Output Height', 5, 100);
         LG.set(tile, 'Mirror Edges',  6, true);
@@ -5526,6 +5603,46 @@ function lgFindNamed(layer, label) {
         try { ef = effects.property(i); } catch (e) { continue; }
         if (ef && ef.name === label) return ef;
     }
+    return null;
+}
+
+/* AN OPTIONAL STAGE — applied only when it does something.
+
+   lgFxNamed and lgFx both mean "find it, or apply it", and every stage in the
+   metal builder went through one of them. So a preset that wanted none of the
+   reflection still got a Ramp, a Motion Tile, two Turbulent Displaces, a CC
+   Toner and a Glow applied to its layer, and the next six lines switched them
+   all off again. Crumpled Foil is two effects; the panel was building it as
+   eight, six of them dead rows in the Effect Controls panel with their fx
+   switches dark, all of them still in the stack for a live update to walk.
+
+   These take the answer instead of assuming yes:
+
+     want true    exactly lgFxNamed / lgFx. Find it, or apply it.
+     want false   NEVER apply. A layer that a previous version already put the
+                  stage on keeps it — found and switched off, because deleting
+                  an effect a saved preset might turn back on is not this
+                  function's call — but a fresh build simply does not have it.
+
+   The one asymmetry worth knowing: a stage that was skipped at build time and
+   is later wanted by a slider gets applied at the END of the stack rather than
+   in its proper place. Every stage that can be switched on by a control is
+   already non-zero in the specs that offer that control, so this is currently
+   unreachable; it is written down because the day it stops being unreachable
+   the symptom is an ordering bug, not a missing effect. */
+function lgFxStage(layer, names, label, want) {
+    if (want) return lgFxNamed(layer, names, label);
+    var found = lgFindNamed(layer, label);
+    if (found) { try { found.enabled = false; } catch (e) { } }
+    return null;
+}
+
+/* The same, for the stages this file identifies by matchName rather than by a
+   name it gave them — CC Toner, CC Glass, the shaders. */
+function lgFxOn(layer, names, want) {
+    if (want) return lgFx(layer, names);
+    var found = findFx(layer, names);
+    if (found) { try { found.enabled = false; } catch (e) { } }
     return null;
 }
 

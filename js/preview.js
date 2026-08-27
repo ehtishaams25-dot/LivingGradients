@@ -720,14 +720,22 @@ function pvPainterFor(type) {
    all: exactly the behaviour a fresh checkout wants. */
 
 const pvRenders = new Map();          // type -> HTMLImageElement
-let pvIndex = null;                   // Promise<Set<string>>
+let pvIndex = null;                   // Promise<{cards:Set, loops:Set}>
 
+/* Two lists in the one file, so this is still one request. `cards` are the
+   poster stills, `loops` the hover videos; a gradient can have a poster and no
+   loop (its render succeeded, its encode did not) and the card has to do the
+   sensible thing in that case rather than reaching for a file that is not
+   there. */
 function pvRenderIndex() {
   if (pvIndex) return pvIndex;
   pvIndex = fetch('css/previews/index.json')
     .then((res) => (res.ok ? res.json() : null))
-    .then((data) => new Set((data && data.cards) || []))
-    .catch(() => new Set());
+    .then((data) => ({
+      cards: new Set((data && data.cards) || []),
+      loops: new Set((data && data.loops) || [])
+    }))
+    .catch(() => ({ cards: new Set(), loops: new Set() }));
   return pvIndex;
 }
 
@@ -736,7 +744,7 @@ function pvRenderFor(type, whenReady) {
   if (cached) { whenReady(cached); return; }
 
   pvRenderIndex().then((have) => {
-    if (!have.has(type)) return;
+    if (!have.cards.has(type)) return;
 
     /* Re-check after the await: two cards of the same type can both get here
        while the index is in flight. */
@@ -796,4 +804,50 @@ function paintPreview(canvas, type, colors, options) {
       ctx.drawImage(image, 0, 0, W, H);
     } catch (e) { /* decoded but undrawable; the painter is already there */ }
   });
+}
+
+/* ── What the cards can use ──────────────────────────────────────────
+   js/main.js builds the grid and owns the hover behaviour; these are the
+   questions it has to ask before it can. Kept here because this file already
+   owns the index and the css/previews path shape, and two places deciding what
+   a preview filename looks like is one place too many. */
+
+function previewIndex() { return pvRenderIndex(); }
+
+function previewPosterSrc(type) {
+  return 'css/previews/' + encodeURIComponent(type) + '.png';
+}
+function previewLoopSrc(type) {
+  return 'css/previews/' + encodeURIComponent(type) + '.webm';
+}
+
+/* CAN THIS BUILD ACTUALLY PLAY THEM.
+
+   The loops are VP9 in WebM because VP9 is always compiled into Chromium and
+   H.264 is not — Adobe's CEF build is not guaranteed to carry proprietary
+   codecs, and there is no version number to test that reliably predicts it.
+   So ask the browser instead of guessing.
+
+   If the answer is no, every card still shows its poster, which is a render of
+   the real gradient and the larger half of the improvement. Nothing breaks; the
+   grid just stops moving. That is also why the AE render is never wasted work:
+   the posters come out of the same sequences.
+
+   canPlayType answers '', 'maybe' or 'probably'. Anything non-empty is worth
+   attempting — a 'maybe' that turns out to be wrong ends in a rejected play()
+   promise, which the caller already has to handle. */
+let pvCanLoop = null;
+function previewCanPlayLoops() {
+  if (pvCanLoop !== null) return pvCanLoop;
+  try {
+    const v = document.createElement('video');
+    pvCanLoop = !!(v.canPlayType && v.canPlayType('video/webm; codecs="vp9"'));
+    if (!pvCanLoop) {
+      console.warn('[Living Gradients] this build cannot decode VP9/WebM; ' +
+                   'cards will show their poster still and not animate');
+    }
+  } catch (e) {
+    pvCanLoop = false;
+  }
+  return pvCanLoop;
 }

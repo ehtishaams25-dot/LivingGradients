@@ -1,0 +1,29 @@
+Living Gradients - loop renders
+AE 26.0x67   Thu Aug 27 2026 16:41:19 GMT+0530
+built at 1920x1080, saved at 640x360 (scaled to cover)
+loop 8s + 1s tail at 30fps = 270 frames each
+ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
+builders : jsx/main.jsx, 310792 chars, modified Thu Aug 27 2026 16:11:13 GMT+0530
+frames   : C:\Users\Admin\AppData\Local\Temp\lg_loops
+scope    : Copper, Gold, Silver, Metallic
+
+STATUS   GRADIENT            FRAMES  NOTES
+-----------------------------------------------------------------------------------------------
+  FAILED Molten Copper       -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
+  FAILED Molten Gold         -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
+  FAILED Molten Silver       -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
+  FAILED Satin Waves         -       ReferenceError: o is undefined  (line 5330)
+-----------------------------------------------------------------------------------------------
+rendered 0   skipped 0   failed 4
+
+The ones that failed keep the canvas painter in js/preview.js, so
+the grid still shows something for them. They are the ones to look
+at: a builder that cannot render here cannot render in the panel
+either.
+
+Next:
+  powershell -ExecutionPolicy Bypass -File tools/encode_loops.ps1
+
+That crossfades the 1s tail over the head of each sequence to
+close the loop, encodes css/previews/<id>.webm, pulls the poster still
+out of frame 0 of the result, and writes css/previews/index.json.

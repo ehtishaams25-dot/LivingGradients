@@ -168,11 +168,19 @@ function renderLibrary() {
 
       /* Each card previews its own palette rather than the one currently in
          the inspector — the grid is for choosing between gradients, and they
-         do not all mean the same thing by "colour 3". */
+         do not all mean the same thing by "colour 3".
+
+         `live: true` means "do not swap the render in yourself". It used to be
+         the inspector's flag alone; the cards want it now too, because the
+         render arrives as a real <img> on top rather than as a drawImage into
+         this canvas. Without it the same PNG is fetched and decoded twice for
+         every card. The canvas underneath is the last fallback — what a
+         gradient with nothing rendered shows, forever. */
       const cardCanvas = card.querySelector('.card-canvas');
       if (typeof paintPreview === 'function') {
-        paintPreview(cardCanvas, preset.id, preset.defaultColors);
+        paintPreview(cardCanvas, preset.id, preset.defaultColors, { live: true });
       }
+      attachCardRender(card, preset.id);
 
       card.addEventListener('click', function () {
         // In batch mode a click adds to the set rather than switching the
@@ -226,6 +234,124 @@ function renderLibrary() {
 
       gradientGrid.appendChild(card);
     });
+  });
+}
+
+/* ── Card renders: the poster, and the loop on hover ─────────────────
+
+   Three layers in every .card-preview, and which of them you see depends
+   entirely on what has been rendered:
+
+     canvas   the painter. Always drawn, always underneath. An imitation of
+              the builder, and the only thing a gradient with no render has.
+     img      the poster still, if css/previews/index.json names it. A frame
+              of the real gradient, so it covers the imitation.
+     video    the 8s loop, created on first hover and never before.
+
+   Poster and video are both 16:9 and both cropped by the same object-fit
+   rule, so the video landing on top of the poster changes what is moving and
+   nothing else. They were not always the same shape — the stills this replaced
+   were 336x240 — and a card whose picture jumps sideways the instant you point
+   at it reads as a glitch, not as a preview. */
+
+function attachCardRender(card, type) {
+  if (typeof previewIndex !== 'function') return;
+  previewIndex().then((have) => {
+    if (!have.cards.has(type)) return;
+    const shell = card.querySelector('.card-preview');
+    if (!shell || card.querySelector('.card-poster')) return;
+    const img = document.createElement('img');
+    img.className = 'card-poster';
+    img.alt = '';
+    /* Decoded off the main thread. Forty-three of these arriving at once
+       otherwise lands as one long jank while the grid is being scrolled. */
+    img.decoding = 'async';
+    img.src = previewPosterSrc(type);
+    shell.appendChild(img);
+  });
+}
+
+/* Motion is a preference, and one the OS is allowed to have an opinion about.
+   Read once: it is not going to change while the panel is open, and the hover
+   path should not be doing matchMedia on every pointer move. */
+const lgWantsMotion = !(window.matchMedia &&
+                        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+let lgHoverCard = null;
+
+function lgStartLoop(card) {
+  if (!lgWantsMotion) return;
+  if (typeof previewCanPlayLoops !== 'function' || !previewCanPlayLoops()) return;
+
+  const type = card.dataset.type;
+  previewIndex().then((have) => {
+    if (!have.loops.has(type)) return;
+    /* The index resolves a tick later than the pointer moves. Sweeping across
+       the grid queues one of these per card passed over, and without this every
+       one of them would start playing behind whichever card the pointer
+       actually stopped on. */
+    if (lgHoverCard !== card) return;
+
+    let vid = card._lgLoop;
+    if (!vid) {
+      vid = document.createElement('video');
+      vid.className = 'card-loop';
+      vid.muted = true;
+      vid.loop = true;
+      vid.playsInline = true;
+      /* Attributes as well as properties: muted in particular is only honoured
+         as an autoplay condition when it is on the element. */
+      vid.setAttribute('muted', '');
+      vid.setAttribute('playsinline', '');
+      /* Nothing is fetched until the first hover. Forty-three loops
+         preloading when the panel opens is several megabytes to look at a
+         grid the user may not touch. */
+      vid.preload = 'none';
+      vid.addEventListener('playing', () => {
+        /* Faded in only once there is a frame to show, so a slow first load
+           shows the poster rather than a black rectangle. */
+        if (lgHoverCard === card) vid.classList.add('is-playing');
+      });
+      vid.src = previewLoopSrc(type);
+      card.querySelector('.card-preview').appendChild(vid);
+      card._lgLoop = vid;
+    }
+
+    const p = vid.play();
+    /* play() rejects if the pointer left before the first frame decoded, and an
+       unhandled rejection here is a red line in the console for a non-event. */
+    if (p && p.catch) p.catch(() => {});
+  });
+}
+
+function lgStopLoop(card) {
+  const vid = card && card._lgLoop;
+  if (!vid) return;
+  vid.pause();
+  /* currentTime is left alone on purpose. Coming back to a card you were just
+     looking at should carry on, not start over. */
+  vid.classList.remove('is-playing');
+}
+
+if (gradientGrid) {
+  /* Delegated. mouseenter does not bubble, so this is mouseover plus a record
+     of which card is current — which is needed anyway to stop the previous one.
+     One card plays at a time: forty-three video decoders in a docked panel is
+     not something to find out about the hard way. */
+  gradientGrid.addEventListener('mouseover', (e) => {
+    const card = e.target.closest ? e.target.closest('.gradient-card') : null;
+    if (card === lgHoverCard) return;
+    if (lgHoverCard) lgStopLoop(lgHoverCard);
+    lgHoverCard = card;
+    if (card) lgStartLoop(card);
+  });
+
+  /* Leaving the grid entirely — out of the panel, or into the toolbar — fires
+     no mouseover, so without this the last card hovered keeps playing
+     underneath a pointer that is somewhere else. */
+  gradientGrid.addEventListener('mouseleave', () => {
+    if (lgHoverCard) lgStopLoop(lgHoverCard);
+    lgHoverCard = null;
   });
 }
 

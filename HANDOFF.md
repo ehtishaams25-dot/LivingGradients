@@ -25,7 +25,7 @@ js/footer.js        the bell and the menu
 js/boot.js          start-up order (documented at the top of the file)
 js/main.js          the gradient half of the panel
 js/controls.js      per-gradient slider schemas
-js/preview.js       canvas painters for the cards, and the real renders
+js/preview.js       canvas painters for the cards, the posters and the loops
 js/colorpicker.js   the fallback colour picker (browser only)
 jsx/main.jsx        the builders (~6300 lines)
 jsx/presets.jsx     capture, thumbnail render, apply
@@ -344,7 +344,9 @@ found:
 **Open:**
 
 1. Deploy the Worker and set `API`.
-2. Run `tools/render_cards.jsx` once for the real card images.
+2. Run `tools/render_loops.jsx` for the remaining gradients. The metals went
+   first; clear `ONLY` at the top of the script and it renders whatever has no
+   `.webm` yet, so it can be run in chunks. Then `tools/encode_loops.ps1`.
 3. Run `tools/reach_calibrate.jsx`, then `node tools/reach_measure.js`, and put
    the measured slope into `LG_REACH_PER_AMOUNT`. It is the last inferred number
    in the file.
@@ -352,6 +354,66 @@ found:
    rendered evidence, but nothing has been rendered since it was written, and
    this project's own record is that source-reading diagnoses were wrong and
    rendering ones were right.
+
+**Done 2026-08-27 - the grid stops guessing: posters, and loops on hover.**
+
+The browse grid was forty-three hand-written canvas painters imitating what the
+builders ought to produce. The failure that forced this was visible in one
+screenshot: Molten Copper, Molten Gold and Molten Silver were *identical* on
+screen - one wavy shape in three tints - because `PREVIEW_FAMILY` routes all
+three through `pvMetalCard`. Three gradients that look nothing alike in a comp
+were indistinguishable in the thing whose whole job is telling them apart.
+
+So the cards show renders now, and move when you point at them:
+
+- `tools/render_loops.jsx` builds each gradient at 1920x1080 (the usual rule -
+  the builders carry hard-coded pixel values), scales it to cover a 640x360 comp
+  and writes a 270-frame PNG sequence with `saveFrameToPng`. Deliberately not the
+  render queue: `outputModule.setSettings` did not exist until AE 2020 and the
+  manifest supports 15.0+. **Resumable** - `ONLY` scopes a run, anything with a
+  finished `.webm` or a complete sequence is skipped, and a failure deletes its
+  own last frame so a half-sequence is never mistaken for a whole one.
+- `tools/encode_loops.ps1` closes the loop and encodes it. The gradients do not
+  loop on their own - the motion drifts - so 9s is rendered and 8s is kept, with
+  the 1s tail crossfaded over the head. **The tail has to be the first xfade
+  input.** That ordering is what makes output frame 0 continuous with the last
+  body frame; swapping the two puts the jump straight back and the filter graph
+  looks equally reasonable either way. Verified numerically on a synthetic ramp
+  before any real footage existed: the step across the seam came out at exactly
+  1.00, the same as any ordinary frame-to-frame step.
+- The panel stacks canvas, poster, loop. Nothing is fetched until the index says
+  it exists; no video is created until the first hover; one plays at a time;
+  leaving and coming back resumes rather than restarts. `prefers-reduced-motion`
+  and a VP9 capability check each fall back to the poster alone.
+- `$PreviewBudgetKB` in `tools/build.ps1` went 6144 -> 24576, and the allowlist
+  now reads `index.json` as JSON so `cards` can ship `.png` and `loops` `.webm`.
+  The stale `css/previews/silk.png` is gone.
+
+The first run found two bugs that had been sitting in committed code:
+
+- **`File.exists` answers as of when the File object was built.** Every frame
+  failed its write check with 300KB of perfectly good PNG on disk, because the
+  `File` is necessarily constructed before the frame is saved into it and the
+  object caches that first answer. `wroteFile()` in `render_loops.jsx` builds a
+  fresh `File` per attempt and retries briefly, since `saveFrameToPng` can also
+  return before the bytes land. **`tools/render_cards.jsx` has the identical bug
+  at its own `!png.exists` check** and has simply never been run.
+- **Satin Waves could not build at all.** `tuneMetallic` read `o.foldHeight`
+  with no `o` in scope - the line had been pasted in from `tuneMetalSurface`,
+  where `var o = lgDefaults(spec, ctrl)` exists, into a function that uses
+  `METAL_FINISHES`, which has no `foldHeight` at all. Every build of it threw
+  `ReferenceError: o is undefined`, in the panel exactly as in the render tools.
+  Now a literal 100. Found only because a render tool tried to build all four.
+
+**Open on this:** only the four metals are rendered. The rest of the library
+still shows painters, which is the designed fallback and costs nothing - but the
+grid is not finished until they are rendered too.
+
+**`tools/render_cards.jsx` is superseded and is now a trap.** It writes 336x240
+posters, and the loops need 480x270 ones to crop identically; running it would
+put a sideways jump into every card it touched. `tools/encode_loops.ps1` writes
+the posters now. Delete it or fix its size and its `exists` check - do not run
+it as it stands.
 
 ---
 
@@ -392,16 +454,17 @@ it can hang After Effects.
 - **Nothing new may hold still.** A static surface reads as a photograph rather
   than a background. Default drift speed is never 0 — Snakeskin is the one
   deliberate exception, because a drifting reflection is a metal cue.
-- **The preset id `Metallic` is labelled "Liquid Chrome".** The id was
-  deliberately not renamed so saved presets and existing layer stamps keep
-  resolving.
+- **The preset id `Metallic` is labelled "Satin Waves".** The id was
+  deliberately not renamed when the label changed, so saved presets and existing
+  layer stamps keep resolving. Expect the id and the label to disagree; the id
+  is the one anything in code should key off.
 - **Snakeskin routes to `buildMetalTexture(..., 'Hammered')` on purpose.** The
   dimple lattice that reads as beaten metal *is* a field of scales; only the
   lighting said metal. Do not give it its own builder.
 - **`tools/contact_sheet.jsx` is the review instrument**, and it must build at
   1920×1080 and scale down — many builders carry hard-coded pixel values, so a
-  small render produces wrong diagnoses. `tools/render_cards.jsx` follows the
-  same rule for the card images.
+  small render produces wrong diagnoses. `tools/render_cards.jsx` and
+  `tools/render_loops.jsx` follow the same rule for the card art.
 - **A slider's range must be a range the build can deliver.** The metal Crumple
   went to 400 while the height map's overhang could only pay for 188, so the top
   half of the control did nothing — and Foil's own default of 240 was being
@@ -412,11 +475,33 @@ it can hang After Effects.
   and the next tears the reflection across the surface instead of flowing it
   over; lighting has no such limit. When a metal reads as crinkled, Displacement
   is the one to pull back.
-- **Card previews are renders first, painters second.** `css/previews/<id>.png`
-  from `tools/render_cards.jsx`, with `js/preview.js` painting immediately and
-  swapping the image in when it loads. `index.json` in that folder is the
-  allowlist for both the panel and the build — without it, no image requests are
-  made at all.
+- **Card previews are loops first, posters second, painters third.** Every
+  `.card-preview` stacks all three, and which one you see is decided by what has
+  been rendered: the canvas painter always (an imitation, and the only thing an
+  unrendered gradient has), `css/previews/<id>.png` over it if there is one, and
+  `css/previews/<id>.webm` over both from the first hover onward. `index.json`
+  carries a `cards` list and a `loops` list and is the allowlist for the panel
+  and the build alike — without it, nothing is requested at all, which is what a
+  fresh checkout wants.
+
+- **The painters are not just a fallback, they are a known-wrong fallback.**
+  Several gradients share one: `PREVIEW_FAMILY` routes Copper, Gold and Silver
+  all through `pvMetalCard`, so the grid showed one wavy shape in three tints for
+  three gradients that look nothing alike in a comp. That is why the renders
+  exist. Do not spend effort making a painter more accurate — render it instead.
+
+- **Poster and loop must stay the same aspect ratio.** Both are cropped by one
+  `object-fit: cover` rule, so if they differ the picture jumps sideways the
+  instant a card is hovered, which reads as a glitch rather than a preview. Both
+  are 16:9 today (640×360 video, 480×270 poster). The poster is pulled from
+  frame 0 of the *encoded* loop, not from the source sequence, because the
+  crossfade means those are not the same frame.
+
+- **The loops are VP9 in WebM, and the panel checks before using them.** Adobe's
+  CEF build is not guaranteed to carry proprietary codecs, so H.264 is not safe
+  and there is no version test that reliably predicts it; `previewCanPlayLoops()`
+  asks the browser instead. If the answer is no, every card still shows its
+  poster and the grid simply stops moving.
 - **PowerShell string literals in `tools/build.ps1` must be ASCII.** The file has
   no BOM, so PowerShell 5.1 decodes it as ANSI; an em dash inside a `"..."`
   becomes a smart double quote, closes the string early, and the file stops
