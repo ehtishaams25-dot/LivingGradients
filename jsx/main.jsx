@@ -4177,13 +4177,13 @@ var MOLTEN = {
     env: 'flow', field: 'noise',
 
     /* The fold. */
-    tilt: 18, bands: 33.333, foldHeight: 25,
+    tilt: 0, bands: 0, foldHeight: 25,
 
     /* The two displacements, by menu index — 5 is Bulge Smoother and 1 is
        plain Turbulent. See the note above; these two lines are most of the
        difference between metal and a striped ramp. */
-    twistMode: 5, twistAmount: 433, twistSize: 351,
-    envMode:   1, envAmount:  229.1, envSize:  620,
+    twistMode: 5, twistAmount: 0, twistSize: 351,
+    envMode:   1, envAmount:  0, envSize:  620,
 
     /* Tritone. CC Toner's Brights and Darktones are inactive in this mode, so
        the palette is genuinely three colours — and the panel offers three
@@ -4239,9 +4239,10 @@ var METAL_SURFACES = {
         crumpleMode: 9,                   // Cross Displacement
         crumpleAmount: 718, crumpleSize: 2,
         smooth: 0,
-        tilt: 22, bands: 333, foldHeight: 100,
-        twistMode: 6, twistAmount: 0.6, twistSize: 1000,
-        envMode: 1, envAmount: -35.5, envSize: 999,
+        tilt: 0, bands: 0, foldHeight: 0,
+        twistMode: 6, twistAmount: 0, twistSize: 1000,
+        envMode: 1, envAmount: 0, envSize: 999,
+        toner: false, noiseType: 3,
         glassSoftness: 0, glassHeight: 10, glassDisplacement: 10,
         lightIntensity: 215.3, lightAngle: 305, lightHeight: 67,
         ambient: 63, diffuse: 16, specular: 63, roughness: 0.083, metal: 100,
@@ -4375,6 +4376,7 @@ function tuneMetalHeight(s, ctrl, kind) {
            coincidence, it is the controlled experiment. */
         lgFractalSet(lgFxNamed(s, ['ADBE Fractal Noise'], 'Metal Grain'), {
             fractalType: 1,
+            noiseType:   num(o.noiseType, 4),
             contrast:    num(o.hContrast, 80),
             brightness:  0,
             overflow:    num(o.overflow, 2),
@@ -4512,8 +4514,8 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
        against each other and shears the reflection instead of drifting it. */
     var tile = lgFxNamed(s, ['ADBE Tile'], 'Metal Fold');
     if (tile) {
-        try { tile.enabled = !bare; } catch (e) { }
-        LG.set(tile, 'Tile Width',    2, 100 / bands);
+        try { tile.enabled = !bare && (num(o.bands, 0) > 0); } catch (e) { }
+        LG.set(tile, 'Tile Width',    2, 100 / Math.max(1, num(o.bands, 1)));
         /* 25 on the molten metals, 100 everywhere else, and it is one of the
            four numbers that separate a pour from a stripe — see MOLTEN. */
         LG.set(tile, 'Tile Height',   3, num(o.foldHeight, 100));
@@ -4643,7 +4645,7 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     var toner = lgFx(s, ['CC Toner']);
     if (o.tritone) lgToneTri(toner, c);
     else           lgToneColors(toner, c, true);
-    if (toner) { try { toner.enabled = !bare; } catch (e) { } }
+    if (toner) { try { toner.enabled = !bare && (o.toner !== false); } catch (e) { } }
 
     /* 4. The shader. One of two, fixed per preset — never switched at run
           time, so the effect stack a live update walks is the one the build
@@ -4918,8 +4920,8 @@ function buildMetalTexture(comp, c, ctrl, w, h, dur, kind) {
 
        It costs one comp-sized layer carrying a ramp, a tile and a toner. No
        displacement, no shader, nothing expensive. */
-    var base = comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Base', w, h, 1, dur);
-    tuneMetalBase(base, c, ctrl, kind, w, h);
+    // var base = comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Base', w, h, 1, dur);
+    // tuneMetalBase(base, c, ctrl, kind, w, h);
 
     comp.layers.addSolid([0.5, 0.5, 0.5], kind + ' Metal', OW, OH, 1, dur);
 
@@ -5580,7 +5582,7 @@ function lgFractalSet(fn, o) {   /* @effect fn = ADBE Fractal Noise */
     var scale = num(o.scale, 150);
 
     LG.set(fn, 'Fractal Type', 1, fractalType);          // 2 = Turbulent Smooth
-    LG.set(fn, 'Noise Type',   2, 4);                    // 4 = Spline
+    LG.set(fn, 'Noise Type',   2, o.noiseType !== undefined ? o.noiseType : 4);                    // 4 = Spline
     LG.set(fn, 'Contrast',     4, contrast);
     LG.set(fn, 'Brightness',   5, brightness);
     LG.set(fn, 'Overflow',     6, o.overflow || 1);      // 1 Clip, 2 Soft Clamp, 3 Wrap Back
