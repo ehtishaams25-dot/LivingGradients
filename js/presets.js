@@ -54,7 +54,6 @@ const COLOR_ROLES = {
   /* The other three still run the five-stop ramp, so they keep four. */
   Brushed:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
   Foil:           ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
-  Mercury:        ['Shadow', 'Base Metal', 'Bright', 'Highlight'],
 
   /* The only gradient in the library whose first swatch is the BACKGROUND
      rather than a stop in a ramp. In this look the background is most of what
@@ -196,6 +195,5 @@ const GRADIENT_LIBRARY = [
      fractal noise shredded by a two-pixel cross displacement — with the
      shader on top of it. See METAL_SURFACES.Foil. */
   { id: 'Foil', category: 'Metal', label: 'Crumpled Foil', cssClass: 'preview-pulse', defaultColors: ['#0A0C0F', '#6E7A86', '#C6D2DC', '#FFFFFF'] },
-  { id: 'Brushed', category: 'Metal', label: 'Brushed Steel', cssClass: 'preview-pulse', defaultColors: ['#16191C', '#5C6570', '#AEB8C2', '#F2F6FA'] },
-  { id: 'Mercury', category: 'Metal', label: 'Liquid Mercury', cssClass: 'preview-pulse', defaultColors: ['#04070A', '#6C7A85', '#C3D2DB', '#FFFFFF'] }
+  { id: 'Brushed', category: 'Metal', label: 'Brushed Steel', cssClass: 'preview-pulse', defaultColors: ['#16191C', '#5C6570', '#AEB8C2', '#F2F6FA'] }
 ];

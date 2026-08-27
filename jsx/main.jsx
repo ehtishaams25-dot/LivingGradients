@@ -684,7 +684,6 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'Silver':
         case 'Brushed':
         case 'Foil':
-        case 'Mercury':
             buildMetalTexture(comp, c, controls, w, h, dur, type);
             break;
         /* Hammered is no longer a preset of its own — Snakeskin is the only
@@ -2486,7 +2485,7 @@ function updateGradientLive(paramsStr) {
            the surface exactly as it was — Relief, Brush Length and Crumple all
            live on the map, not on what you can see. */
         var SHADED = { Copper: 1, Gold: 1, Silver: 1, Brushed: 1,
-                       Foil: 1, Mercury: 1, Hammered: 1,
+                       Foil: 1, Hammered: 1,
                        /* Still reachable so a preset saved on one of the
                           removed metals goes on updating live. */
                        Polished: 1, Gunmetal: 1 };
@@ -4178,13 +4177,13 @@ var MOLTEN = {
     env: 'flow', field: 'noise',
 
     /* The fold. */
-    tilt: 18, bands: 33, foldHeight: 25,
+    tilt: 18, bands: 33.333, foldHeight: 25,
 
     /* The two displacements, by menu index — 5 is Bulge Smoother and 1 is
        plain Turbulent. See the note above; these two lines are most of the
        difference between metal and a striped ramp. */
     twistMode: 5, twistAmount: 433, twistSize: 351,
-    envMode:   1, envAmount:  229, envSize:  620,
+    envMode:   1, envAmount:  229.1, envSize:  620,
 
     /* Tritone. CC Toner's Brights and Darktones are inactive in this mode, so
        the palette is genuinely three colours — and the panel offers three
@@ -4196,12 +4195,15 @@ var MOLTEN = {
        Displacement bends the reflection against the slope, which pulls the
        bright band down into the trough of a fold instead of leaving it
        sitting on the ridge. Positive on both is the plate look. */
-    glassSoftness: 4.3, glassHeight: -58, glassDisplacement: -48,
+    glassSoftness: 4.3, glassHeight: -58, glassDisplacement: -48.2,
 
-    hWidth: 480, hHeight: 430, hContrast: 120, hComplexity: 3,
-    smooth: 9, metal: 100, ambient: 36, diffuse: 50,
-    lightIntensity: 94, lightHeight: 45, specular: 90, roughness: 17,
-    sheen: 28, speed: 7
+    hWidth: 480, hHeight: 430, hContrast: 130, hComplexity: 3,
+    crumpleMode: 1, crumpleAmount: 120, crumpleSize: 180,
+    smooth: 8, metal: 100, ambient: 36, diffuse: 50,
+    lightIntensity: 93.6, lightHeight: 45, lightAngle: 58, specular: 90, roughness: 17,
+    sheen: 28, speed: 7,
+    
+    bloomThreshold: 44.7, bloomRadius: 79.6, bloomIntensity: 0.3
 };
 
 /* One molten metal, with only what makes it that metal changed. */
@@ -4213,19 +4215,9 @@ function lgMolten(over) {
 }
 
 var METAL_SURFACES = {
-    Copper:  lgMolten({ lightAngle: 58 }),
-
-    /* Gold sits its light a little higher and further round, and runs
-       slightly hotter. Deliberately a small change: this is the same pour,
-       and the palette is what says gold. */
-    Gold:    lgMolten({ lightAngle: 72, lightHeight: 52, specular: 96,
-                        roughness: 14, sheen: 34 }),
-
-    /* Silver is the cold one. Lower ambient so the shadows stay dark instead
-       of going grey, tighter roughness for a harder highlight, and no warmth
-       anywhere in the palette. */
-    Silver:  lgMolten({ lightAngle: 44, lightHeight: 40, specular: 98,
-                        roughness: 9, ambient: 30, sheen: 22 }),
+    Copper:  lgMolten({}),
+    Gold:    lgMolten({}),
+    Silver:  lgMolten({}),
 
     /* CRUMPLED FOIL — the same discovery from the other end.
 
@@ -4241,14 +4233,17 @@ var METAL_SURFACES = {
        stack not being there is also half the render time. */
     Foil: {
         recipe: 'crinkle',
-        bare: true,                       // no ramp, fold, twist, env, toner, bloom
+        bare: false,
         field: 'noise',
         hWidth: 150, hHeight: 130, hContrast: 103, hComplexity: 4,
         crumpleMode: 9,                   // Cross Displacement
         crumpleAmount: 718, crumpleSize: 2,
         smooth: 0,
+        tilt: 22, bands: 333, foldHeight: 100,
+        twistMode: 6, twistAmount: 0.6, twistSize: 1000,
+        envMode: 1, envAmount: -35.5, envSize: 999,
         glassSoftness: 0, glassHeight: 10, glassDisplacement: 10,
-        lightIntensity: 215, lightAngle: 305, lightHeight: 67,
+        lightIntensity: 215.3, lightAngle: 305, lightHeight: 67,
         ambient: 63, diffuse: 16, specular: 63, roughness: 0.083, metal: 100,
         sheen: 0, speed: 5
     },
@@ -4270,24 +4265,6 @@ var METAL_SURFACES = {
         lightIntensity: 180, lightAngle: 300, lightHeight: 55,
         ambient: 58, diffuse: 20, specular: 60, roughness: 0.4, metal: 100,
         sheen: 10, speed: 4
-    },
-
-    /* Untouched, and the user's to change. */
-    Mercury: {
-        /* CC Blobbylize rather than CC Glass, because Blobbylize is the
-           shader that is actually about liquid: it does not just light a
-           height field, it rounds it, pulling the map's contours into
-           surface-tension shapes that merge where they meet.
-
-           Cut Away stays at 0. It does not darken the layer, it *discards*
-           it — every pixel below the threshold stops existing, which over
-           nothing is a hard-edged black void. That was the holes. */
-        shader: 'blobbylize', blobCut: 0,
-        env: 'flow', field: 'noise', overflow: 2,
-        tilt: 10, bands: 3, foldHeight: 100,
-        twistMode: 6, envMode: 4,
-        hWidth: 300, hHeight: 280, hContrast: 140, hComplexity: 2,
-        smooth: 22, metal: 100, ambient: 30, diffuse: 46
     },
 
     /* HAMMERED — no longer a preset, still a recipe.
@@ -4742,11 +4719,11 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
     // 5. Bloom on the specular, then the optional final soften.
     var g = lgFxNamed(s, ['ADBE Glo2'], 'Metal Bloom');
     if (g) {
-        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - sheen * 0.4));
-        LG.set(g, 'Glow Radius',    3, 12 + sheen * 0.9);
-        LG.set(g, 'Glow Intensity', 4, sheen / 110);
+        LG.set(g, 'Glow Threshold', 2, o.bloomThreshold !== undefined ? o.bloomThreshold : Math.max(0, 100 - sheen * 0.4));
+        LG.set(g, 'Glow Radius',    3, o.bloomRadius !== undefined ? o.bloomRadius : 12 + sheen * 0.9);
+        LG.set(g, 'Glow Intensity', 4, o.bloomIntensity !== undefined ? o.bloomIntensity : sheen / 110);
         LG.set(g, 'Glow Colors',    7, 1);                       // Original Colors
-        try { g.enabled = !bare && sheen > 0; } catch (e) { }
+        try { g.enabled = !bare && (sheen > 0 || o.bloomIntensity > 0); } catch (e) { }
     }
 
     lgBlur(s, num(o.softness, 0));

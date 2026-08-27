@@ -452,7 +452,7 @@ function pvPlates(d, W, H, pal) {
 
 /* The height field, per finish. These are the canvas equivalents of the
    layers METAL_SURFACES builds: brushed is grain stretched along one axis,
-   hammered is dimples, foil is ridges, mercury is blobs. */
+   hammered is dimples, foil is ridges. */
 function pvHeight(kind, x, y) {
   switch (kind) {
     case 'Brushed':  return pvFbm(x * 2.5, y * 70, 3, 11);
@@ -474,10 +474,7 @@ function pvHeight(kind, x, y) {
       return pvClamp(Math.sqrt(best) * g * 1.4);
     }
     case 'Foil':     return 1 - Math.abs(2 * pvFbm(x * 4.5, y * 4.5, 3, 13) - 1);
-    case 'Mercury':  {
-      const f = pvFbm(x * 2.8, y * 2.8, 2, 14);
-      return pvClamp((f - 0.44) * 5.5);          // rounded droplets
-    }
+
     case 'Gold':
     case 'Copper':   return pvFbm(x * 4.5, y * 4.5, 3, 15);
     default:         return pvFbm(x * 2.2, y * 2.2, 2, 16);   // Polished
@@ -672,7 +669,6 @@ const PREVIEW_FAMILY = {
      nothing else, which is exactly what the builder now makes. */
   Foil:           pvMetalCard('Foil',    { env: 'plate', bands: 1, relief: 0.70, shine: 0,  lightAngle: 305, lightHeight: 0.67, ambient: 0.63, specular: 0.63, tilt: 0.0 }),
   Brushed:        pvMetalCard('Brushed', { env: 'plate', bands: 5, relief: 0.30, shine: 10, lightAngle: 300, lightHeight: 0.55, ambient: 0.58, specular: 0.60, tilt: 0.10 }),
-  Mercury:        pvMetalCard('Mercury', { env: 'flow', bands: 3, relief: 0.85, shine: 110, lightAngle: 315, lightHeight: 0.60, ambient: 0.4, specular: 1.3, tilt: 0.10 }),
 
   /* Snakeskin is the hammered height field, and now it is hammered's lighting
      too — the two presets became one. */

@@ -59,7 +59,7 @@ if (LG_SL_MAIN.exists) {
     /* Which builds to take apart. Defaults come from js/controls.js the same
        way the contact sheet reads them, so a row shows what the panel builds
        rather than a builder's internal fallback. */
-    var SUBJECTS = ['Gold', 'Polished', 'Mercury', 'Brushed', 'Hammered', 'Glass'];
+    var SUBJECTS = ['Gold', 'Polished', 'Brushed', 'Hammered', 'Glass'];
 
     var root = LG_SL_ROOT;
     var log  = [];

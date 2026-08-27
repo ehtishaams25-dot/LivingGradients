@@ -368,23 +368,6 @@ const GRADIENT_CONTROLS = {
     { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
     { id: 'speed',       label: 'Drift Speed',   min: 0,  max: 60,  step: 1, default: 4,   type: 'slider' }
   ],
-
-  /* Liquid Mercury is untouched and is the user's to change. */
-  Mercury: [
-    { id: 'scaleAll',    label: 'Blob Scale',    min: 20, max: 300, step: 5, default: 100, type: 'slider' },
-    { id: 'relief',      label: 'Relief',        min: 0,  max: 100, step: 1, default: 85,  type: 'slider' },
-    { id: 'bands',       label: 'Reflections',   min: 1,  max: 40,  step: 1, default: 5,   type: 'slider' },
-    { id: 'brushLength', label: 'Brush Length',  min: 0,  max: 200, step: 5, default: 0,   type: 'slider' },
-    { id: 'warp',        label: 'Surface Churn', min: 0,  max: 250, step: 5, default: 160, type: 'slider' },
-    { id: 'lightAngle',  label: 'Light Angle',   min: 0,  max: 360, step: 1, default: 315, type: 'slider' },
-    { id: 'lightHeight', label: 'Light Height',  min: 0,  max: 100, step: 1, default: 60,  type: 'slider' },
-    { id: 'specular',    label: 'Specular',      min: 0,  max: 100, step: 1, default: 100, type: 'slider' },
-    { id: 'roughness',   label: 'Roughness',     min: 1,  max: 100, step: 1, default: 7,   type: 'slider' },
-    { id: 'sheen',       label: 'Bloom',         min: 0,  max: 100, step: 1, default: 38,  type: 'slider' },
-    { id: 'softness',    label: 'Softness',      min: 0,  max: 40,  step: 1, default: 0,   type: 'slider' },
-    { id: 'speed',       label: 'Flow Speed',    min: 0,  max: 60,  step: 1, default: 14,  type: 'slider' }
-  ],
-
   AnimeCells: [
     { id: 'pattern',    label: 'Cell Shape',
       options: ['Static Plates', 'Static Crystals', 'Static Crystallize',
