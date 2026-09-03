@@ -155,14 +155,55 @@ $n = 0
 foreach ($id in $ids) {
     $n++
     $seq = Join-Path $Work $id
-    $pattern = Join-Path $seq 'f%05d.png'
     $webm = Join-Path $Previews "$id.webm"
     $poster = Join-Path $Previews "$id.png"
 
-    $lastFrame = Join-Path $seq ("f{0:D5}.png" -f ($totalFrames - 1))
-    if (-not (Test-Path $lastFrame)) {
-        Say ("  [{0}/{1}] {2,-16} SKIP  incomplete sequence" -f $n, $ids.Count, $id) 'Yellow'
-        continue
+    # A SEQUENCE OR A MOVIE - WHICHEVER IS ACTUALLY THERE.
+    #
+    # render_loops.jsx and a cooperative render queue both leave a PNG sequence.
+    # But AE 2026 defaults its output module to H.264 and will not always be
+    # talked out of it, so queue_loops.jsx is allowed to give up and keep AE's
+    # own format rather than fail the run. Either way the frames are in the same
+    # per-id folder, so look rather than assume - and the filter graph below is
+    # frame-indexed, so it does not care which one it got.
+    $inputArgs = @()
+    $frames = @(Get-ChildItem $seq -Filter '*.png' -File -ErrorAction SilentlyContinue |
+                Sort-Object Name)
+
+    if ($frames.Count -gt 0) {
+        if ($frames.Count -lt $totalFrames) {
+            Say ("  [{0}/{1}] {2,-16} SKIP  {3}/{4} frames - not rendered yet?" -f `
+                 $n, $ids.Count, $id, $frames.Count, $totalFrames) 'Yellow'
+            continue
+        }
+        # WHERE THE SEQUENCE STARTS IS ASKED, NOT ASSUMED. render_loops.jsx
+        # names its frames from 0, the render queue names them from a [#####]
+        # placeholder tied to the comp's first frame, and ffmpeg's own image
+        # muxer starts at 1. Read it off the first filename instead.
+        $firstName = $frames[0].BaseName
+        $digits = [regex]::Match($firstName, '(\d+)$')
+        if (-not $digits.Success) {
+            Say ("  [{0}/{1}] {2,-16} SKIP  no frame number in '{3}'" -f `
+                 $n, $ids.Count, $id, $frames[0].Name) 'Yellow'
+            continue
+        }
+        $width = $digits.Groups[1].Value.Length
+        $stem = $firstName.Substring(0, $firstName.Length - $width)
+        $pattern = Join-Path $seq ("{0}%0{1}d.png" -f $stem, $width)
+        $inputArgs = @('-framerate', $fps,
+                       '-start_number', [int] $digits.Groups[1].Value,
+                       '-i', $pattern)
+    }
+    else {
+        $movie = @(Get-ChildItem $seq -File -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Extension -imatch '^\.(mp4|mov|avi|mkv|mxf|webm)$' } |
+                   Sort-Object Length -Descending | Select-Object -First 1)
+        if ($movie.Count -eq 0) {
+            Say ("  [{0}/{1}] {2,-16} SKIP  nothing rendered into {3}" -f `
+                 $n, $ids.Count, $id, $seq) 'Yellow'
+            continue
+        }
+        $inputArgs = @('-i', $movie[0].FullName)
     }
     if ((Test-Path $webm) -and (-not $Force)) {
         $kb = [math]::Round((Get-Item $webm).Length / 1KB)
@@ -177,8 +218,8 @@ foreach ($id in $ids) {
     # Two-pass. VP9 in constant-quality mode still gets a real quality gain from
     # the first pass knowing what is coming.
     $common = @(
-        '-hide_banner', '-loglevel', 'error', '-y',
-        '-framerate', $fps, '-i', $pattern,
+        '-hide_banner', '-loglevel', 'error', '-y'
+    ) + $inputArgs + @(
         '-filter_complex', $filter,
         '-map', '[v]',
         '-frames:v', $loopFrames,

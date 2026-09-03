@@ -1,0 +1,75 @@
+Living Gradients - queued loop renders
+AE 26.0x67   Mon Aug 31 2026 14:53:37 GMT+0530
+built at 1920x1080, rendered at 640x360 (scaled to cover)
+loop 8s + 1s tail at 30fps = 270 frames each
+ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
+builders : jsx/main.jsx, 315503 chars, modified Mon Aug 31 2026 14:48:08 GMT+0530
+frames   : C:\Users\Admin\AppData\Local\Temp\lg_loops
+scope    : whole library   (FORCE)
+
+STATUS   GRADIENT            NOTES
+-----------------------------------------------------------------------------------------------
+
+  output: H.264   via kept AE format
+  writing: C:\Users\Admin\AppData\Local\Temp\lg_loops\Wavy/source.mp4
+
+  Not a PNG sequence. After Effects would not change format, so
+  this keeps its own and lets ffmpeg read the result instead. That
+  is fine - one lossy step at 640x360 before the VP9 encode is not
+  visible. What was tried:
+    Format="PNG Sequence" threw Error: After Effects error: Invalid Value for key: <Format>.  Property is read-only
+    Format="PNG" threw Error: After Effects error: Invalid Value for key: <Format>.  Property is read-only
+    Format="PNG sequence" threw Error: After Effects error: Invalid Value for key: <Format>.  Property is read-only
+    output module templates: AIFF 48kHz | Alpha Only | H.264 - Match Render Settings -  5 Mbps | H.264 - Match Render Settings - 15 Mbps | H.264 - Match Render Settings - 40 Mbps | High Quality | High Quality with Alpha | Lossless | Lossless with Alpha | Multi-Machine Sequence | Photoshop | TIFF Sequence with Alpha | _HIDDEN X-Factor 16 | _HIDDEN X-Factor 16 Premul | _HIDDEN X-Factor 32 | _HIDDEN X-Factor 32 Premul | _HIDDEN X-Factor 8 | _HIDDEN X-Factor 8 Premul
+
+  QUEUED Wavy                kept AE format
+  QUEUED Liquid Ribbons      kept AE format
+  QUEUED Waves               kept AE format
+  QUEUED Fluid Gradient      kept AE format
+  QUEUED Satin Waves         kept AE format
+  QUEUED Silk                kept AE format
+  QUEUED Aurora              kept AE format
+  QUEUED Prism               kept AE format
+  QUEUED Fiber               kept AE format
+  QUEUED Veil                kept AE format
+  QUEUED Pulse               kept AE format
+  QUEUED Comet               kept AE format
+  QUEUED Oklab Smooth        kept AE format
+  QUEUED Living Gradient     kept AE format
+  QUEUED Trail Gradient      kept AE format
+  QUEUED Lava Lamp           kept AE format
+  QUEUED Sunburst            kept AE format
+  QUEUED Prismatic Burst     kept AE format
+  QUEUED ChromaFlare         kept AE format
+  QUEUED Heatmap             kept AE format
+  QUEUED Antigravity         kept AE format
+  QUEUED Web Threads         kept AE format
+  QUEUED Anime Water         kept AE format
+  QUEUED Anime Cells         kept AE format
+  QUEUED Giraffe             kept AE format
+  QUEUED Tiger               kept AE format
+  QUEUED Zebra               kept AE format
+  QUEUED Leopard             kept AE format
+  QUEUED Cow                 kept AE format
+  QUEUED Fur                 kept AE format
+  QUEUED Snakeskin           kept AE format
+  QUEUED Halftone            kept AE format
+  QUEUED ASCII Matrix        kept AE format
+  QUEUED Cellular Mosaic     kept AE format
+  QUEUED Stacked Squares     kept AE format
+  QUEUED SaaS Gradient       kept AE format
+  QUEUED Frosted Glass       kept AE format
+  QUEUED Reeded Glass        kept AE format
+  QUEUED Molten Copper       kept AE format
+  QUEUED Molten Gold         kept AE format
+  QUEUED Molten Silver       kept AE format
+  QUEUED Crumpled Foil       kept AE format
+  QUEUED Brushed Steel       kept AE format
+-----------------------------------------------------------------------------------------------
+queued 43   skipped 0   failed 0
+
+Next:
+  1. Press Render in the Render Queue (or let RENDER_NOW do it).
+  2. powershell -ExecutionPolicy Bypass -File tools/encode_loops.ps1
+  3. Set CLEANUP = true at the top of this script and run it again to
+     drop the 'LG LOOP QUEUE' folder and clear the queue.

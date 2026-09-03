@@ -4312,7 +4312,17 @@ var METAL_SURFACES = {
         tilt: 22, bands: 0, foldHeight: 0,
         twistMode: 6, twistAmount: 0, twistSize: 1000,
         envMode: 1, envAmount: 0, envSize: 999,
-        toner: false, noiseType: 3,
+        /* THE PALETTE WAS SWITCHED OFF. `toner: false` disabled CC Toner on
+           this finish, and CC Toner is the only thing on a metal that reads
+           the palette -- so Crumpled Foil offered four swatches (Shadow, Base
+           Metal, Bright, Highlight) and not one of them changed a pixel. It
+           rendered at exactly 0.00 mean chroma next to Brushed Steel's 14.35
+           off the same shading path, on a palette that carries a blue.
+
+           `bare` genuinely switches a stage off because that stage is not
+           part of the look. A dead colour control is not that -- it is a
+           control the panel still draws. */
+        toner: true, noiseType: 3,
         glassSoftness: 0, glassHeight: 10, glassDisplacement: 10,
         lightIntensity: 215.3, lightAngle: 305, lightHeight: 67,
         /* Roughness 42, which lands on the tuned sheet's 0.084.
@@ -4716,14 +4726,16 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
 
     /* 3. The palette.
 
-          Tritone is three colours and says so. CC Toner's Brights and
-          Darktones do nothing in that mode, so writing five stops into it —
-          which is what this used to do for every metal — meant two of the
-          four swatches in the panel were decorative. The molten metals now
-          declare `tritone` and take three roles: Shadow, Base Metal,
-          Highlight, straight onto Shadows, Midtones and Highlights.
+          The molten metals declare `tritone` and take three roles: Shadow,
+          Base Metal and Highlight. Everything else keeps the five-stop ramp.
 
-          Everything else keeps the five-stop ramp it had. */
+          THE CLAIM THAT USED TO BE HERE WAS WRONG. It said Brights and
+          Darktones "do nothing in that mode", and that is what let lgToneTri
+          write three stops and leave the other two at CC Toner's own tan
+          defaults. Mode 3 is Pentone, not Tritone; all five stops are live.
+          Molten Silver -- three neutral colours -- rendered gold because of
+          it. lgToneTri now fills all five and the note there carries the
+          measurement. */
     var wantToner = !bare && (o.toner !== false);
     var toner = lgFxOn(s, ['CC Toner'], wantToner);
     if (toner) {
@@ -5507,10 +5519,37 @@ function lgToneTri(toner, c) {   /* @effect toner = CC Toner */
     var body      = c[Math.floor((n - 1) / 2)];
     var highlight = c[n - 1];
 
-    LG.set(toner, 'Tones',      1, 3);                       // Tritone
-    LG.set(toner, 'Shadows',    6, shadow);
-    LG.set(toner, 'Midtones',   4, body);
-    LG.set(toner, 'Highlights', 2, highlight);
+    /* ALL FIVE STOPS, NOT THREE, AND TONES 3 IS PENTONE.
+
+       This used to set Tones to 3 with the comment "// Tritone", then write
+       Shadows, Midtones and Highlights and stop -- leaving Brights and
+       Darktones at whatever CC Toner defaults to. Those defaults are
+       #c0aa78 and #40320a: a tan and a dark olive.
+
+       Mode 3 is Pentone. lgToneStops, thirty lines down, has always said so
+       in its own comment and has always written all five. So the panel held
+       both readings of the same number and acted on the wrong one here.
+
+       What it looked like: Molten Silver. Its palette is #0B0E12 / #7E8B99 /
+       #FFFFFF -- three neutrals, no hue anywhere -- and it rendered visibly
+       gold, because two of the five stops it was being mapped through were a
+       tan nobody chose. Measured on a build: mean chroma 29.3/255 with a peak
+       of 71 on a palette whose own chroma is 14. Copper and Gold hid it, being
+       warm already; the neutral one is where a foreign colour has nowhere to
+       blend in.
+
+       Sweeping Tones 1..5 does not fix it -- no mode renders neutral, because
+       the wrong colours are in the STOPS, not in the mode. So this fills every
+       stop from the palette and the choice of mode stops mattering: the two
+       intermediates are the midpoints either side of the body colour, which is
+       what a metal ramp wants anyway. A three-colour palette still gives a
+       three-colour metal; it just no longer travels through a tan to get
+       between them. */
+    lgToneStops(toner, [ shadow,
+                         lgMix(shadow, body, 0.5),
+                         body,
+                         lgMix(body, highlight, 0.5),
+                         highlight ]);
     return toner;
 }
 
@@ -5753,15 +5792,47 @@ function lgTurbSet(td, o) {   /* @effect td = ADBE Turbulent Displace */
        over nothing, that reads as a hard-edged black void, which is exactly
        what the metals were showing.
 
-       'Pin All' (option 1) clamps the fetch to the layer's own edges, so an
+       'Pin All' clamps the fetch to the layer's own edges, so an
        out-of-bounds sample returns the nearest real pixel instead of a hole.
        Resize Layer stays off: the layers here are already oversized on purpose
        (see LG_OVERSIZE) and letting the effect grow them again would knock
        every downstream index and bump-layer reference out of alignment.
 
+       PIN ALL IS OPTION 11, NOT OPTION 1, AND THIS LINE SAID 1.
+
+       The INDEX was right and the VALUE was wrong, which is the one kind of
+       dropdown error nothing here was checking for. index_audit.js verifies
+       that property 12 is Pinning -- and it is -- so the audit passed, in
+       green, while every Turbulent Displace in the library ran unpinned.
+       A wrong value hides in exactly the place a wrong index cannot.
+
+       Measured, not reasoned, on the rule this file already lives by. Copper
+       was built at 1920x1080, the comp then grown to the metal layer's own
+       5376x3024 so all four edges were inside the frame, a pure green solid
+       put underneath so torn alpha could not be mistaken for a dark pixel,
+       and all seventeen options rendered. Green pixels over the whole layer:
+
+         option  1  (what was here)   30043    tears on all four edges
+         option  3                     1281    right edge only
+         option  4                    14374
+         option  8                    20775
+         option 11                        0    <-- pins all four
+         option 12                     8471
+         option 16                    16944
+
+       Option 11 is the only value that tears nowhere, which is what Pin All
+       means. In the visible 1920x1080 crop, option 1 was leaving 6.64% of the
+       frame as hard-edged black voids: the holes hanging from the top of
+       Molten Copper, Molten Gold and Molten Silver.
+
+       This is one line and it is not one gradient. lgTurbSet is the only place
+       Pinning is written and twelve call sites go through it, so the same tear
+       was in everything that displaces -- which is why the symptom looked
+       different every time it was chased.
+
        Both are indices 12 and 13 -- from tools/effect_probe_report.txt, not
-       from memory. */
-    LG.set(td, 'Pinning',      12, 1);
+       from memory. The 11 is from the sweep above, for the same reason. */
+    LG.set(td, 'Pinning',      12, 11);
     LG.set(td, 'Resize Layer', 13, false);
     return td;
 }

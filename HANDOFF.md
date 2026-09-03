@@ -253,17 +253,21 @@ found:
 - **Polished Chrome and Gunmetal stay cut.** Their recipes remain in
   `METAL_SURFACES` and in `SHADED` so presets saved on them still build and
   still update live; nothing offers them.
-- **CC Toner index 3 is Tritone, not Pentone**, and the comment saying Pentone
-  had been wrong for a long time. Brights and Darktones are inert in that
-  mode — so two of the five stops the panel writes have never done anything, on
-  every metal, print and glass it has ever made. The molten metals now use
-  `lgToneTri()` and take three colours because three is what the shader eats.
+- **CC Toner index 3 is Tritone, not Pentone.** ***Corrected 2026-08-31: this
+  is exactly backwards. Mode 3 is Pentone, all five stops are live, and the
+  claim below that Brights and Darktones are inert is what let `lgToneTri()`
+  write three of them and leave two at CC Toner's tan defaults. See the
+  2026-08-31 section.*** The molten metals use `lgToneTri()` and take three
+  colours because three is what the palette means — but it now fills all five
+  stops so the mode cannot matter.
 - **A measured recipe is not budgeted.** `lgDisplaceBudget` converts overhang
   into an Amount at a flat 3.2px per unit; the molten stack asks for 433 + 229,
   which that model says needs 2118px of overhang against the 972px that exists
   — and the hand-tuned comp has no holes anywhere. Reach depends on the mode
   and the Size, neither of which the model looks at. What actually makes holes
-  impossible is **Pin All**, which `lgTurbSet` sets on every one of them. Specs
+  impossible is **Pin All** — which `lgTurbSet` *believed* it was setting on
+  every one of them and ***was not: it wrote option 1, and Pin All is option
+  11. Corrected 2026-08-31; see that section.*** Specs
   that state their amounts get them; specs that derive amounts from the Crumple
   slider still go through the budget, because those are guesses.
 - **`tools/recipe_dump.jsx`** — select layers, run it, and it writes every
@@ -325,10 +329,14 @@ found:
   and reported success. `live_audit` now reports 48 of 48.
 - **The holes are budgeted against a measured model, and backstopped anyway.**
   `LG_REACH_PER_AMOUNT` replaces the `LG_DISPLACE_HEADROOM` guess and every
-  metal's stack now fits its overhang exactly. On top of that each metal carries
+  metal's stack now fits its overhang exactly. On top of that each metal carried
   a `<kind> Base` layer — the same reflection, undisplaced and blurred, sitting
-  beneath the surface — so a tear can only read as a soft patch, never a void.
-  That part does not depend on the constant being right.
+  beneath the surface — so a tear could only read as a soft patch, never a void.
+  ***Stale: the Base layer was removed afterwards. `buildMetalTexture` builds
+  two layers for a shaded finish and one for a molten one, and the live update
+  deletes a stale Base when it finds one. Nothing has backstopped a tear since;
+  what was actually holding the metals up was oversize alone, with the pinning
+  broken underneath it. Corrected 2026-08-31.***
 - **CC Glass Displacement is capped by the height field's finest feature.**
   `tools/bisect/06` is smooth flowing ribbons and `07`, whose only difference is
   CC Glass switching on, is wrinkled foil. Foil's field is about 16px across and
@@ -408,6 +416,41 @@ The first run found two bugs that had been sitting in committed code:
 **Open on this:** only the four metals are rendered. The rest of the library
 still shows painters, which is the designed fallback and costs nothing - but the
 grid is not finished until they are rendered too.
+
+**Three ways to get card art in, and they all end at the same encoder.**
+`tools/queue_loops.jsx` builds every gradient and puts it in the AE render
+queue as a PNG sequence - the fast path, and the one to reach for: the queue
+has a progress bar, a time estimate and a Pause button, where
+`tools/render_loops.jsx` calls `saveFrameToPng` 270 times per gradient with the
+application frozen throughout. `tools/import_previews.ps1` skips After Effects
+entirely and takes video you made yourself out of `css/previews/incoming/`, in
+any format at any size. All three feed `tools/encode_loops.ps1`, which is the
+only thing that writes `index.json`.
+
+`queue_loops.jsx` leaves an `LG LOOP QUEUE` folder in the project on purpose -
+the queue renders after the script exits, so the comps cannot be swept up the
+way `render_loops.jsx` sweeps them. Set `CLEANUP = true` at the top and run it
+again once the render is done.
+
+**Do not use `applyTemplate` for render or output settings.** Template names are
+localised, and this project has already been bitten once by a locale-dependent
+lookup. `outputModule.setSettings()` takes English keys on every locale.
+
+**And do not assume setSettings took.** On AE 2026 the default output module is
+H.264, and asking for `Format` and `Output File Info` in one call left it on
+H.264 - changing the format resets the output path, so the two must be set
+separately, in that order. `queue_loops.jsx` reads the format back after every
+attempt, tries a few spellings, then searches the output-module templates for
+one whose name mentions png, and if none of that lands it **keeps AE's format
+and sets only the path**. A lossy intermediate at 640x360 is not visible after
+the VP9 encode, and is much better than a run that refuses to start.
+`encode_loops.ps1` takes a movie or a sequence without being told which.
+
+**The encoder does not assume where a sequence starts.** `render_loops.jsx`
+names its own frames from 0, the render queue names them from a `[#####]`
+placeholder, and ffmpeg's own image muxer starts at 1. `encode_loops.ps1` reads
+the first filename and derives the stem, the digit width and the start number
+from it.
 
 **`tools/render_cards.jsx` is superseded and is now a trap.** It writes 336x240
 posters, and the loops need 480x270 ones to crop identically; running it would
@@ -507,3 +550,63 @@ it can hang After Effects.
   becomes a smart double quote, closes the string early, and the file stops
   parsing 250 lines later. Comments and `'...'` are unaffected, which is why the
   em dashes already in there have always been harmless.
+
+---
+
+**Done 2026-08-31 — the metals, measured through a live bridge.**
+
+After Effects was driven directly from the shell this session (Flue's CEP
+bridge), so every claim below was rendered and looked at rather than reasoned
+out of the source. That is the same rule the metals were rebuilt under, applied
+to the diagnosis instead of the recipe.
+
+Three bugs, all of them settings rather than structure, and two of the three
+were in code that reads as if it already knew better.
+
+- **`Pinning` was option 1, and Pin All is option 11.** Every Turbulent
+  Displace in the library ran unpinned. The index was right — `index_audit.js`
+  checks that property 12 is Pinning, and it is — so the audit passed in green
+  while the *value* was wrong. **A wrong dropdown value hides in exactly the
+  place a wrong index cannot, and nothing here checks for it.**
+
+  Measured: Copper built at 1920×1080, the comp then grown to the metal layer's
+  own 5376×3024 so all four edges were in frame, a pure green solid underneath
+  so torn alpha could not be read as a dark pixel, all seventeen options
+  rendered and the green counted. Option 11 is the only one that tears nowhere.
+  Option 1 was leaving **6.64% of the visible frame as hard black voids** — the
+  holes hanging off the top of Molten Copper, Gold and Silver.
+
+  One line, twelve call sites. This was never a metal bug; it was in everything
+  that displaces, which is why the symptom looked different every time it was
+  chased.
+
+- **`lgToneTri` filled three of five stops.** Mode 3 is Pentone, not Tritone —
+  `lgToneStops` thirty lines below has always said so and has always written all
+  five. So the file held both readings of the same number and acted on the wrong
+  one. The two unwritten stops kept CC Toner's defaults: **#c0aa78 and #40320a,
+  a tan and a dark olive.** Molten Silver's palette is three neutrals and it
+  rendered visibly gold — mean chroma 29.3 against a palette chroma of 14.
+  Copper and Gold hid it by being warm already. Sweeping the mode does not fix
+  it, because the wrong colours are in the stops; `lgToneTri` now fills all five
+  from the palette and the mode stops mattering. Silver came back to 15.3.
+
+- **Crumpled Foil's palette did nothing.** `toner: false` disabled CC Toner, and
+  CC Toner is the only thing on a metal that reads the palette — so the panel
+  drew four swatches (Shadow, Base Metal, Bright, Highlight) and none of them
+  changed a pixel. It rendered at 0.00 mean chroma beside Brushed Steel's 14.35
+  off the same shading path. `bare` switches off a stage that is not part of the
+  look; a dead colour control is not that.
+
+**Still open on the metals, and it needs your eye, not another render.**
+Crumpled Foil reads as fine vertical static rather than as a crumpled sheet.
+`crumpleSize` is a real user slider ("Crease Size", 1–40) and it works — the
+default of 2 is what makes it static. Swept 2/8/16/26/40: at 40 it has real
+pleat structure, at 2 it is noise. **The default was not changed**, because 2 is
+documented as read off the tuned sheet and this is a taste call. Renders are in
+the session scratchpad.
+
+**A gap worth closing.** The three audits check indices, live paths and panel
+scope. Nothing checks that a dropdown *value* means what the code says it means,
+and two of today's three bugs were exactly that. `effect_probe_report.txt`
+records how many options each dropdown has but not what they are called, so the
+check does not exist yet.
