@@ -1,16 +1,16 @@
 # Living Gradients — handoff
 
 Paste this into a fresh chat to bring anyone (or any assistant) up to speed.
-Current as of **2026-08-25, v2.1.0**.
+Current as of **2026-09-04, v2.2.0**.
 
 ---
 
 ## What this is
 
-A CEP panel for After Effects that builds 46 procedural gradients out of
+A CEP panel for After Effects that builds 43 procedural gradients out of
 native effects — molten metal, glass, halftone, animal prints, anime cel water,
 aurora, silk, SaaS blooms. No footage; everything is resolution-independent and
-recolourable. Sold by Digivero, licensed through Gumroad.
+recolourable. Sold by Mohammed Ehtishaam Shaikh, licensed through Gumroad.
 
 ```
 index.html          the panel
@@ -116,8 +116,8 @@ in Add from library. Only Delete destroys.
 
 | Platform | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\Digivero\LivingGradients\v2` |
-| macOS | `~/Library/Application Support/Digivero/LivingGradients/v2` |
+| Windows | `%APPDATA%\Ehtishaam\LivingGradients\v2` |
+| macOS | `~/Library/Application Support/Ehtishaam/LivingGradients/v2` |
 
 Resolved via `CSInterface.getSystemPath(SystemPath.USER_DATA)` — **not**
 `process.env`, which is absent exactly when the Node fallback is needed and
@@ -160,7 +160,7 @@ The build **stages from an allowlist**, strips `.debug`, drops unreferenced
 2. **Two folders with the same `ExtensionBundleId` means After Effects loads
    one, and not the one you just wrote.** A hand-copied `LivingGradients` folder
    (the whole repo, 197MB, `.debug` included) sat next to
-   `com.digivero.livinggradients` and AE served the stale one — the panel looked
+   `com.ehtishaam.livinggradients` and AE served the stale one — the panel looked
    like the change had not happened. `build.ps1 -Install` sweeps any other folder
    declaring the same bundle id before copying, so **`.\sync_to_cep.ps1` is the
    fix**; never copy the repo into the extensions folder by hand.
@@ -171,7 +171,7 @@ change:
 ```powershell
 Get-ChildItem "$env:APPDATA\Adobe\CEP\extensions" -Directory |
   Where-Object { Test-Path "$($_.FullName)\CSXS\manifest.xml" } |
-  Where-Object { (Select-String -Path "$($_.FullName)\CSXS\manifest.xml" -Pattern 'com.digivero.livinggradients' -Quiet) } |
+  Where-Object { (Select-String -Path "$($_.FullName)\CSXS\manifest.xml" -Pattern 'com.ehtishaam.livinggradients' -Quiet) } |
   Select-Object Name, FullName
 ```
 
@@ -193,7 +193,7 @@ Get-ChildItem "$env:APPDATA\Adobe\CEP\extensions" -Directory |
 `server/worker.js` — one Cloudflare Worker, three routes the panel calls
 (`/version`, `/messages`, `/feedback`) plus `/admin/*` behind a bearer token.
 Fully tested locally; **not yet deployed**. `js/service.js` still points at the
-placeholder `https://api.digivero.dev/living-gradients`, and the build warns
+placeholder `https://api.livinggradients.dev/living-gradients`, and the build warns
 about it. See `server/README.md`.
 
 Privacy: the version and message checks send only the panel version. Feedback
@@ -550,6 +550,139 @@ it can hang After Effects.
   becomes a smart double quote, closes the string early, and the file stops
   parsing 250 lines later. Comments and `'...'` are unaffected, which is why the
   em dashes already in there have always been harmless.
+
+---
+
+**Done 2026-09-04 - the V2.2 commercial pass. Every gradient rendered and
+looked at, the cursor put back on the pointer, the trial gone.**
+
+The full record is in `V22_AUDIT.md`, `GRADIENT_QA_V22.md`,
+`SAAS_GRADIENT_RESEARCH.md`, `V22_RELEASE_QA.md`, `V22_ARCHITECTURE.md`,
+`V22_KNOWN_LIMITATIONS.md` and `CHANGELOG.md`. What belongs here is the handful
+of things that will bite the next person.
+
+**All 43 gradients were built and rendered at 1920x1080 and sampled at five
+points across their animation, and there are no displacement tears anywhere.**
+The worst enclosed-hole figure in the library is 0.36%, on Prismatic Burst, and
+that is the gaps between its rays. The `Pin All` fix from 2026-08-31 held across
+everything. New instruments: `tools/qa_sweep.jsx` builds and renders any subset
+at any size, `tools/qa_analyse.js` reads the frames back and measures holes,
+voids, clipping, banding, flatness, chroma, motion and loop seam.
+
+- **A HOLE IS NOT THE SAME THING AS TRANSPARENCY, and the first run of the
+  measurement conflated them.** Ten gradients came back at "100% holes" and every
+  one was a SilkFlare-family look - a blurred colour field through a rotating
+  shape matte, so most of the frame is clear by design. Silk is 42.9% fully
+  transparent and none of it is torn. What distinguishes a tear is that it is
+  *enclosed*: transparency with opaque pixels around it. Measure that instead.
+
+- **Satin Waves was blowing 63.8% of the frame to pure white.** It rendered as
+  white paper with two black lines on it. The Sheen control was mapped as an
+  exposure - threshold `100 - sheen*0.8`, so at the default of 45 more than half
+  the fold was inside the bloom with the intensity near unity. Found by sweeping
+  the slider and measuring, not by reading: sheen 0 gives 3.5% blown, 20 gives
+  41%, 45 gives 63.8%. Re-mapped so only the crests catch light. Now 17.5%, and
+  the whole 0-100 range is usable instead of destroying the look above about 20.
+
+- **Two gradients were completely static**, which the library's own rules
+  forbid. Oklab Smooth was a ramp with no animation of any kind. Anime Cells
+  shipped with both Evolution Speed and Drift defaulting to 0. Both measured
+  0.00 mean luma change across eight seconds, which is how they were found -
+  nobody had noticed by looking.
+
+- **Web Threads rendered as a bright line across an empty frame.** Amplitude is
+  `spread*h*10 * |t-pinch|^taper` and at taper 3 the cube of a number below one
+  collapses it, so every thread lived inside a 266px band in a 1080px frame.
+  Arithmetic, not an effect.
+
+**Do not run anything that drives After Effects unattended without a quiet
+flag.** This cost most of a session. `tools/render_loops.jsx` finished with
+`alert()` and then `report.execute()`. The alert blocks the application, so every
+subsequent `evalScript` is refused with *"Attempt was made to run a second script
+while another script was already running"* - which looks exactly like the render
+having died, so the chunk driver re-fired, and stacked another modal. Three
+dialogs deep the only visible symptom was that nothing was happening.
+`report.execute()` is worse: After Effects treats opening a file as running a
+script and leaves a security prompt on screen. Both are behind `quiet` in
+`tools/qa/loops.json` now, and the lesson generalises to any new tool.
+
+**A non-zero file length is not a finished file.** The `wroteFile()` retry in
+both render tools accepted the first size it could read, and `saveFrameToPng`
+returns before the bytes are flushed - so a frame can be read half-written.
+ffmpeg reported `chunk too big` on one, and a truncated frame measures as a frame
+full of holes. Wait for two consecutive reads at the same size, and give it
+twenty seconds: a heavy stack takes several seconds per frame and a short budget
+failed three gradients at frame 16-25 with nothing wrong except impatience.
+
+**The version of record moved.** `js/service.js` is gone - it pointed at a
+Cloudflare Worker that was never deployed, so the bell could not ring and the
+feedback form could not send. It took `PANEL_VERSION` with it, and left two
+readers behind: About showed the literal `__PANEL_VERSION__`, and every exported
+preset bundle was stamped `2.0.0` from a hardcoded fallback. The number now lives
+on `<html data-panel-version>`, `lgPanelVersion()` in `js/ui.js` is the only
+thing that reads it, and **the build fails if the placeholder is missing** rather
+than warning.
+
+**The build's network check is stricter than it was.** It used to look for the
+API placeholder in one file. It now fails on any absolute URL in panel
+JavaScript outside a two-host Gumroad allowlist, which catches a re-added
+placeholder, a leftover localhost endpoint and a debug webhook under one rule.
+Adding a host is a deliberate edit with a reason next to it.
+
+**The fluid cursor is on the pointer now, and the fix was not smoothing.**
+`Mouse.setCoords` always wrote the raw pointer straight into `coords`, so there
+was never any smoothing to remove. What made it feel slow was that
+`ExternalForce` applied exactly one impulse per frame at the last known position,
+with the whole frame's travel as its force - so a fast stroke deposited a row of
+widely spaced blobs. It now splats along the path the pointer actually took,
+using the sub-frame samples `getCoalescedEvents()` already had, with the frame's
+momentum divided between the steps so the step count changes smoothness and never
+strength. Four modes, SNAPPY default, measured at **0.0px head error**; the
+handover from the idle demo went from 250ms to 50ms.
+
+**Every card shows a real render now.** All 43 have posters.
+`tools/poster_from_qa.js` writes them from the QA frames for anything with no
+loop yet and leaves alone anything that has one - because where a loop exists the
+poster has to keep coming from frame 0 of the *encoded* loop, not the source
+sequence.
+
+**THE RENDER TOOLS COULD DELETE THE USER'S COMPS, AND DID.** This is the most
+important thing in this section. All five — `render_loops.jsx`,
+`queue_loops.jsx`, `contact_sheet.jsx`, `render_cards.jsx` and the new
+`qa_sweep.jsx` — decided which project items belonged to the run by recording
+`beforeItems = app.project.numItems` and then sweeping everything at an index
+above it into the tool's own folder, which `render_loops.jsx` deletes whole at
+the end.
+
+Indices are not stable. `app.project.item(i)` enumerates in the Project panel's
+own order, not insertion order, and every removal shifts every index after it.
+Across forty-three gradients that each add items and then have them removed, the
+count falls below the indices of items that were already in the project, and the
+descending loop reaches them. After the full library render this project held
+neither the comp it started with nor the folder tree that had been created for
+the run.
+
+Fixed by snapshotting the items that exist before anything is built and treating
+exactly the ones not in that list as the run's own - `lgSnapshotItems()` and
+`lgWasHereBefore()`, now in all five. Verified by rebuilding the comp, running a
+full build-and-clean cycle over it, and confirming it survived. **Any new tool
+that touches `app.project.items` needs the same helper.**
+
+**There is a fourth audit now.** `tools/dropdown_audit.js`, and
+`tools/build.ps1` gates on it with the other three. It binds every write to the
+effect it lands on - `Pinning` is a property on Wave Warp as well as on
+Turbulent Displace, with different options, so a name-only check fires on the
+wrong lines - then range-checks the literal and asserts the two facts that have
+been wrong before. It cannot check a dropdown nobody has written down yet:
+`effect_probe_report.txt` has option counts but not option names, so eleven
+writes that come from a variable stay unchecked.
+
+**Still open, and honestly:** only 1920x1080 was measured - portrait, square and
+4K were not, because After Effects was rendering previews for the rest of the
+session. Nothing checks that a dropdown *value* means what the code says it
+means, which is still the gap that produced the two worst bugs in this product's
+history. `server/worker.js` is written and undeployed. See
+`V22_KNOWN_LIMITATIONS.md`.
 
 ---
 

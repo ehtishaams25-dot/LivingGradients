@@ -17,9 +17,9 @@
    entirely in the background, the network. Anything that fails leaves a banner
    explaining what stopped working and what still does.
 
-   LOAD ORDER (index.html): store → library → ui → service → shelf → footer →
-   controls/preview/main → boot. Boot is last because it assumes everything
-   else has defined itself. */
+   LOAD ORDER (index.html): store → library → ui → license → presets →
+   controls → preview → colorpicker → shelf → footer → main → boot. Boot is
+   last because it assumes everything else has defined itself. */
 
 (function () {
   'use strict';
@@ -74,9 +74,9 @@
   /* ── 3. THE PRESETS TAB ──────────────────────────────────────────────
 
      Inserted rather than written into index.html, so that the tab and its view
-     arrive together and cannot drift apart. The tab bar in a docked panel is
-     narrow, so this sits third — after Browse and Edit, before Fluid — because
-     that is the order of how often it is reached for. */
+     arrive together and cannot drift apart. It lands last of the three, which
+     is both the order they are reached for and the order of the work: find a
+     gradient, dial it in, keep it. */
 
   function installTab() {
     var nav = document.querySelector('.tabs-nav');
@@ -88,9 +88,7 @@
     tab.id = 'tab-presets';
     tab.textContent = 'Presets';
 
-    var fluidTab = document.getElementById('tab-fluid');
-    if (fluidTab) nav.insertBefore(tab, fluidTab);
-    else nav.appendChild(tab);
+    nav.appendChild(tab);
 
     var view = document.createElement('main');
     view.className = 'view-panel lg-shelf';
@@ -134,18 +132,31 @@
        handler already sets the title, the mini preview, the control set and
        the tab, and a second copy of that would drift within a week. */
     window.lgSelectType = function (type, colors, controls) {
-      var card = document.querySelector('.gradient-card[data-type="' + type + '"]');
-      if (card) card.click();
-      else if (typeof selectedType !== 'undefined') selectedType = type;
+      /* Filling the inspector is a load, not an edit. lgWhileLoading is the
+         one place that distinction is enforced, and it has to wrap the
+         setTimeout below as well — otherwise the controls arrive after the
+         window has closed and read as the user having moved them. See the
+         binding block at the top of js/main.js. */
+      var load = (typeof lgWhileLoading === 'function')
+        ? lgWhileLoading
+        : function (fn) { fn(); };
 
-      if (colors && colors.length && typeof setColors === 'function') {
-        setColors(colors, colors.length);
-      }
-      if (controls && typeof applyPolledControls === 'function') {
-        /* After the card click has rebuilt the control set — otherwise the
-           values land on controls that are about to be replaced. */
-        setTimeout(function () { applyPolledControls(controls); }, 30);
-      }
+      load(function () {
+        var card = document.querySelector('.gradient-card[data-type="' + type + '"]');
+        if (card) card.click();
+        else if (typeof selectedType !== 'undefined') selectedType = type;
+
+        if (colors && colors.length && typeof setColors === 'function') {
+          setColors(colors, colors.length);
+        }
+        if (controls && typeof applyPolledControls === 'function') {
+          /* After the card click has rebuilt the control set — otherwise the
+             values land on controls that are about to be replaced. */
+          setTimeout(function () {
+            load(function () { applyPolledControls(controls); });
+          }, 30);
+        }
+      });
     };
 
     /* An image dropped anywhere on the panel means "take the colours out of
@@ -250,6 +261,28 @@
      out. Said once, at the top, rather than as six confusing failures later. */
 
   function runDiagnostics(store, hostInfo) {
+    /* The data folder moved in 2.3.0, when the old vendor name was dropped.
+       LGStore copies the old tree across the first time it sees one, and this
+       is the only place that says so — a library that silently relocates is
+       indistinguishable from one that lost something, right up until the user
+       goes looking on disk and finds two of them. */
+    if (store.migrated) {
+      LGUI.banner('lg-banner-moved', {
+        kind: 'info',
+        title: 'Your presets moved with you',
+        body: store.migrated.files + ' file(s) were copied from the old folder (' +
+          store.migrated.from + ') into ' + store.migrated.to + '. The originals ' +
+          'were left where they were, so nothing is at risk — delete the old folder ' +
+          'once you are happy everything is here.',
+        action: {
+          label: 'Show me',
+          onClick: function () {
+            if (LGFooter && typeof LGFooter.revealDataFolder === 'function') LGFooter.revealDataFolder();
+          }
+        }
+      });
+    }
+
     if (!store.writable) {
       LGUI.banner('lg-banner-store', {
         kind: 'error',
@@ -310,7 +343,6 @@
       if (bridge) bridge.evalScript('lgSweepTempThumbs()', function () { });
     });
 
-    if (typeof LGService !== 'undefined') LGService.start();
   }
 
   if (document.readyState === 'loading') {

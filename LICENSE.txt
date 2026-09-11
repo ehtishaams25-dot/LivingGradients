@@ -2,12 +2,12 @@ LIVING GRADIENTS
 End User Licence Agreement
 
 Version 2.1.0
-Digivero
+Mohammed Ehtishaam Shaikh
 
 --------------------------------------------------------------------------
 Please read this before installing. Installing or using Living Gradients
 means you accept these terms. If you do not accept them, do not install it,
-and contact Digivero for a refund in line with the refund policy of the store
+and contact Mohammed Ehtishaam Shaikh for a refund in line with the refund policy of the store
 you bought it from.
 --------------------------------------------------------------------------
 
@@ -16,7 +16,7 @@ you bought it from.
 
 Living Gradients is a panel extension for Adobe After Effects. You are buying
 a licence to use it. You are not buying the software itself, and ownership of
-it stays with Digivero.
+it stays with Mohammed Ehtishaam Shaikh.
 
 One purchase covers one person. That person may install and use Living
 Gradients on any number of computers they personally work on — a desktop and a
@@ -30,7 +30,7 @@ using it.
     limit on the number of projects.
 
   - Keep and use everything it produces. THE GRADIENTS YOU MAKE ARE YOURS.
-    Digivero claims no rights over any composition, render, still or video you
+    Mohammed Ehtishaam Shaikh claims no rights over any composition, render, still or video you
     create with this panel, and no attribution is required. You may use them
     in paid client work, in products you sell, and in work you licence on to
     someone else.
@@ -70,7 +70,7 @@ the key. If you change machines, deactivate on the old one from the panel's
 settings, or just activate on the new one — the key is not machine-locked.
 
 Treat the key like a password. A key found in public is deactivated, and
-Digivero will replace it once for the person who bought it.
+Mohammed Ehtishaam Shaikh will replace it once for the person who bought it.
 
 
 5. WHAT THE PANEL SENDS
@@ -96,7 +96,7 @@ policy.
 Updates to version 2.x are included. A future major version may be a separate
 purchase, usually with an upgrade price for existing customers.
 
-Digivero is not obliged to keep releasing updates, or to keep the panel working
+Mohammed Ehtishaam Shaikh is not obliged to keep releasing updates, or to keep the panel working
 with future versions of After Effects — though the intent is plainly to do
 both.
 
@@ -115,9 +115,9 @@ setup before you depend on it for a deadline.
 
 8. LIMITATION OF LIABILITY
 
-To the fullest extent permitted by law, Digivero's total liability for any
+To the fullest extent permitted by law, Mohammed Ehtishaam Shaikh's total liability for any
 claim arising out of Living Gradients is limited to the amount you paid for
-it. Digivero is not liable for lost work, lost time, lost profits, or any
+it. Mohammed Ehtishaam Shaikh is not liable for lost work, lost time, lost profits, or any
 indirect or consequential loss.
 
 Keep backups of your After Effects projects. That is good practice with any
@@ -133,7 +133,7 @@ section 2 survives termination.
 
 10. GENERAL
 
-This is the entire agreement between you and Digivero about Living Gradients,
+This is the entire agreement between you and Mohammed Ehtishaam Shaikh about Living Gradients,
 and it replaces anything said elsewhere. If any part of it is unenforceable,
 the rest still stands.
 
@@ -165,6 +165,6 @@ affiliated with, endorsed by, or sponsored by Adobe.
 --------------------------------------------------------------------------
 
 Questions, volume licences, or a key that has gone astray:
-https://digivero.gumroad.com/l/livinggradients
+https://ehtishaam.gumroad.com/l/livinggradients
 
-(c) 2026 Digivero. All rights reserved.
+(c) 2026 Mohammed Ehtishaam Shaikh. All rights reserved.

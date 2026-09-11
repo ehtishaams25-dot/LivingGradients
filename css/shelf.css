@@ -500,6 +500,25 @@
 
 .lg-shelf-tools { display: flex; align-items: center; gap: var(--lg-gap-xs); }
 
+/* A split button: one action, one menu, joined so they read as one control
+   rather than as two buttons that happen to be touching. The hairline is the
+   only thing separating them, which is what makes the arrow read as "more of
+   this" instead of "something else". */
+.lg-split { display: inline-flex; align-items: stretch; }
+.lg-split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 9px;
+}
+.lg-split-caret {
+  width: 24px;
+  padding: 0;
+  justify-content: center;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.28);
+}
+
 .lg-shelf-list {
   flex: 1;
   min-height: 0;
@@ -824,7 +843,7 @@
 .lg-setting-text em { color: var(--text-faint); font-size: var(--fs-eyebrow); font-style: normal; line-height: 1.45; }
 .lg-setting-head { display: flex; align-items: center; justify-content: space-between; }
 .lg-setting-head strong { color: var(--text-main); font-size: var(--fs-label); font-weight: 600; }
-.lg-setting-value { color: var(--accent); font-family: var(--font-mono); font-size: var(--fs-eyebrow); }
+.lg-setting-value { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-eyebrow); }
 .lg-setting-hint { color: var(--text-faint); font-size: var(--fs-eyebrow); line-height: 1.5; }
 
 .lg-settings-where { margin-top: var(--lg-gap-lg); }
@@ -837,7 +856,7 @@
   border-radius: 7px;
   background: var(--bg-input);
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: var(--fs-eyebrow);
 }
 .lg-settings-where .lg-btn { margin-top: var(--lg-gap-sm); }
@@ -924,7 +943,7 @@
   overflow-wrap: anywhere;
   border-radius: 5px;
   background: var(--bg-input);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: var(--fs-eyebrow);
 }
 
@@ -1017,7 +1036,7 @@ body.lg-dropping::after {
 
 .xy-readout {
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: var(--fs-eyebrow);
   font-variant-numeric: tabular-nums;
 }

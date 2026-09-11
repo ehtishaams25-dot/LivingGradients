@@ -1,0 +1,25 @@
+Living Gradients — card renders
+AE 26.0x67   Sat Sep 05 2026 04:08:00 GMT+0530
+built at 1920x1080, saved at 336x240 (scaled to cover), still at 2s
+ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
+builders : jsx/main.jsx, 320277 chars, modified Sat Sep 05 2026 03:20:40 GMT+0530
+out      : css/previews/
+
+STATUS  GRADIENT            KB     NOTES
+-----------------------------------------------------------------------------------------------
+  OK    Prismatic Burst     243    
+  OK    ChromaFlare         18     
+  OK    Heatmap             113    
+  OK    Antigravity         138    
+  OK    Web Threads         45     
+  OK    Anime Cells         94     
+  OK    ASCII Matrix        56     
+  OK    Cellular Mosaic     100    
+  OK    Stacked Squares     47     
+-----------------------------------------------------------------------------------------------
+wrote 9   failed 0   total 854 KB
+
+Every card is now a render of what that gradient actually builds.
+
+tools/build.ps1 ships css/previews and reports its size. If the total
+above is larger than the budget there, lower CARD_W/CARD_H and rerun.

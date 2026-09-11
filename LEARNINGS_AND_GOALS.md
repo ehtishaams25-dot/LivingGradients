@@ -152,7 +152,7 @@ host application's own data, reached through
 `CSInterface.getSystemPath(SystemPath.USER_DATA)` rather than assembled from
 `process.env` (which is absent precisely when nodejs failed, i.e. exactly when
 you need the fallback). Ours is
-`%APPDATA%\Digivero\LivingGradients2` / `~/Library/Application Support/...`.
+`%APPDATA%\Ehtishaam\LivingGradients2` / `~/Library/Application Support/...`.
 
 Three properties follow, and all three are the reason to bother:
 

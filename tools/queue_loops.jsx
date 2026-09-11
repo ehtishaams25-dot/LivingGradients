@@ -199,7 +199,46 @@ if (LG_QL_MAIN.exists) {
     if (!mainSrc)    { alert('Could not read jsx/main.jsx.'); return; }
 
     var library  = parseLibrary(presetsSrc);
+
+    /* ---- variant tables --------------------------------------------------
+
+       Some gradients' sliders are DERIVED at run time rather than written out:
+       js/controls.js builds the SaaS family's control sets from SAAS_VARIANTS
+       in js/presets.js. parseControls() above reads literal text, so it cannot
+       see them, and every one of them would be built with the base SaaS
+       defaults instead.
+
+       That is not a hypothetical. Four SaaS presets were rendered, looked at
+       and rejected on what turned out to be four renders of a fifth, because
+       this gap was on the tooling side and nothing reported it.
+
+       The table is literal text where it lives, so read it there. */
+    function parseVariantTable(src, name) {
+        var out = {};
+        if (!src) return out;
+        var block = new RegExp('var ' + name + '\\s*=\\s*\\{([\\s\\S]*?)\\n\\};').exec(src);
+        if (!block) return out;
+        var re = /([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\{([^{}]*)\}/g, m;
+        while ((m = re.exec(block[1])) !== null) {
+            var vals = {}, kv = /([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(-?[0-9.]+)/g, k;
+            while ((k = kv.exec(m[2])) !== null) vals[k[1]] = parseFloat(k[2]);
+            out[m[1]] = vals;
+        }
+        return out;
+    }
+
+    function mergeVariantDefaults(defaults, presetsSrc) {
+        var v = parseVariantTable(presetsSrc, 'SAAS_VARIANTS'), id, k;
+        for (id in v) {
+            if (!v.hasOwnProperty(id)) continue;
+            if (!defaults[id]) defaults[id] = {};
+            /* The variant's own numbers win over anything inherited. */
+            for (k in v[id]) if (v[id].hasOwnProperty(k)) defaults[id][k] = v[id][k];
+        }
+        return defaults;
+    }
     var defaults = controlsSrc ? parseControls(controlsSrc) : {};
+    defaults = mergeVariantDefaults(defaults, presetsSrc);
     if (!library.length) { alert('Could not parse any gradients out of js/presets.js.'); return; }
 
     var G = $.global;
@@ -330,7 +369,38 @@ if (LG_QL_MAIN.exists) {
 
     // -- Queue --------------------------------------------------------
 
+
+    /* ---- WHAT WAS HERE BEFORE THIS SCRIPT RAN ------------------------------
+
+       THIS REPLACES A SWEEP THAT COULD MOVE THE USER'S OWN WORK INTO THIS
+       TOOL'S FOLDER, and in tools/render_loops.jsx that folder is deleted at
+       the end of the run.
+
+       The pattern all five render tools shared was: record
+       `beforeItems = app.project.numItems`, then walk
+       `for (pi = numItems; pi > beforeItems; pi--)` and treat everything above
+       that index as this run's own. That test is not valid.
+       `app.project.item(i)` enumerates in the Project panel's own order, which
+       is not insertion order, and every removal shifts every index after it -
+       so across a long run the count falls below the indices of items that
+       were already in the project, and the loop reaches them.
+
+       Identity is the test that means what it says. */
+    function lgSnapshotItems() {
+        var seen = [], i;
+        for (i = 1; i <= app.project.numItems; i++) seen.push(app.project.item(i));
+        return seen;
+    }
+
+    function lgWasHereBefore(seen, item) {
+        var i;
+        for (i = 0; i < seen.length; i++) if (seen[i] === item) return true;
+        return false;
+    }
+
     app.beginUndoGroup('Living Gradients - Queue Loops');
+
+    var PRE_EXISTING = lgSnapshotItems();
 
     var folder = app.project.items.addFolder(FOLDER_NAME);
 
@@ -367,7 +437,6 @@ if (LG_QL_MAIN.exists) {
     for (var i = 0; i < queue.length; i++) {
         var g = queue[i];
         var status = 'QUEUED', detail = '';
-        var beforeItems = app.project.numItems;
         var cell = null, out = null;
 
         var finished = new File(previewsDir.fsName + '/' + g.id + '.webm');
@@ -484,10 +553,11 @@ if (LG_QL_MAIN.exists) {
            Halftone alone makes four precomps. These CANNOT be deleted the way
            render_loops.jsx deletes them: the queue has not rendered yet and
            they are what it will render from. */
-        for (var pi = app.project.numItems; pi > beforeItems; pi--) {
+        for (var pi = app.project.numItems; pi >= 1; pi--) {
             try {
                 var item = app.project.item(pi);
-                if (item !== folder && item.parentFolder === app.project.rootFolder) {
+                if (item !== folder && item.parentFolder === app.project.rootFolder &&
+                    !lgWasHereBefore(PRE_EXISTING, item)) {
                     item.parentFolder = folder;
                 }
             } catch (e) { }

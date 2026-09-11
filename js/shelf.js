@@ -243,7 +243,7 @@ var LGShelf = (function () {
   function suggestName(payload, origin) {
     var label = LGLibrary.labelForType(payload.type).split('  ')[0] ||
       payload.type || 'Gradient';
-    label = label.replace(/\s+(Waves & Flow|Metal|Glass|Print & Pattern|Light & Energy|Ambient & Organic|Animal Prints|Anime & 2D|SilkFlare Engine|Liquid Metal)$/, '');
+    label = label.replace(/\s+(Waves & Flow|Metal|Glass|Print & Pattern|Light & Energy|Ambient & Organic|Animal Prints|Anime & 2D|SilkFlare Engine|Trail Engine|Liquid Metal)$/, '');
 
     var layerName = (origin && origin.layer) || '';
     var generated = /^(.*) Gradient$/.test(layerName);
@@ -366,17 +366,34 @@ var LGShelf = (function () {
       });
     }
 
+    /* Applying builds a layer, and the panel drives what it builds — the same
+       rule as Apply to Composition in the inspector. The token goes into the
+       payload so the layer is stamped with it, and the inspector's sliders are
+       live on that layer the moment it exists. See the binding block at the
+       top of js/main.js. */
+    var payload = payloadOf(rec);
+    var lgId = (typeof window.lgNewBindingId === 'function') ? window.lgNewBindingId() : null;
+    if (lgId) payload.lgId = lgId;
+
     LGUI.toast('Building "' + rec.name + '"…');
-    return host('lgApplyPreset(' + esArgLocal(payloadOf(rec)) + ', ' + (replace ? 'true' : 'false') + ')')
+    return host('lgApplyPreset(' + esArgLocal(payload) + ', ' + (replace ? 'true' : 'false') + ')')
       .then(function (res) {
         if (res.ok === false) { LGUI.toast(res.error, 'error'); return; }
+        if (lgId && typeof window.lgBindApplied === 'function') window.lgBindApplied(lgId);
         LGUI.toast('Applied "' + rec.name + '"', 'success');
       });
   }
 
   /* Load a preset into the inspector without touching the comp — the "show me
-     what this is before I commit to it" path. */
+     what this is before I commit to it" path.
+
+     "Without touching the comp" is a promise, so it is kept explicitly: the
+     panel lets go of whatever it was driving first. Otherwise loading a preset
+     of the same gradient type while one is applied would push the preset's
+     colours straight into it, which is the browse bug wearing a hat. */
   function loadIntoInspector(rec) {
+    if (typeof window.lgDetach === 'function') window.lgDetach();
+
     if (rec.kind === 'gradient' && typeof window.lgSelectType === 'function') {
       window.lgSelectType(rec.type, rec.colors, rec.controls);
       LGUI.toast('Loaded "' + rec.name + '" into Edit', 'success');
@@ -437,39 +454,57 @@ var LGShelf = (function () {
 
     var tools = LGUI.el('div', 'lg-shelf-tools');
 
-    var capture = LGUI.el('button', 'lg-btn is-primary is-small',
+    /* ONE DOOR INTO THE LIBRARY, NOT TWO.
+
+       This was a Capture button and a "+" button standing next to each other,
+       and their menus held nearly the same six items. So there were two ways
+       to reach capture, two ways to reach save, and no way to tell from
+       looking which button was the one you wanted. The whole of the Capture
+       button's menu was on a right-click, which nobody finds.
+
+       A split button instead. The left half still captures in one click,
+       because that is the thing people came here to do. The right half is the
+       same menu that used to be hidden on right-click, now with an arrow
+       saying so, and it has absorbed everything the "+" button offered.
+       Nothing was removed — the two buttons became one, and the menu that was
+       invisible became visible. */
+    function addMenuItems() {
+      return [
+        { label: 'Capture selected gradient', icon: 'capture', hint: 'From After Effects', onClick: captureFromComp },
+        { label: 'Capture every gradient in comp', icon: 'layers', onClick: captureWholeComp },
+        '-',
+        { label: 'Save current panel settings', icon: 'plus', hint: 'From Edit', onClick: saveCurrent },
+        { label: 'Save palette only', icon: 'droplet', onClick: savePalette },
+        '-',
+        { label: 'New folder', icon: 'folder', onClick: newFolder },
+        { label: 'Add from library…', icon: 'box', onClick: openAddFromLibrary }
+      ];
+    }
+
+    var split = LGUI.el('div', 'lg-split');
+
+    var capture = LGUI.el('button', 'lg-btn is-primary is-small lg-split-main',
       LGUI.icon('capture', 13) + '<span>Capture</span>');
     capture.type = 'button';
     capture.title = 'Save the gradient selected in After Effects as a preset';
     capture.addEventListener('click', function () { captureFromComp(); });
     capture.addEventListener('contextmenu', function (e) {
       e.preventDefault();
-      LGUI.menu(capture, [
-        { label: 'Capture selected gradient', icon: 'capture', onClick: captureFromComp },
-        { label: 'Capture every gradient in this comp', icon: 'layers', onClick: captureWholeComp },
-        '-',
-        { label: 'Save current panel settings', icon: 'plus', onClick: saveCurrent },
-        { label: 'Save palette only', icon: 'droplet', onClick: savePalette }
-      ]);
+      LGUI.menu(capture, addMenuItems());
     });
-    tools.appendChild(capture);
+    split.appendChild(capture);
 
-    var add = LGUI.el('button', 'lg-icon-btn', LGUI.icon('plus', 15));
-    add.type = 'button';
-    add.title = 'Add';
-    add.addEventListener('click', function () {
-      LGUI.menu(add, [
-        { label: 'Capture selected gradient', icon: 'capture', onClick: captureFromComp },
-        { label: 'Capture every gradient in comp', icon: 'layers', onClick: captureWholeComp },
-        '-',
-        { label: 'Save current settings', icon: 'plus', onClick: saveCurrent },
-        { label: 'Save palette only', icon: 'droplet', onClick: savePalette },
-        '-',
-        { label: 'New folder', icon: 'folder', onClick: newFolder },
-        { label: 'Add from library…', icon: 'box', onClick: openAddFromLibrary }
-      ], { alignRight: true });
+    var more = LGUI.el('button', 'lg-btn is-primary is-small lg-split-caret',
+      LGUI.icon('chevronDown', 13));
+    more.type = 'button';
+    more.title = 'Other ways to add a preset';
+    more.setAttribute('aria-haspopup', 'true');
+    more.addEventListener('click', function () {
+      LGUI.menu(more, addMenuItems(), { alignRight: true });
     });
-    tools.appendChild(add);
+    split.appendChild(more);
+
+    tools.appendChild(split);
 
     var view = LGUI.el('button', 'lg-icon-btn');
     view.type = 'button';

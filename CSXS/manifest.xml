@@ -3,7 +3,7 @@
   Living Gradients — CEP extension manifest.
 
   ExtensionBundleVersion is the version of record. tools/build.ps1 reads it and
-  stamps it into js/service.js at package time, so the number the panel reports
+  stamps it into index.html at package time, so the number the panel reports
   and the number the installer registers cannot drift apart. Change it here and
   nowhere else.
 
@@ -12,29 +12,23 @@
   — which is how preset thumbnails are rendered — has been present since well
   before it.
 -->
-<ExtensionManifest Version="7.0"
-  ExtensionBundleId="com.digivero.livinggradients"
-  ExtensionBundleVersion="2.1.0"
-  ExtensionBundleName="Living Gradients">
-
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.ehtishaam.livinggradients" ExtensionBundleVersion="2.3.0" ExtensionBundleName="Living Gradients">
   <ExtensionList>
-    <Extension Id="com.digivero.livinggradients.panel" Version="2.1.0"/>
+    <Extension Id="com.ehtishaam.livinggradients.panel" Version="2.3.0" />
   </ExtensionList>
-
   <ExecutionEnvironment>
     <HostList>
-      <Host Name="AEFT" Version="[15.0,99.9]"/>
+      <Host Name="AEFT" Version="[15.0,99.9]" />
     </HostList>
     <LocaleList>
-      <Locale Code="All"/>
+      <Locale Code="All" />
     </LocaleList>
     <RequiredRuntimeList>
-      <RequiredRuntime Name="CSXS" Version="7.0"/>
+      <RequiredRuntime Name="CSXS" Version="7.0" />
     </RequiredRuntimeList>
   </ExecutionEnvironment>
-
   <DispatchInfoList>
-    <Extension Id="com.digivero.livinggradients.panel">
+    <Extension Id="com.ehtishaam.livinggradients.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>

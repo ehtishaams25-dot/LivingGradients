@@ -9,6 +9,11 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* The browse filter hides cards and family headings with the `hidden`
+   attribute, and both of them set `display` on their own class — which wins,
+   because a class beats a UA default. This is what makes hidden mean hidden. */
+[hidden] { display: none !important; }
+
 :root {
   /* ── BRAND ─────────────────────────────────────────────────────────
      From the portfolio's own variables. These are for accents and buttons
@@ -19,24 +24,39 @@
   --beige:  #EFE7D8;
   --void:   #030604;
 
-  /* ── SURFACES — After Effects native ───────────────────────────────
-     Neutral, matching the host's default dark UI. Nothing here is tinted:
-     a coloured panel biases every gradient previewed against it. */
-  --bg-app:      #1A1A1A;
-  --bg-sunken:   #131313;
-  --bg-panel:    #232323;
-  --bg-raised:   #2B2B2B;
-  --bg-hover:    #343434;
-  --bg-active:   #3D3D3D;
-  --bg-input:    #141414;
+  /* ── SURFACES ──────────────────────────────────────────────────────
+     STILL NEUTRAL, AND THAT PART IS NOT A STYLE CHOICE. Every surface here
+     is a pure grey — equal R, G and B. A panel with any tint at all sits
+     behind forty-odd colour fields and biases the judgement of every one of
+     them, which is the whole job this interface has.
 
-  --border-light:  rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.17);
+     WHAT CHANGED, AND WHY. The old set ran #1A1A1A -> #2B2B2B -> #343434:
+     six points of luminance between one surface and the next, which is under
+     the threshold where an edge reads without a border. So everything needed
+     a border to be seen at all, and the result was a panel made of outlined
+     boxes — the 'I don't like the colours, the background, anything' note.
+
+     These go deeper at the bottom and climb further at the top, so a raised
+     surface is legible on its own and a border is a choice rather than a
+     structural necessity. The ground is darker than the host's, which is what
+     makes a gradient card look lit rather than pasted on. */
+  --bg-app:      #121212;
+  --bg-sunken:   #0A0A0A;
+  --bg-panel:    #181818;
+  --bg-raised:   #242424;
+  --bg-hover:    #303030;
+  --bg-active:   #3A3A3A;
+  --bg-input:    #0E0E0E;
+
+  --border-light:  rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.14);
   --border-accent: rgba(220, 181, 88, 0.45);
 
-  --text-main:  #D9D9D9;
-  --text-muted: #9A9A9A;
-  --text-faint: #6B6B6B;
+  /* Raised off #D9D9D9. On the darker ground the old value read as grey text
+     rather than as the panel's voice; this is a clean 13:1 on --bg-app. */
+  --text-main:  #EDEDED;
+  --text-muted: #A0A0A0;
+  --text-faint: #6E6E6E;
 
   /* ── ACCENT — the brand's gold ─────────────────────────────────────
      Slider fill, focus ring, active tab, selected card. The forest-to-gold
@@ -46,7 +66,15 @@
   --accent-press:  #C29E42;
   --accent-glow:   rgba(220, 181, 88, 0.26);
   --accent-quiet:  rgba(220, 181, 88, 0.13);
-  --accent-grad:   linear-gradient(100deg, #204937 0%, #3F7B58 45%, #DCB558 100%);
+
+  /* THE PRIMARY BUTTON WAS FOREST -> GOLD AND IT WAS THE LOUDEST THING HERE.
+     Two hues over one button meant the eye read it as a decorative bar rather
+     than as the action, and the green end went muddy against the dark ground.
+
+     The brand is kept — this is still the portfolio's gold — but it is now one
+     hue with light moving across it, which is what a raised metal surface
+     does. --forest survives as a token and is still used by the mark. */
+  --accent-grad:   linear-gradient(100deg, #C08F35 0%, #DCB558 52%, #EED08A 100%);
 
   --danger:  #FF5C5C;
   --warning: #FFB340;
@@ -57,20 +85,51 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
+  /* ONE FAMILY, THREE ROLES.
+
+     The panel used to run three faces at once: Instrument Sans for UI,
+     Instrument Serif for names and headings, JetBrains Mono for numeric
+     readouts. Three voices in a 320px-wide panel reads as three different
+     products stapled together, and the serif in particular fought the
+     gradient cards it sat under.
+
+     All three variables now resolve to Instrument Sans. The NAMES are kept
+     deliberately — fifteen call sites across three stylesheets still say
+     var(--font-display) and var(--font-mono), and they still mean "this is a
+     heading" and "this is a number". Keeping the roles addressable means the
+     decision is reversible in one place instead of fifteen.
+
+     Numeric readouts that used to get the mono face now get tabular figures
+     instead, so a value ticking 9 -> 10 does not shift the row. */
   --font-sans:    'Instrument Sans', -apple-system, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  /* The display serif the brand leads with. Names and headings only — it is
-     an editorial face and it does not belong on a slider label. */
-  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-display: var(--font-sans);
+  --font-mono:    var(--font-sans);
 
   /* ── TYPE SCALE ────────────────────────────────────────────────────
      The panel previously set almost everything at 10-11px, which reads as
-     cramped rather than dense. These give it a hierarchy. */
-  --fs-title:   15px;
-  --fs-body:    12.5px;
-  --fs-label:   11.5px;
-  --fs-caption: 11px;
-  --fs-eyebrow: 10px;
+     cramped rather than dense. These give it a hierarchy.
+
+     Raised about a point across the board in 2.2: at the old sizes the
+     control labels — the text you actually read while working — were
+     smaller than the section headings you read once. Dense is the goal;
+     squinting is not. Anything that still hard-codes a px size below is
+     either a deliberate display size or a bug. */
+  --fs-title:   15.5px;
+  --fs-body:    13px;
+  --fs-label:   12px;
+  --fs-caption: 11.5px;
+  --fs-eyebrow: 10.5px;
+
+  /* ── SPACING ───────────────────────────────────────────────────────
+     A four-step scale, so a gap is chosen rather than guessed. */
+  --sp-1: 6px;
+  --sp-2: 10px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+
+  /* Every interactive thing is at least this tall. A 20px target is a
+     target you miss, and this panel is used by people holding a pen. */
+  --hit: 30px;
 
   --shadow-panel: 0 -10px 40px rgba(0,0,0,0.5);
   --shadow-btn:   0 2px 8px rgba(0,0,0,0.35);
@@ -157,7 +216,6 @@ html, body {
 
 .get-license-link { font-size: 12px; color: var(--text-muted); text-align: center; text-decoration: none; transition: color var(--trans-fast); }
 .get-license-link:hover { color: var(--text-main); }
-.trial-section { margin-top: 8px; border-top: 1px solid var(--border-light); padding-top: 16px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 
 /* ── MAIN APP LAYOUT ── */
 .main-app-layout { flex-direction: column; position: relative; }
@@ -177,7 +235,16 @@ html, body {
   flex-shrink: 0;
   box-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.35);
 }
-.header-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+/* THE HEADER AT PANEL WIDTH.
+
+   Three flex children that all wanted to shrink, and the one that could not —
+   the tab bar, whose buttons are nowrap with no min-width — overflowed its box
+   instead. On a 400px panel the wordmark and "Browse" were drawn on top of
+   each other. So the tabs are now the fixed thing, header-right is sized by
+   its one icon button rather than a hard-coded 200px, and the wordmark is the
+   part that gives way: it ellipses, and below 430px it is not drawn at all.
+   The mark beside it already says whose panel this is. */
+.header-left { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
 /* A rounded mark rather than a spinning rainbow dot — the brand is one green
    and one gold, and the animation was the loudest thing in the header. */
 .logo-dot {
@@ -197,15 +264,15 @@ html, body {
 }
 .header-badge { display: none; }
 
-.tabs-nav { display: flex; align-items: center; height: 100%; justify-content: flex-end; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.tabs-nav { display: flex; align-items: center; height: 100%; justify-content: flex-end; flex: 0 0 auto; gap: 2px; }
 .tab-btn {
   background: transparent;
   border: none;
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
+  font-size: var(--fs-body);
   font-weight: 600;
-  padding: 0 11px;
+  padding: 0 14px;
   height: 100%;
   cursor: pointer;
   transition: color var(--trans-fast);
@@ -227,7 +294,11 @@ html, body {
 .hidden-dot { display: none; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; position: absolute; top: 12px; right: 8px; }
 .hidden-dot.visible { display: block; }
 
-.header-right { display: flex; justify-content: flex-end; width: 200px; }
+.header-right { display: flex; justify-content: flex-end; flex: 0 0 auto; }
+
+@media (max-width: 430px) { .header-title { display: none; } }
+/* Docked at its narrowest there is room for the tabs and nothing else. */
+@media (max-width: 330px) { .tab-btn { padding: 0 10px; font-size: var(--fs-label); } }
 .icon-btn {
   background: transparent;
   border: none;
@@ -326,6 +397,24 @@ html, body {
   box-shadow: inset 0 -1px 0 rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.05);
   pointer-events: none;
 }
+/* Sits on the preview, top-right, and deliberately does not use the accent —
+   BETA is information, not something to click. */
+.card-beta {
+  position: absolute;
+  top: 6px; right: 6px;
+  z-index: 3;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #E8E8E8;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
 .card-label {
   display: block;
   padding: 7px 8px;
@@ -390,7 +479,29 @@ html, body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.inspector-content { flex: 1; overflow-y: auto; padding: 0; }
+/* SCROLL SHADOWS, SO THE LIST STOPS LOOKING LIKE IT WAS CUT OFF.
+
+   The footer is a flex sibling and never overlapped anything, but the content
+   above it was clipped dead flat at the boundary — usually across the middle
+   of a control — with nothing to say the list continued. Reported as 'it cuts
+   around here, this is not finished like a proper product'.
+
+   This is the background-attachment trick rather than a scroll listener: the
+   two `local` layers scroll with the content and mask the `scroll` layers
+   beneath them, so a shadow is visible at an edge only while there is more
+   content past it. No JS, and it cannot fall out of sync. */
+.inspector-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 8px;
+  background:
+    linear-gradient(var(--bg-app) 30%, rgba(0,0,0,0)) top / 100% 20px no-repeat local,
+    linear-gradient(rgba(0,0,0,0), var(--bg-app) 70%) bottom / 100% 20px no-repeat local,
+    radial-gradient(farthest-side at 50% 0,
+      rgba(0,0,0,0.45), rgba(0,0,0,0)) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%,
+      rgba(0,0,0,0.45), rgba(0,0,0,0)) bottom / 100% 10px no-repeat scroll;
+}
 
 /* Docked narrow the panel is one column. Given real width it splits, because
    three sections stacked in a narrow column puts the settings permanently
@@ -416,6 +527,9 @@ html, body {
     background: var(--bg-app);
   }
   .inspector-col-right { grid-column: 2; }
+  /* Row two, column one: back under the colours, where it was, without
+     costing the settings their place in the one-column layout. */
+  .inspector-col-save { grid-column: 1; }
 }
 /* No rules between sections. Both references separate content with space and
    let the eyebrow label carry the hierarchy; the panel had a border under
@@ -505,7 +619,7 @@ html, body {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: 10.5px;
   letter-spacing: 0.02em;
   text-align: right;
@@ -516,10 +630,11 @@ html, body {
 .color-hex:hover { background: var(--bg-hover); color: var(--text-main); }
 .color-hex:focus { background: var(--bg-hover); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
-.color-tools-row { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 14px; }
+.color-tools-row { display: flex; align-items: center; gap: var(--sp-1); margin-bottom: 14px; }
 .tool-btn {
   flex: 1;
-  height: 32px;
+  gap: 7px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -533,6 +648,11 @@ html, body {
 }
 .tool-btn:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--border-accent); }
 .tool-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tool-btn[hidden] { display: none; }
+/* Labelled, because an eyedropper glyph and a picture glyph at 14px are two
+   grey smudges and the tooltip only helps somebody who already suspects. */
+.tool-btn-label { font-size: var(--fs-caption); font-weight: 500; letter-spacing: 0.01em; }
+.tool-btn-more { flex: none; width: 34px; }
 
 /* ── SELECTS & INPUTS ── */
 .select-wrap { position: relative; }
@@ -563,7 +683,7 @@ html, body {
 .custom-select option { background: var(--bg-panel); color: var(--text-main); }
 
 .preset-row { display: flex; gap: 8px; align-items: center; }
-.action-btn { width: 28px; height: 28px; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: var(--radius-sm); }
+.action-btn { width: var(--hit); height: var(--hit); flex: none; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: var(--radius-sm); }
 .danger-btn:hover { color: var(--danger); border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.1); }
 
 /* ── CONTROLS (Sliders & Toggles) ── */
@@ -571,126 +691,132 @@ html, body {
 .control-item { display: flex; flex-direction: column; gap: 6px; }
 
 /* ── CONTROL ROWS ─────────────────────────────────────────────────────
-   One row per control, not two.
+   After Effects' own Effect Controls row: name and scrubbable value on the
+   first line, track on the second.
 
-   The old block put the label and value on one line and a full-width slider
-   underneath, which is 44px of panel for every parameter. Cellular Mosaic has
-   ten of them and Halftone eleven, so the settings could never be on screen at
-   once however the panel was arranged — the layout was being asked to solve a
-   problem the control itself was creating.
+   THE CAPSULE THIS REPLACES WAS REPORTED TWICE IN ONE SENTENCE. It hid a
+   full-width range input behind the row and drew the value as a tinted fill
+   *underneath the label text*, so the fill ended in the middle of a word and
+   read as a broken progress bar rather than a scale. Worse, the invisible
+   range stopped 84px short of the right edge to clear the number field while
+   the fill was painted across the whole capsule — so the position the pointer
+   was at and the position the value was at genuinely disagreed. That is the
+   'very finicky, where my cursor is and where it's going' note.
 
-   The row *is* the slider: the whole capsule is the drag target, the fill
-   shows the value, and the label and number sit on top of it. Same
-   information, 38px, and a target the width of the panel instead of a 4px
-   track. */
+   A native track with a native thumb cannot disagree with itself, and the
+   thumb is the affordance: you can see where the value is before you touch it.
 
-.ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+   DENSITY IS NOT LOST, WHICH WAS THE ARGUMENT FOR THE CAPSULE. Halftone has
+   eleven controls and the old row was 40px plus a 6px gap. The head line is
+   20px, the track 14px and the gap between them 2px — 36px plus 8px — so a
+   two-line row that is easier to read is also two pixels shorter. The saving
+   came from dropping the border and the inner padding a capsule needs and a
+   plain row does not. */
+
+.ctrl-group { display: flex; flex-direction: column; gap: 8px; }
 
 .ctrl { display: block; }
 
-.ctrl-slider {
-  position: relative;
+.ctrl-head {
   display: flex;
   align-items: center;
-  height: 38px;
-  padding: 0 8px 0 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-input);
-  border: 1px solid var(--border-light);
-  overflow: hidden;
-  transition: border-color var(--trans-fast), background var(--trans-fast);
-}
-.ctrl-slider:hover { border-color: var(--border-strong); }
-
-/* The fill. --pct is written by paintRange() as the slider moves. */
-.ctrl-slider::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: var(--pct, 0%);
-  background: var(--accent-quiet);
-  border-right: 1.5px solid var(--accent);
-  pointer-events: none;
-  transition: background var(--trans-fast);
-}
-.ctrl-slider:hover::before { background: rgba(220, 181, 88, 0.19); }
-
-/* Faint ticks, so a capsule still reads as a scale rather than a text field. */
-.ctrl-slider::after {
-  content: '';
-  position: absolute;
-  left: 12%; right: 90px; top: 50%;
-  height: 9px;
-  transform: translateY(-50%);
-  pointer-events: none;
-  opacity: 0.16;
-  background: repeating-linear-gradient(to right,
-    var(--text-faint) 0 1px, transparent 1px 12.5%);
+  gap: 4px;
+  height: 20px;
+  margin-bottom: 2px;
 }
 
-/* Invisible, and covering everything but the reset button and number field.
+/* The groove. Full width, so the drag target is the whole row — the one thing
+   the capsule got right and the only reason it existed. */
+.ctrl-track {
+  position: relative;
+  height: 14px;
+  display: flex;
+  align-items: center;
+}
 
-   The 56px here used to be wrong, and it is the overlap bug: the reset is
-   20px plus 2px of margin and the number field is 54px, so 76px of the row is
-   spoken for. Reserving 56px left the drag surface lying across the last 20px
-   of them — the reset button sat under the invisible range, and the number
-   crowded up against it because there was no room left to sit anywhere else.
-
-   Keep this in step with .ctrl-reset and .ctrl-num below: it is their combined
-   width plus a little breathing room, and nothing else. */
 .ctrl-range {
-  position: absolute;
-  left: 0; top: 0; bottom: 0; right: 84px;
-  width: auto; height: auto;
-  margin: 0; padding: 0;
-  opacity: 0;
-  cursor: ew-resize;
-  z-index: 2;
   -webkit-appearance: none;
   appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  padding: 0;
   background: transparent;
+  cursor: ew-resize;
 }
+/* --pct is written by paintRange() as the value moves, so the filled part of
+   the groove always ends exactly under the thumb. */
+.ctrl-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background:
+    linear-gradient(to right, var(--accent) 0 var(--pct, 0%), transparent var(--pct, 0%) 100%),
+    var(--bg-active);
+}
+.ctrl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px; height: 12px;
+  margin-top: -4px;                 /* centres a 12px thumb on a 4px track */
+  border-radius: 50%;
+  background: var(--text-main);
+  border: 2px solid var(--bg-panel);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: ew-resize;
+  transition: background var(--trans-fast), transform var(--trans-fast);
+}
+.ctrl-range:hover::-webkit-slider-thumb { background: #FFFFFF; transform: scale(1.12); }
+.ctrl-range:active::-webkit-slider-thumb { background: var(--accent); transform: scale(1.12); }
+.ctrl-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-glow); }
+.ctrl-range:focus { outline: none; }
 
 .ctrl-label {
-  position: relative;
-  z-index: 1;
   flex: 1 1 auto;
   min-width: 0;
-  /* So a long label ellipses before it reaches the reset rather than sliding
-     underneath it. */
-  padding-right: 8px;
-  font-size: var(--fs-caption);
+  padding-right: 4px;
+  font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text-muted);
-  pointer-events: none;
+  /* Still ellipses when a docked panel is genuinely too narrow, but the row
+     now gives a label the *whole* width instead of what was left after a
+     number field and a tick strip, so 'Turbulence Amount' fits where
+     'Turbulen…' used to be. The title attribute is set in controls.js. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
 }
-.ctrl-slider:hover .ctrl-label { color: var(--text-main); }
+.ctrl:hover .ctrl-label { color: var(--text-main); }
 
+/* The value is a control, not a readout — drag it and it counts, the same as
+   the blue numbers in Effect Controls. lgScrubNumber() in controls.js does the
+   dragging; this is what says so before you touch it. */
 .ctrl-num {
-  position: relative;
-  z-index: 3;
   flex: none;
-  /* Four digits and a minus sign have to fit without clipping. */
-  width: 54px;
-  height: 26px;
+  width: 56px;
+  height: 20px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-main);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  color: var(--accent);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px;
   text-align: right;
   padding: 0 4px;
   outline: none;
-  cursor: text;
+  cursor: ew-resize;
+  border-bottom: 1px dotted transparent;
+  transition: border-color var(--trans-fast), background var(--trans-fast);
 }
 .ctrl-num::-webkit-outer-spin-button,
 .ctrl-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.ctrl-num:hover { background: var(--bg-hover); }
-.ctrl-num:focus { background: var(--bg-hover); box-shadow: 0 0 0 1px var(--accent); }
+.ctrl-num:hover { border-bottom-color: var(--accent); }
+.ctrl-num:focus {
+  background: var(--bg-input);
+  color: var(--text-main);
+  cursor: text;
+  box-shadow: 0 0 0 1px var(--accent);
+}
 
 /* Reset only appears when the pointer is on the row it belongs to. */
 .ctrl-reset {
@@ -711,27 +837,38 @@ html, body {
   opacity: 0;
   transition: opacity var(--trans-fast), color var(--trans-fast);
 }
-.ctrl-slider:hover .ctrl-reset,
+.ctrl:hover .ctrl-reset,
 .ctrl-row:hover .ctrl-reset,
 .ctrl-reset:focus-visible { opacity: 1; }
 .ctrl-reset:hover { color: var(--accent); background: var(--bg-hover); }
 
 /* A row that holds a select, a text field or a toggle — same capsule, so a
    column of mixed controls still reads as one list. */
-.ctrl-row {
+/* The second line of a select or text control: the field itself, full width,
+   under its own label. `.ctrl-row` is kept for the XY pad's header, which is
+   genuinely a single line — a name and a coordinate readout. */
+.ctrl-line {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 8px 0 12px;
-  border-radius: var(--radius-md);
+  min-height: 30px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--radius-sm);
   background: var(--bg-input);
   border: 1px solid var(--border-light);
   transition: border-color var(--trans-fast);
 }
-.ctrl-row:hover { border-color: var(--border-strong); }
+.ctrl-line:hover { border-color: var(--border-strong); }
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
 .ctrl-row .ctrl-label { pointer-events: auto; }
 
+.ctrl-line select,
+.ctrl-line input[type="text"],
 .ctrl-row select,
 .ctrl-row input[type="text"] {
   flex: 1 1 auto;
@@ -742,19 +879,24 @@ html, body {
   color: var(--text-main);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  text-align: right;
+  text-align: left;
   padding: 0 16px 0 0;
   outline: none;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
 }
+.ctrl-line input[type="text"],
 .ctrl-row input[type="text"] { cursor: text; padding-right: 2px; }
+.ctrl-line select:focus, .ctrl-line input[type="text"]:focus,
 .ctrl-row select:focus, .ctrl-row input[type="text"]:focus { color: var(--accent); }
+.ctrl-line select option,
 .ctrl-row select option { background: var(--bg-panel); color: var(--text-main); }
 
 /* The chevron for a select sitting inside a row. */
+.ctrl-line.has-select,
 .ctrl-row.has-select { position: relative; }
+.ctrl-line.has-select::after,
 .ctrl-row.has-select::after {
   content: '';
   position: absolute;
@@ -784,15 +926,15 @@ html, body {
 }
 
 .control-header { display: flex; justify-content: space-between; align-items: center; }
-.control-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-.control-value { font-size: 10px; font-family: var(--font-mono); color: var(--text-main); background: transparent; padding: 0; border: none; }
+.control-label { font-size: var(--fs-label); color: var(--text-muted); font-weight: 500; }
+.control-value { font-size: 10px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-main); background: transparent; padding: 0; border: none; }
 
 .slider { width: 100%; height: 3px; -webkit-appearance: none; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: 2px; outline: none; cursor: pointer; }
 .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #ccc; cursor: pointer; transition: transform 0.1s; }
 .slider::-webkit-slider-thumb:hover { transform: scale(1.15); background: #fff; }
 
-.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 24px; }
-.toggle-row .control-label { font-size: 11px; cursor: pointer; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: var(--hit); }
+.toggle-row .control-label { font-size: var(--fs-label); cursor: pointer; }
 
 /* 38x22 with a 16px knob — the old 28x16 was a fiddly target, especially
    docked at panel width. */
@@ -828,7 +970,7 @@ html, body {
 
 .comp-row { display: flex; gap: 12px; }
 .comp-field { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.comp-field label { font-size: 12px; color: var(--text-muted); }
+.comp-field label { font-size: var(--fs-caption); color: var(--text-muted); font-weight: 500; }
 
 /* ── INSPECTOR FOOTER ── */
 /* Pinned, and quiet. The two exports sit above the primary action so the
@@ -848,7 +990,10 @@ html, body {
   width: 100%;
   padding: 11px 14px;
   background: var(--accent-grad);
-  color: #fff;
+  /* Dark ink on the gold. White on #DCB558 is 1.9:1 and was the least
+     readable text in the panel while sitting on its most important
+     control. This is 9.4:1. */
+  color: var(--void);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--fs-body);
@@ -860,7 +1005,9 @@ html, body {
   box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255,255,255,0.18);
   transition: transform var(--trans-fast), box-shadow var(--trans-fast), filter var(--trans-fast);
 }
-.btn-generate:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,138,255,0.42), inset 0 1px 0 rgba(255,255,255,0.22); }
+/* Was a blue-violet glow left behind by a palette two versions ago, on a
+   button that has been gold the whole time. */
+.btn-generate:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(220,181,88,0.38), inset 0 1px 0 rgba(255,255,255,0.24); }
 .btn-generate:active { transform: translateY(0); filter: brightness(0.96); }
 .btn-generate:disabled { opacity: 0.45; cursor: default; transform: none; filter: none; }
 .btn-generate:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
@@ -869,7 +1016,7 @@ html, body {
 .btn-generate:hover .btn-glow { transform: translateX(100%); }
 .btn-glow { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%); pointer-events: none; }
 .btn-text { position: relative; z-index: 1; }
-.generate-status { text-align: center; font-size: 12px; margin-top: 12px; color: var(--text-muted); min-height: 18px; line-height: 1.45; }
+.generate-status { text-align: center; font-size: var(--fs-caption); margin-top: 12px; color: var(--text-muted); min-height: 18px; line-height: 1.45; }
 .generate-status.success { color: var(--success); }
 .generate-status.error   { color: var(--danger); }
 .generate-status.warn    { color: var(--warning); text-align: left; }
@@ -1003,103 +1150,228 @@ html, body {
    appeared to float above the toolbar. Negative margins pull the bar out to
    the panel edges and the same amount of padding puts its contents back where
    they were, so the opaque background now covers the whole strip. */
+/* ── BROWSE: FIND ONE GRADIENT ──────────────────────────────────────
+   This strip used to hold Batch Select. It holds the only thing this screen
+   is for now: narrowing forty cards down to the one you want. Sticky, because
+   scrolling to the bottom of the library and losing the search is exactly
+   when you need it. */
 .browse-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: -16px -16px 2px;
-  padding: 16px 16px 14px;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: -16px -16px var(--sp-1);
+  padding: 14px 16px 12px;
   position: sticky;
   top: -16px;                       /* view-panel has 16px padding */
   z-index: 5;
   background: var(--bg-app);
-  box-shadow: 0 6px 12px -6px var(--bg-app);
+  box-shadow: 0 8px 14px -8px var(--bg-app);
 }
 
-.batch-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-.batch-switch input {
-  appearance: none;
-  width: 15px; height: 15px;
-  margin: 0;
-  border: 1.5px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--bg-input);
-  cursor: pointer;
-  position: relative;
-  transition: background var(--trans-fast), border-color var(--trans-fast);
-}
-.batch-switch input:hover { border-color: var(--accent); }
-.batch-switch input:checked { background: var(--accent); border-color: var(--accent); }
-.batch-switch input:checked::after {
-  content: '';
-  position: absolute;
-  left: 4px; top: 1px;
-  width: 4px; height: 8px;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-.batch-switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.batch-switch:hover { color: var(--text-main); }
-
-.batch-actions { display: none; align-items: center; gap: 8px; }
-.batch-actions.visible { display: flex; }
-.btn-batch { width: auto; padding: 7px 14px; font-size: 12px; }
-
-/* In batch mode the card carries a tick instead of the single-select ring. */
-.gradient-card .batch-tick {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  border: 1.5px solid var(--border-strong);
-  background: rgba(0,0,0,0.55);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--bg-app);
+.browse-search { position: relative; display: flex; align-items: center; }
+.browse-search-icon {
+  position: absolute; left: 11px;
+  color: var(--text-faint);
   pointer-events: none;
+  transition: color var(--trans-fast);
 }
-body.batch-mode .gradient-card { position: relative; }
-body.batch-mode .gradient-card .batch-tick { display: flex; }
-body.batch-mode .gradient-card.batch-selected .batch-tick {
+.browse-search:focus-within .browse-search-icon { color: var(--accent); }
+.browse-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 30px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  outline: none;
+  transition: border-color var(--trans-fast), box-shadow var(--trans-fast);
+}
+.browse-search-input::placeholder { color: var(--text-faint); }
+.browse-search-input:hover { border-color: var(--border-strong); }
+.browse-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.browse-search-clear {
+  position: absolute; right: 5px;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--trans-fast), background var(--trans-fast);
+}
+.browse-search-clear:hover { color: var(--text-main); background: var(--bg-hover); }
+.browse-search-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The families, as chips rather than a dropdown: a dropdown hides the shape
+   of the library, and the shape of the library is half of how you find things
+   in it. Scrolls sideways rather than wrapping, so the strip never grows tall
+   enough to push the grid off screen in a docked panel. */
+.browse-filters {
+  position: relative;
+  display: flex;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+/* A 3px rail that only colours in under the pointer: discoverable when you go
+   looking, invisible the rest of the time. Hiding it outright is what made the
+   strip look like a row that had been cut off rather than one that scrolls. */
+.browse-filters::-webkit-scrollbar { height: 3px; }
+.browse-filters::-webkit-scrollbar-track { background: transparent; }
+.browse-filters::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
+.browse-filters:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }
+
+/* Only while there is actually more to the right — lgBindFilterScroll() in
+   main.js toggles the class. */
+.browse-filters.has-more {
+  -webkit-mask-image: linear-gradient(to right, #000 0 calc(100% - 34px), transparent 100%);
+          mask-image: linear-gradient(to right, #000 0 calc(100% - 34px), transparent 100%);
+}
+
+.browse-chip {
+  flex: none;
+  height: 27px;
+  padding: 0 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--trans-fast), background var(--trans-fast), border-color var(--trans-fast);
+}
+.browse-chip:hover { color: var(--text-main); background: var(--bg-hover); border-color: var(--border-strong); }
+.browse-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.browse-chip.is-active {
+  color: var(--void);
   background: var(--accent);
   border-color: var(--accent);
-}
-body.batch-mode .gradient-card.batch-selected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  font-weight: 600;
 }
 
-.batch-status {
-  font-size: 11.5px;
-  line-height: 1.45;
-  padding: 10px 4px 0;
-  color: var(--text-muted);
-  min-height: 16px;
+/* All never scrolls away. The box-shadow is the gap between this chip and the
+   next one painted in the panel's own colour, so the chips that slide past go
+   behind it cleanly instead of showing through the flex gap. */
+.browse-chip.is-all {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  /* Both sides. Wider than the flex gap on purpose: at exactly the gap the
+     rounded corner of the chip sliding underneath still showed past the pill,
+     and the left side needs it too once the strip has been scrolled, because
+     chips pass under this one on their way out of view. */
+  box-shadow: 10px 0 0 0 var(--bg-app), -12px 0 0 0 var(--bg-app);
 }
-.batch-status.success { color: var(--success); }
-.batch-status.error   { color: var(--danger); }
-.batch-status.warn    { color: var(--warning); }
+
+.browse-empty { padding: 44px 16px; text-align: center; }
+.browse-empty-title {
+  font-size: var(--fs-body); font-weight: 600;
+  color: var(--text-main); margin-bottom: var(--sp-1);
+}
+.browse-empty-body { font-size: var(--fs-caption); color: var(--text-muted); line-height: 1.55; }
+.lg-link-inline {
+  background: none; border: 0; padding: 0;
+  color: var(--accent); font: inherit; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.lg-link-inline:hover { color: var(--accent-hover); }
+.lg-link-inline:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ── LIVE / DRAFT ───────────────────────────────────────────────────
+   Draft is the resting state and looks like it: grey, flat, quiet. Live is
+   the one that costs you something if you miss it, so it is the one that
+   moves. See paintLiveBadge() in js/main.js. */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  height: 23px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-pill);
+  background: var(--bg-raised);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+  cursor: default;
+  transition: color var(--trans-fast), background var(--trans-fast), border-color var(--trans-fast);
+}
+.live-badge-dot {
+  width: 6px; height: 6px; flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live-badge[data-state="live"] {
+  color: var(--success);
+  border-color: rgba(74, 222, 148, 0.34);
+  background: rgba(74, 222, 148, 0.10);
+}
+.live-badge[data-state="live"] .live-badge-dot {
+  box-shadow: 0 0 0 3px rgba(74, 222, 148, 0.18);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── ADVANCED DISCLOSURE ────────────────────────────────────────────
+   Same eyebrow treatment as a section header, because that is what it is —
+   a section that happens to start closed. The summary on the right names
+   what is inside so the fold is never a guess. */
+.adv-group {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--border-light);
+}
+.adv-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  transition: color var(--trans-fast);
+}
+.adv-toggle:hover { color: var(--text-main); }
+.adv-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-sm); }
+.adv-caret { flex: none; transition: transform var(--trans-smooth); }
+.adv-group.is-open .adv-caret { transform: rotate(90deg); }
+.adv-count {
+  margin-left: auto;
+  font-size: var(--fs-eyebrow);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adv-group.is-open .adv-count { opacity: 0; }
+.adv-body { display: none; padding-top: var(--sp-1); }
+.adv-group.is-open .adv-body { display: block; }
 
 .ctrl-hint {
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   line-height: 1.45;
   color: var(--text-faint);
   margin: 6px 0 0;

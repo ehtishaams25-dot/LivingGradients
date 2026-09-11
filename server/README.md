@@ -79,7 +79,7 @@ without a backend.
 curl -X POST https://your-worker/admin/version \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"version":"2.2.0","url":"https://digivero.gumroad.com/l/livinggradients","notes":"Preset capture, collections, and a proper data folder."}'
+  -d '{"version":"2.2.0","url":"https://ehtishaam.gumroad.com/l/livinggradients","notes":"Preset capture, collections, and a proper data folder."}'
 ```
 
 Panels pick it up within twelve hours, or immediately on **Check for updates**.

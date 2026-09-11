@@ -7,7 +7,11 @@ const GRADIENT_CONTROLS = {
      inspector. Keys match what each builder actually reads. */
   OklabSmooth: [
     { id: 'gradientType', label: 'Gradient Type', options: ['Linear', 'Radial'], default: 'Linear', type: 'select' },
-    { id: 'angle',        label: 'Angle',  min: 0, max: 90,  step: 90, default: 0,  type: 'slider' }
+    { id: 'angle',        label: 'Angle',  min: 0, max: 90,  step: 90, default: 0,  type: 'slider' },
+    /* This gradient had no motion control because it had no motion. It does
+       now - the ramp axis swings and its reach breathes - and 0 stays
+       reachable for anyone who genuinely wants a still. */
+    { id: 'speed',        label: 'Drift Speed', min: 0, max: 60, step: 1, default: 12, type: 'slider' }
   ],
   /* Position first, deliberately. On this gradient it is not one setting
      among many — it is the one that decides what the thing looks like, and
@@ -379,8 +383,8 @@ const GRADIENT_CONTROLS = {
     { id: 'cells',      label: 'Cell Density',  min: 5, max: 200, step: 1, default: 120, type: 'slider' },
     { id: 'dispersion', label: 'Irregularity',  min: 0, max: 100, step: 1, default: 100, type: 'slider' },
     { id: 'contrast',   label: 'Line Weight',   min: 0, max: 400, step: 5, default: 400, type: 'slider' },
-    { id: 'speed',      label: 'Evolution Speed', min: 0, max: 300, step: 5, default: 0, type: 'slider' },
-    { id: 'drift',      label: 'Drift',         min: 0, max: 400, step: 5, default: 0,  type: 'slider' },
+    { id: 'speed',      label: 'Evolution Speed', min: 0, max: 300, step: 5, default: 12, type: 'slider' },
+    { id: 'drift',      label: 'Drift',         min: 0, max: 400, step: 5, default: 18, type: 'slider' },
     { id: 'warp',       label: 'Organic Warp',  min: 0, max: 300, step: 5, default: 0,  type: 'slider' },
     { id: 'sheen',      label: 'Edge Glow',     min: 0, max: 100, step: 1, default: 0,  type: 'slider' },
     { id: 'invert',     label: 'Invert Cells',  options: ['On', 'Off'], default: 'On', type: 'select' },
@@ -441,12 +445,25 @@ const GRADIENT_CONTROLS = {
     { id: 'centerX',       label: 'Centre X',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' },
     { id: 'centerY',       label: 'Centre Y',       min: 0,    max: 100, step: 1, default: 50, type: 'slider' }
   ],
+  /* ── THE TRAIL ENGINE ──────────────────────────────────────────────
+     Eight gradients on one mechanism, so they share most of one control
+     set. Stroke thickness is the only rebuild in any of them: it decides
+     how many solids the bank has and how wide each one is, and a solid
+     cannot be resized after the fact. Everything else is an effect
+     property or an expression, so it lands on the drag.
+
+     Band Count is new, and it is the control the family was missing. Each
+     stroke carried exactly one soft sweep over the whole frame, which at
+     any real stroke width reads as a slab of flat colour rather than as a
+     strand. 4 is what the builder always hard-coded; it is the default so
+     nothing saved before this moves. */
   TrailGradient: [
-    /* Trail Width is the only rebuild here: it sets how many strokes there
-       are and how wide each solid is, and a solid cannot be resized after the
-       fact. Everything below is an effect property or an expression, so it
-       lands on the drag. */
     { id: 'width',      label: 'Trail Width',  min: 10,  max: 200,  step: 5,  default: 60,  type: 'slider' },
+    /* 2, not the 4 the builder hard-coded for years. Four bands crossed with
+       the shear puts a dozen colour cycles in the frame and it reads as
+       knitting; two reads as strands travelling, which is the thing this
+       gradient is for. The slider goes to 16 for anyone who wants the weave. */
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 16,   step: 1,  default: 2,   type: 'slider' },
     { id: 'cycleSpeed', label: 'Cycle Speed',  min: 100, max: 2000, step: 50, default: 600, type: 'slider' },
     { id: 'phase',      label: 'Phase Pattern',
       options: ['Linear', 'Sine', 'Mirror', 'Random', 'Counterflow'],
@@ -454,11 +471,186 @@ const GRADIENT_CONTROLS = {
     { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 100, type: 'slider' },
     { id: 'warpStyle',  label: 'Warp Style',
       options: ['Squeeze', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
-                'Rise', 'Fisheye', 'Inflate', 'Twist', 'Flat'],
+                'Fisheye', 'Inflate', 'Twist', 'Flat'],
       default: 'Squeeze', type: 'select' },
     { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
       default: 'Horizontal', type: 'select' },
-    { id: 'bend',       label: 'Arc Bend',     min: -100, max: 100, step: 1,  default: 30,  type: 'slider' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 30,  type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* The bank on its side. Same set, different words for the same things —
+     these are bars stacked up the frame, not columns across it. */
+  HorizonTrail: [
+    { id: 'width',      label: 'Bar Depth',    min: 10,  max: 300,  step: 5,  default: 60,  type: 'slider' },
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 16,   step: 1,  default: 4,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Drift Speed',  min: 100, max: 2000, step: 50, default: 600, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Linear', 'Sine', 'Mirror', 'Random', 'Counterflow'],
+      default: 'Sine', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 90,  type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Wave', 'Flat', 'Arc', 'Arch', 'Bulge', 'Flag', 'Fish',
+                'Fisheye', 'Inflate', 'Squeeze', 'Twist'],
+      default: 'Wave', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 22,  type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* Wrapped into a circle. No warp — the polar wrap is the distortion, and
+     adding a second one on top of it only ever made mush. Phase Spread is
+     the important one here: at 0 the wedges vanish and it becomes Ripple. */
+  IrisTrail: [
+    { id: 'width',      label: 'Wedge Width',  min: 10,  max: 300,  step: 5,  default: 60,  type: 'slider' },
+    { id: 'bands',      label: 'Ring Count',   min: 1,   max: 24,   step: 1,  default: 6,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Travel Speed', min: 100, max: 2000, step: 50, default: 600, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Random', 'Linear', 'Sine', 'Mirror', 'Counterflow'],
+      default: 'Random', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 120, type: 'slider' },
+    { id: 'spin',       label: 'Spin',         min: -60, max: 60,   step: 1,  default: 6,   type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* The same wrap aimed at the rings instead of the wedges. Wide strokes and
+     no spread, plus a turbulence in rectangular space that bends the rows —
+     which is what stops concentric rings being a bullseye. */
+  RippleTrail: [
+    { id: 'width',       label: 'Segment Width', min: 40,  max: 600,  step: 10, default: 200, type: 'slider' },
+    { id: 'bands',       label: 'Ring Count',    min: 1,   max: 24,   step: 1,  default: 8,   type: 'slider' },
+    { id: 'cycleSpeed',  label: 'Ripple Speed',  min: 100, max: 2000, step: 50, default: 500, type: 'slider' },
+    { id: 'spread',      label: 'Phase Spread',  min: 0,   max: 200,  step: 5,  default: 0,   type: 'slider' },
+    { id: 'wobble',      label: 'Water Wobble',  min: 0,   max: 300,  step: 5,  default: 60,  type: 'slider' },
+    { id: 'wobbleScale', label: 'Wobble Scale',  min: 10,  max: 400,  step: 5,  default: 90,  type: 'slider' },
+    { id: 'wobbleSpeed', label: 'Wobble Speed',  min: 0,   max: 200,  step: 5,  default: 40,  type: 'slider' },
+    { id: 'spin',        label: 'Spin',          min: -60, max: 60,   step: 1,  default: 0,   type: 'slider' },
+    { id: 'colorOrder',  label: 'Colour Order',  options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* Melt Scale is the control that decides whether this is Molten Trail or a
+     fraying rope. A turbulence FINER than a stroke is wide shreds the strokes
+     into fibres — that is how Golden Pelt was found by accident. Coarser than
+     a stroke slides whole columns past each other, which is marbling. The
+     default sits well clear of the stroke width for that reason. */
+  MoltenTrail: [
+    { id: 'width',      label: 'Trail Width',  min: 20,  max: 300,  step: 5,  default: 90,  type: 'slider' },
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 16,   step: 1,  default: 3,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Cycle Speed',  min: 100, max: 2000, step: 50, default: 450, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Linear', 'Sine', 'Mirror', 'Random', 'Counterflow'],
+      default: 'Linear', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 80,  type: 'slider' },
+    /* 250, not 400. The builder budgets the displacement against the bank's
+       overhang and clamps to it, so the top of the slider did not tear the
+       frame — it just stopped doing anything past the clamp, which is a
+       slider that lies about its own range. This is the last value that
+       still moves the picture. */
+    { id: 'melt',       label: 'Melt Amount',  min: 0,   max: 250,  step: 5,  default: 120, type: 'slider' },
+    { id: 'meltScale',  label: 'Melt Scale',   min: 20,  max: 600,  step: 10, default: 220, type: 'slider' },
+    { id: 'meltSpeed',  label: 'Melt Speed',   min: 0,   max: 200,  step: 5,  default: 30,  type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Flat', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
+                'Fisheye', 'Inflate', 'Squeeze', 'Twist'],
+      default: 'Flat', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 20,  type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* Softness has to be able to exceed the stroke width or this is just Vapor
+     Trail with a blur on it — the point is that the columns stop being
+     columns. Hence 400 against a default stroke of 140. */
+  HazeTrail: [
+    { id: 'width',      label: 'Trail Width',  min: 40,  max: 500,  step: 10, default: 140, type: 'slider' },
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 12,   step: 1,  default: 3,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Drift Speed',  min: 100, max: 2000, step: 50, default: 350, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Sine', 'Linear', 'Mirror', 'Random', 'Counterflow'],
+      default: 'Sine', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 110, type: 'slider' },
+    /* 250, not 400. Past about this the bank blurs into one flat field: the
+       render came back at mean luminance 242 with no measurable difference
+       between two seconds apart, which is a white rectangle that does not
+       move. Softness is meant to soften a trail, not remove it. */
+    { id: 'softness',   label: 'Softness',     min: 0,   max: 250,  step: 5,  default: 90,  type: 'slider' },
+    { id: 'bloom',      label: 'Bloom',        min: 0,   max: 100,  step: 1,  default: 20,  type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Flat', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
+                'Fisheye', 'Inflate', 'Squeeze', 'Twist'],
+      default: 'Flat', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 18,  type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* Band Edge is the whole difference between this and Vapor Trail. It is a
+     Levels window around the middle of the ramp: wide is a soft band, narrow
+     is a hard one. The stroke widths are uneven here and that is not a
+     setting — an even barcode is a picket fence. */
+  SignalTrail: [
+    /* Wide, and only two bands. Every earlier default here was denser, and
+       dense is the one thing a barcode cannot be: at five bands over
+       seventy-pixel strokes the frame held several hundred cells and read as
+       television static. Two bands on a hundred-and-forty-pixel stroke gives
+       one flat block per column at its own random offset, which is the
+       thing. */
+    { id: 'width',      label: 'Base Width',   min: 20,  max: 300,  step: 5,  default: 140, type: 'slider' },
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 16,   step: 1,  default: 2,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Cycle Speed',  min: 100, max: 2000, step: 50, default: 700, type: 'slider' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Random', 'Linear', 'Sine', 'Mirror', 'Counterflow'],
+      default: 'Random', type: 'select' },
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 100, type: 'slider' },
+    { id: 'edge',       label: 'Band Edge',    min: 0,   max: 100,  step: 1,  default: 70,  type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Flat', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
+                'Fisheye', 'Inflate', 'Squeeze', 'Twist'],
+      default: 'Flat', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 0,   type: 'slider' },
+    { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
+      default: 'Palette', type: 'select' }
+  ],
+
+  /* Two banks crossed. Weave is the blend between them and it changes this
+     more than any slider does: Multiply reads as cloth, Screen as light
+     through a grille, Difference as neither and deliberately so. */
+  LatticeTrail: [
+    /* A weave needs several repeats in BOTH directions. Two bands put barely
+       one repeat across the frame and the crossing disappeared into a flat
+       sheet; the corduroy before it was the shear, not the density. Five
+       bands with the shear held low is a mesh. */
+    { id: 'width',      label: 'Thread Width', min: 20,  max: 300,  step: 5,  default: 110, type: 'slider' },
+    { id: 'bands',      label: 'Band Count',   min: 1,   max: 16,   step: 1,  default: 5,   type: 'slider' },
+    { id: 'cycleSpeed', label: 'Cycle Speed',  min: 100, max: 2000, step: 50, default: 400, type: 'slider' },
+    { id: 'weave',      label: 'Weave',        options: ['Multiply', 'Screen', 'Difference'],
+      default: 'Multiply', type: 'select' },
+    { id: 'phase',      label: 'Phase Pattern',
+      options: ['Linear', 'Sine', 'Mirror', 'Random', 'Counterflow'],
+      default: 'Linear', type: 'select' },
+    /* Low, and that is the weave. Phase Spread shears the bank, and a sheared
+       bank crossed with another sheared bank is corduroy running diagonally
+       rather than cloth: the two directions stop meeting at right angles and
+       there is nothing left to read as woven. */
+    { id: 'spread',     label: 'Phase Spread', min: 0,   max: 200,  step: 5,  default: 25,  type: 'slider' },
+    { id: 'warpStyle',  label: 'Warp Style',
+      options: ['Flat', 'Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish',
+                'Fisheye', 'Inflate', 'Squeeze', 'Twist'],
+      default: 'Flat', type: 'select' },
+    { id: 'warpAxis',   label: 'Warp Axis', options: ['Horizontal', 'Vertical'],
+      default: 'Horizontal', type: 'select' },
+    { id: 'bend',       label: 'Arc Bend',     min: -50,  max: 50,  step: 1,  default: 0,   type: 'slider' },
     { id: 'colorOrder', label: 'Colour Order', options: ['Palette', 'By Luminance'],
       default: 'Palette', type: 'select' }
   ],
@@ -503,10 +695,23 @@ const GRADIENT_CONTROLS = {
   ],
   WebThreads: [
     { id: 'speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 0.4, type: 'slider' },
-    { id: 'threadCount', label: 'Thread Count', min: 1, max: 50, step: 1, default: 10, type: 'slider' },
-    { id: 'frequency', label: 'Frequency', min: 1, max: 50, step: 1, default: 14, type: 'slider' },
-    { id: 'spread', label: 'Spread', min: 0.01, max: 0.2, step: 0.01, default: 0.06, type: 'slider' },
-    { id: 'taper', label: 'Taper', min: 1, max: 10, step: 0.1, default: 3, type: 'slider' },
+    { id: 'threadCount', label: 'Thread Count', min: 1, max: 50, step: 1, default: 18, type: 'slider' },
+    { id: 'frequency', label: 'Frequency', min: 1, max: 50, step: 1, default: 11, type: 'slider' },
+    /* SPREAD AND TAPER TOGETHER DECIDE WHETHER THIS FILLS A FRAME AT ALL.
+
+       The thread's amplitude is spreadH * pow(|t - pinch|, taper), and at the
+       old defaults - spread 0.06, taper 3 - spreadH is 648px and the largest
+       amplitude anywhere on the path is 648 * 0.59^3, about 133px. So every
+       thread lived inside a 266px band across the middle of a 1080px frame
+       and the gradient rendered as a bright horizontal line with an empty
+       frame around it. The taper was doing the damage: cubing a number below
+       one collapses it.
+
+       Measured at 1920x1080 across taper 1.2 to 2.2 and spread 0.09 to 0.16,
+       these are the values where the weave reaches the top and bottom edges
+       at the wide end and still closes to a real waist at the pinch. */
+    { id: 'spread', label: 'Spread', min: 0.01, max: 0.2, step: 0.01, default: 0.09, type: 'slider' },
+    { id: 'taper', label: 'Taper', min: 1, max: 10, step: 0.1, default: 1.4, type: 'slider' },
     { id: 'position', label: 'Pinch Position', min: 0, max: 1, step: 0.01, default: 0.59, type: 'slider' },
     { id: 'thickness', label: 'Thickness', min: 0.1, max: 10, step: 0.1, default: 1.1, type: 'slider' },
     { id: 'glow', label: 'Glow', min: 0, max: 0.1, step: 0.01, default: 0.02, type: 'slider' }
@@ -527,11 +732,65 @@ function formatCtrlValue(ctrl, value) {
    whose stop is driven by a custom property. */
 function paintRange(el) {
   const min = parseFloat(el.min), max = parseFloat(el.max);
-  const pct = ((parseFloat(el.value) - min) / (max - min)) * 100;
+  const span = (max - min) || 1;
+  const pct = ((parseFloat(el.value) - min) / span) * 100;
+  /* The range paints its own filled portion, so --pct goes on the input. The
+     `.ctrl` above it gets a copy because the reset button dims itself when a
+     control is still sitting on its default. */
   el.style.setProperty('--pct', pct + '%');
-  /* The range input is invisible now; the capsule around it draws the fill. */
-  const cap = el.closest('.ctrl-slider');
-  if (cap) cap.style.setProperty('--pct', pct + '%');
+  const item = el.closest('.ctrl');
+  if (item) item.style.setProperty('--pct', pct + '%');
+}
+
+/* SCRUBBING THE NUMBER, WHICH IS WHAT MAKES IT READ AS AFTER EFFECTS.
+
+   In Effect Controls the value itself is the control: you drag across the
+   number and it counts. Typing into it still has to work, so this only
+   commits to scrubbing once the pointer has actually travelled — a plain
+   click falls through and focuses the field for typing.
+
+   The step is the control's own, so a slider that moves in 0.5s scrubs in
+   0.5s. Shift is the fine pass at a tenth, the same as the host. */
+function lgScrubNumber(num, slider, ctrl, commit) {
+  let startX = 0, startVal = 0, scrubbing = false, armed = false;
+
+  num.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    armed = true;
+    scrubbing = false;
+    startX = e.clientX;
+    startVal = parseFloat(slider.value);
+  });
+
+  num.addEventListener('pointermove', function (e) {
+    if (!armed) return;
+    const dx = e.clientX - startX;
+    if (!scrubbing) {
+      if (Math.abs(dx) < 3) return;   // still could be a click
+      scrubbing = true;
+      num.setPointerCapture(e.pointerId);
+      num.blur();                      // no caret while dragging
+    }
+    const step = parseFloat(ctrl.step) || 1;
+    const unit = step * (e.shiftKey ? 0.1 : 1);
+    let v = startVal + dx * unit;
+    v = Math.min(ctrl.max, Math.max(ctrl.min, v));
+    /* Land on the control's own grid, or 0.5 steps drift into 0.4999999. */
+    v = Math.round(v / step) * step;
+    slider.value = v;
+    num.value = formatCtrlValue(ctrl, v);
+    commit(num);
+  });
+
+  function release(e) {
+    if (scrubbing && num.hasPointerCapture && num.hasPointerCapture(e.pointerId)) {
+      num.releasePointerCapture(e.pointerId);
+    }
+    armed = false;
+    scrubbing = false;
+  }
+  num.addEventListener('pointerup', release);
+  num.addEventListener('pointercancel', release);
 }
 
 /* -- THE XY PAD ------------------------------------------------------
@@ -751,12 +1010,24 @@ function renderControls(type) {
       buildXYPad(ctrl, item, reset, label);
 
     } else if (ctrl.type === 'select' || ctrl.type === 'text') {
-      /* Selects, text fields and sliders share one capsule, so a column of
-         mixed controls still reads as a single list rather than as three
-         different kinds of widget stacked up. */
+      /* Selects and text fields take the same two lines the sliders take, so a
+         column of mixed controls still reads as one list.
+
+         They used to put the label and the field side by side in a capsule,
+         which is where 'Turbulen…', 'Dot S…', 'Gradien…' and 'Fin…' came from:
+         a dropdown showing 'Custom Text/Emoji' needs most of the row, so the
+         name of the thing it was setting got whatever was left. Nothing is
+         gained by keeping them on one line — the value is already legible in
+         the closed select. */
       const row = document.createElement('div');
-      row.className = 'ctrl-row' + (ctrl.type === 'select' ? ' has-select' : '');
-      row.appendChild(label);
+      row.className = 'ctrl-line' + (ctrl.type === 'select' ? ' has-select' : '');
+      label.title = ctrl.label;
+
+      const head = document.createElement('div');
+      head.className = 'ctrl-head';
+      head.appendChild(label);
+      head.appendChild(reset);
+      item.appendChild(head);
 
       let input;
       if (ctrl.type === 'select') {
@@ -792,7 +1063,6 @@ function renderControls(type) {
       input.id = 'ctrl-' + ctrl.id;
 
       label.setAttribute('for', input.id);
-      row.appendChild(reset);
       row.appendChild(input);
       item.appendChild(row);
 
@@ -854,13 +1124,34 @@ function renderControls(type) {
         commit(num);
       });
 
-      const cap = document.createElement('div');
-      cap.className = 'ctrl-slider';
-      cap.appendChild(slider);
-      cap.appendChild(label);
-      cap.appendChild(reset);
-      cap.appendChild(num);
-      item.appendChild(cap);
+      /* AE's own Effect Controls row, which is the one the panel was asked to
+         look like: the name and a scrubbable value on the first line, the
+         track on the second.
+
+         The old capsule put an invisible range across the whole row and drew
+         the value as a fill *behind the label*. Two things were wrong with
+         that and both were reported. The fill ended in the middle of a word,
+         so it read as a broken progress bar rather than a slider; and because
+         the range spanned the label and the ticks but not the number field,
+         the place the pointer went was never the place the value was. A real
+         track with a real thumb cannot disagree with itself. */
+      const head = document.createElement('div');
+      head.className = 'ctrl-head';
+      /* Labels used to ellipse to 'Turbulen…' with nothing to recover the
+         rest. They still ellipse when a panel is genuinely too narrow, but
+         the full text is always one hover away. */
+      label.title = ctrl.label;
+      head.appendChild(label);
+      head.appendChild(reset);
+      head.appendChild(num);
+
+      const track = document.createElement('div');
+      track.className = 'ctrl-track';
+      track.appendChild(slider);
+
+      item.appendChild(head);
+      item.appendChild(track);
+      lgScrubNumber(num, slider, ctrl, commit);
       paintRange(slider);
     }
 
@@ -905,6 +1196,39 @@ function getControlValues(type) {
   });
   return vals;
 }
+
+
+/* THE SaaS FAMILY'S SLIDERS
+
+   Same eight controls as SaaS, with the defaults from SAAS_VARIANTS in
+   js/presets.js. Derived rather than written out, because five hand-copied
+   lists of eight sliders is five chances to fix a range in four places.
+
+   A NOTE FOR tools/qa_sweep.jsx. That script reads control defaults as
+   LITERAL TEXT out of this file, so anything generated here is invisible to
+   it and it will silently build with the base defaults instead. That is not
+   theoretical: it is how four SaaS presets were reviewed, and rejected, on
+   renders of a fifth. Anything under development states its own numbers in
+   js/candidates.js, which the sweep reads directly. */
+(function defineSaaSFamilyControls() {
+  if (typeof SAAS_VARIANTS === 'undefined' || !GRADIENT_CONTROLS.SaaS) return;
+
+  Object.keys(SAAS_VARIANTS).forEach(function (id) {
+    var overrides = SAAS_VARIANTS[id];
+    GRADIENT_CONTROLS[id] = GRADIENT_CONTROLS.SaaS.map(function (ctrl) {
+      var copy = {};
+      Object.keys(ctrl).forEach(function (k) { copy[k] = ctrl[k]; });
+      /* The XY pad reports as positionX/positionY but is declared as one
+         control with an array default, so it is rebuilt from the two. */
+      if (ctrl.type === 'xy') {
+        copy.default = [overrides[ctrl.id + 'X'], overrides[ctrl.id + 'Y']];
+      } else if (Object.prototype.hasOwnProperty.call(overrides, ctrl.id)) {
+        copy.default = overrides[ctrl.id];
+      }
+      return copy;
+    });
+  });
+})();
 
 
 /* ── Config integrity check ────────────────────────────────────────────

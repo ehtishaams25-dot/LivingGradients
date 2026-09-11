@@ -15,8 +15,8 @@
 
    So the library lives on disk beside the application's other support files:
 
-     Windows   %APPDATA%\Digivero\LivingGradients\v2
-     macOS     ~/Library/Application Support/Digivero/LivingGradients/v2
+     Windows   %APPDATA%\Ehtishaam\LivingGradients\v2
+     macOS     ~/Library/Application Support/Ehtishaam/LivingGradients/v2
 
    and the layout inside it is deliberate:
 
@@ -44,10 +44,14 @@
 var LGStore = (function () {
   'use strict';
 
-  var VENDOR = 'Digivero';
+  var VENDOR = 'Ehtishaam';
   var PRODUCT = 'LivingGradients';
   var SCHEMA = 'v2';
   var BACKUP_KEEP = 8;
+
+  /* The folder was %APPDATA%\Digivero\... up to and including 2.2.0. See
+     migrateVendorFolder() at the bottom of the path section. */
+  var LEGACY_VENDOR = 'Digivero';
 
   /* ── FS ADAPTER ──────────────────────────────────────────────────── */
 
@@ -226,6 +230,13 @@ var LGStore = (function () {
      case, which is how you end up computing a *relative* path and writing the
      library into whatever directory After Effects happened to start in. */
   function supportRoot() {
+    return supportRootFor(VENDOR);
+  }
+
+  /* Parameterised so the old vendor's folder can be located with exactly the
+     same logic that found the new one, rather than by string-surgery on a
+     path that CEP may have handed us in a shape we did not predict. */
+  function supportRootFor(vendor) {
     var base = '';
 
     try {
@@ -247,7 +258,53 @@ var LGStore = (function () {
        is already false, so nothing will be written either way. */
     if (!base) return '(no filesystem)';
 
-    return join(base, VENDOR, PRODUCT, SCHEMA);
+    return join(base, vendor, PRODUCT, SCHEMA);
+  }
+
+  /* ── THE VENDOR RENAME ────────────────────────────────────────────────
+
+     "Digivero" was never the author's name and is gone from the product as of
+     2.3.0. Renaming the data folder is not free, though: somebody who has
+     been saving presets for months has every one of them under the old name,
+     and a panel that quietly starts empty looks exactly like a panel that
+     lost the lot.
+
+     So the old tree is copied across once, the first time the new one is
+     created. COPIED, NOT MOVED, deliberately — if any part of this goes
+     wrong the presets are still sitting where they have always been, and the
+     worst case is two copies rather than none. The user can delete the old
+     folder when they are satisfied; INSTALL.md says where it is.
+
+     Guarded on the new library.json being absent, so this happens once and
+     never fights a library the user has since built up. */
+  function copyTree(from, to) {
+    if (!isDir(from)) return 0;
+    mkdirp(to);
+    var n = 0, names = listDir(from), i, src, dst;
+    for (i = 0; i < names.length; i++) {
+      src = join(from, names[i]);
+      dst = join(to, names[i]);
+      if (isDir(src)) {
+        n += copyTree(src, dst);
+      } else if (!exists(dst) && copyFile(src, dst)) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /* Non-null only when it actually moved something, so the caller can say so
+     once and stay quiet on every subsequent launch. */
+  function migrateVendorFolder() {
+    if (!haveFs()) return null;
+
+    var old = supportRootFor(LEGACY_VENDOR);
+    if (!old || old === P.root) return null;
+    if (!isDir(old)) return null;
+    if (exists(P.library)) return null;
+
+    var copied = copyTree(old, P.root);
+    return copied ? { from: old, to: P.root, files: copied } : null;
   }
 
   var ROOT = supportRoot();
@@ -262,9 +319,23 @@ var LGStore = (function () {
     exports: join(ROOT, 'exports')
   };
 
+  /* Set by the first ensureTree() that finds a 2.2.0-era folder to bring
+     across, and read once by boot.js for the banner. */
+  var migrated = null;
+  var migrationChecked = false;
+
   function ensureTree() {
     if (!haveFs()) return false;
     mkdirp(P.root);
+
+    /* Before the subdirectories, so the copy lands in an empty tree and its
+       own presets/ and thumbs/ arrive as directories rather than merging
+       into ones we just made. */
+    if (!migrationChecked) {
+      migrationChecked = true;
+      migrated = migrateVendorFolder();
+    }
+
     mkdirp(P.presets);
     mkdirp(P.thumbs);
     mkdirp(P.backups);
@@ -445,10 +516,13 @@ var LGStore = (function () {
     /* For the diagnostics card. When an install misbehaves, "which backend
        answered and where is the folder" is always the first question. */
     describe: function () {
+      var writable = ensureTree();
       return {
         backend: nodeFs ? 'node' : (cepFs ? 'cep' : 'none'),
         root: P.root,
-        writable: ensureTree()
+        writable: writable,
+        /* null unless this launch brought a 2.2.0 folder across. */
+        migrated: migrated
       };
     }
   };

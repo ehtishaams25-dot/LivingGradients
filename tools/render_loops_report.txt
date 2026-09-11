@@ -1,25 +1,21 @@
 Living Gradients - loop renders
-AE 26.0x67   Thu Aug 27 2026 16:41:19 GMT+0530
+AE 26.0x67   Sat Sep 05 2026 03:29:46 GMT+0530
 built at 1920x1080, saved at 640x360 (scaled to cover)
 loop 8s + 1s tail at 30fps = 270 frames each
 ran from : D:\Ehtishaam\Files\Mine\New Branding\Scripts\Gradients combined script\v2\LivingGradients
-builders : jsx/main.jsx, 310792 chars, modified Thu Aug 27 2026 16:11:13 GMT+0530
+builders : jsx/main.jsx, 320277 chars, modified Sat Sep 05 2026 03:20:40 GMT+0530
 frames   : C:\Users\Admin\AppData\Local\Temp\lg_loops
-scope    : Copper, Gold, Silver, Metallic
+scope    : SaaS, SaaSMesh, SaaSSpotlight, SaaSCorner, SaaSTwilight   (FORCE)
 
 STATUS   GRADIENT            FRAMES  NOTES
 -----------------------------------------------------------------------------------------------
-  FAILED Molten Copper       -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
-  FAILED Molten Gold         -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
-  FAILED Molten Silver       -       Error: saveFrameToPng wrote nothing at frame 0  (line 344)
-  FAILED Satin Waves         -       ReferenceError: o is undefined  (line 5330)
+  OK     SaaS Gradient       270     
+  OK     Mesh Bloom          270     
+  OK     Spotlight           270     
+  OK     Corner Glow         270     
+  OK     Twilight Mesh       270     
 -----------------------------------------------------------------------------------------------
-rendered 0   skipped 0   failed 4
-
-The ones that failed keep the canvas painter in js/preview.js, so
-the grid still shows something for them. They are the ones to look
-at: a builder that cannot render here cannot render in the panel
-either.
+rendered 5   skipped 0   failed 0
 
 Next:
   powershell -ExecutionPolicy Bypass -File tools/encode_loops.ps1

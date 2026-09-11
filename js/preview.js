@@ -119,8 +119,8 @@ function pvPut(d, i, rgb) {
   d[i + 3] = 255;
 }
 
-/* SaaS: a near-flat backdrop with one big soft bloom off to a side and a
-   quieter second one balancing it.
+/* SaaS: a near-flat backdrop with one big soft bloom off to a side and
+   quieter ones balancing it.
 
    Composited the way the real build does -- each bloom laid over what is
    already there with its own falloff as the alpha -- rather than by
@@ -128,17 +128,82 @@ function pvPut(d, i, rgb) {
    in one pass would let two saturated colours meet at a muddy midpoint,
    which is the failure this whole look is trying to avoid.
 
-   The falloff is smoothstep cubed. Squared still shows an edge on a light
-   backdrop, which is exactly where this gradient is normally used. */
-function pvSaaS(d, W, H, pal) {
-  const bg = pal[0] || [1, 1, 1];
+   THE CARD IS THE BUILD, ARITHMETICALLY.
 
-  /* Matches buildSaaS's default pad position and its first offset, so the
-     card is a fair likeness of what applying it actually produces. */
-  const blooms = [
-    { x: 0.30, y: 0.35, r: 0.62, a: 0.85, c: pal[1] || pal[0] },
-    { x: 0.30 + 0.34, y: 0.35 + 0.23, r: 0.45, a: 0.61, c: pal[2] || pal[1] || pal[0] }
-  ];
+   This used to hard-code two blooms at positions somebody had matched to the
+   defaults by eye. That was fine while SaaS was one preset and impossible the
+   moment it became five: every variant moves the light, changes the count and
+   changes the spread, and a card that ignores all three shows the same picture
+   five times.
+
+   So the numbers below are saasLayout()'s, from jsx/main.jsx, done again in
+   normalised units -- the same offsets, the same per-bloom falloff, the same
+   radius formula. If that function's arithmetic changes, this has to change
+   with it, and the two comments say so to each other. */
+const SAAS_OFFSETS = [[0, 0], [0.62, 0.42], [-0.48, 0.55]];
+/* Each bloom after the first is quieter and smaller; a row of equally loud
+   blooms reads as a lava lamp rather than one light with bounce. */
+const SAAS_FALLOFF = [1, 0.72, 0.5];
+
+/* One SaaS-family preset's numbers, read from the control definitions rather
+   than repeated here, so the card and the inspector cannot disagree about
+   what this gradient's defaults are. Candidates in js/candidates.js carry
+   their own numbers and are never painted here — they have no card. */
+function pvSaaSOptions(type) {
+  const o = { positionX: 30, positionY: 35, size: 70, softness: 80, intensity: 85, blooms: 2, spread: 55 };
+  const defs = (typeof GRADIENT_CONTROLS !== 'undefined') ? GRADIENT_CONTROLS[type] : null;
+  if (!defs) return o;
+  defs.forEach(c => {
+    if (c.type === 'xy' && c.default && c.default.length) {
+      o[c.id + 'X'] = c.default[0];
+      o[c.id + 'Y'] = c.default[1];
+    } else if (typeof c.default === 'number') {
+      o[c.id] = c.default;
+    }
+  });
+  return o;
+}
+
+function pvSaaSCard(type) {
+  let o = null;
+  /* Resolved on first paint, not at load: this file is parsed before anything
+     has asked for a card, and reading the controls now would be reading them
+     before controls.js has finished merging the family in. */
+  return function (d, W, H, pal) {
+    if (!o) o = pvSaaSOptions(type);
+    pvSaaSPaint(d, W, H, pal, o);
+  };
+}
+
+function pvSaaSPaint(d, W, H, pal, o) {
+  const bg = pal[0] || [1, 1, 1];
+  const shortest = Math.min(W, H);
+
+  let count = Math.round(o.blooms);
+  if (count < 1) count = 1;
+  if (count > 3) count = 3;
+
+  const size = o.size / 100, spread = o.spread / 100, soft = o.softness / 100;
+
+  const blooms = [];
+  for (let k = 0; k < count; k++) {
+    const falloff = SAAS_FALLOFF[k];
+    blooms.push({
+      /* Offsets are in units of the shorter axis in the builder, so they are
+         converted per axis here rather than treated as fractions of width. */
+      x: o.positionX / 100 + SAAS_OFFSETS[k][0] * spread * (shortest / W),
+      y: o.positionY / 100 + SAAS_OFFSETS[k][1] * spread * (shortest / H),
+      r: Math.max(0.02, size * 0.75 * falloff),
+      a: (o.intensity / 100) * falloff,
+      c: pal[k + 1] || pal[pal.length - 1] || bg
+    });
+  }
+
+  /* Softness as the exponent of the falloff, which is what the mask feather
+     does to the real build. At the SaaS default of 80 this comes out at 2.96,
+     i.e. the cubed smoothstep this painter always used -- squared still shows
+     an edge on a light backdrop, which is exactly where this look lives. */
+  const exp = 1.2 + soft * 2.2;
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -151,13 +216,12 @@ function pvSaaS(d, W, H, pal) {
         const s = blooms[k];
         /* Distance in units of the shorter axis, so the bloom stays round
            on a 16:9 card instead of stretching with it. */
-        const dx = (u - s.x) * (W / Math.min(W, H));
-        const dy = (v - s.y) * (H / Math.min(W, H));
+        const dx = (u - s.x) * (W / shortest);
+        const dy = (v - s.y) * (H / shortest);
         const dist = Math.sqrt(dx * dx + dy * dy) / s.r;
         if (dist >= 1) continue;
 
-        const t = 1 - dist;
-        const a = t * t * t * s.a;
+        const a = Math.pow(1 - dist, exp) * s.a;
         r += (s.c[0] - r) * a;
         g += (s.c[1] - g) * a;
         b += (s.c[2] - b) * a;
@@ -346,6 +410,93 @@ function pvThreads(d, W, H, pal) {
       pvPut(d, (y * W + x) * 4, pvMix(bg, pvLut(lut, 0.35 + nx * 0.65), glow));
     }
   }
+}
+
+/* ── The Trail Engine ─────────────────────────────────────────────────
+   One painter for eight gradients, because there is one builder for eight
+   gradients: a bank of strokes, each carrying a mirrored ramp, each lagging
+   the next. The card draws that bank rather than an impression of it, so a
+   trail whose real render has not landed yet still shows the right shape —
+   the failure Frosted Glass and Snakeskin both had was a card drawn from a
+   description instead of from the construction.
+
+     axis    'H' lays the bank on its side
+     polar   wraps it into a disc, which is Rect-to-Polar's own mapping:
+             angle across the bank, radius along each stroke
+     even    strokes lag by a fixed step rather than by a hash
+     hard    bands step instead of ramping
+     soft    bands pulled towards the middle of the palette
+     melt    the bank sheared by a slow wave, the way the turbulence does
+     cross   a second bank at right angles, multiplied in */
+function pvTrailCard(o) {
+  return function (d, W, H, pal) {
+    const lut = pvRamp(pvByLuma(pal));
+    const strokes = o.strokes || 9;
+    const bands = o.bands || 4;
+
+    /* The lag between neighbouring strokes is the one number that decides
+       whether this reads as a trail or as brickwork. At a half cycle the
+       bands of one stroke line up with the gaps of the next and the card
+       becomes a checkerboard, which is what the first version of these
+       cards did and is nothing like the render. Small, so the offset
+       accumulates into a shear across the bank. */
+    const step = o.lag === undefined ? 0.08 : o.lag;
+    const band = (u, v) => {
+      /* Modulo, not just floor. At u exactly 1 the floor lands in a bucket
+         of its own, and on a polar card u is an ANGLE — so that extra
+         bucket is a hairline seam down one side of the disc, at the place
+         where the angle wraps and nothing should be visible at all. */
+      const k = ((Math.floor(u * strokes) % strokes) + strokes) % strokes;
+      const lag = o.even ? k * step : pvHash(k, 7, 3) * (o.scatter === undefined ? 0.9 : o.scatter);
+      let t = (((v + lag) * bands) % 1 + 1) % 1;
+      t = Math.abs(t * 2 - 1);                  // Mirror Edges, in one line
+      if (o.hard) t = Math.round(t * 3) / 3;
+      if (o.soft) t = 0.5 + (t - 0.5) * 0.5;
+      return t;
+    };
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let u = x / W, v = y / H;
+        if (o.polar) {
+          /* Squared to the shorter side so the rings come out round, and
+             held off zero at the centre — the radius collapses there and
+             every band lands on the same pixel, which draws a star that
+             exists nowhere in the render. */
+          const nx = (x / W - 0.5) * (W / H), ny = y / H - 0.5;
+          u = Math.atan2(ny, nx) / (Math.PI * 2) + 0.5;
+          /* Not clamped at 1. The disc in the render is as wide as the
+             frame's diagonal, so the corners carry bands like everywhere
+             else; a clamp here paints them flat and says the gradient runs
+             out before the frame does, which is the one thing this family
+             has been fixed NOT to do. */
+          /* The floor is 0.18 rather than a hair above zero. Radius runs out
+             of room at the centre, so the innermost rings pile into a few
+             pixels and moire; starting the ramp further out spends the
+             card on the rings that can actually be seen. */
+          v = 0.30 + Math.sqrt(nx * nx + ny * ny) * 1.7;
+        } else if (o.axis === 'H') {
+          u = y / H; v = x / W;
+        }
+        /* The Warp, which every trail that is not wrapped into a disc ends
+           in. It is not decoration on the card either: a bank of strokes
+           with no bend in it reads as a grid, and the bend is most of what
+           turns the grid back into strands. */
+        if (o.bend)   { v += o.bend * Math.sin(u * Math.PI); }
+        if (o.melt)   { u += 0.10 * Math.sin(v * 4.1 + 0.7); v += 0.06 * Math.sin(u * 5.3); }
+        /* Periodic in u and scaled by the radius. Neither is decoration: u
+           is an ANGLE once the card is polar, so a wobble that does not
+           close over a full turn draws a seam down one side, and one that
+           does not fall off towards the centre folds every ring onto the
+           same few pixels and draws a star. */
+        if (o.wobble) { v += 0.05 * Math.min(1, (v - 0.30) * 2.5) * Math.sin(u * Math.PI * 8); }
+
+        let t = band(u, v);
+        if (o.cross) t = Math.min(t, band(y / H, x / W));
+        pvPut(d, (y * W + x) * 4, pvLut(lut, t));
+      }
+    }
+  };
 }
 
 /* ── A field to threshold, and a surface to light ───────────────────── */
@@ -634,7 +785,7 @@ function pvPrintCard(o) {
 }
 
 const PREVIEW_FAMILY = {
-  SaaS:           pvSaaS,
+  SaaS:           pvSaaSCard('SaaS'),
   Halftone:       pvHalftone,
   CellularMosaic: pvCells,
   AnimeWater:     pvCells,   // same engine, so the card shows the same shape
@@ -676,7 +827,23 @@ const PREVIEW_FAMILY = {
 
   AsciiMatrix:    pvGrid,
   StackedSquares: pvGrid,
-  TrailGradient:  pvThreads,
+
+  /* The Trail Engine. Eight cards off one painter, each given the bank its
+     builder actually makes -- the stroke count and band count here are the
+     control defaults in js/controls.js, so a card cannot drift from the
+     gradient it is standing in for. */
+  TrailGradient:  pvTrailCard({ strokes: 10, bands: 1, even: true, lag: 0.05, bend: 0.20 }),
+  HorizonTrail:   pvTrailCard({ strokes: 12, bands: 2, even: true, axis: 'H', bend: 0.10 }),
+  IrisTrail:      pvTrailCard({ strokes: 16, bands: 4, polar: true, scatter: 0.55 }),
+  /* One stroke, because Ripple's Phase Spread defaults to 0 and a bank with
+     no spread has no visible seams between its wedges — drawing them would
+     be drawing a gradient the builder does not make. */
+  RippleTrail:    pvTrailCard({ strokes: 1,  bands: 5, even: true, polar: true, wobble: true }),
+  MoltenTrail:    pvTrailCard({ strokes: 6,  bands: 3, even: true, lag: 0.17, melt: true }),
+  HazeTrail:      pvTrailCard({ strokes: 5,  bands: 2, even: true, lag: 0.17, bend: 0.16, soft: true }),
+  SignalTrail:    pvTrailCard({ strokes: 8,  bands: 2, hard: true, scatter: 0.75 }),
+  LatticeTrail:   pvTrailCard({ strokes: 7,  bands: 3, even: true, lag: 0.17, cross: true }),
+
   WebThreads:     pvThreads,
   Waves:          pvThreads,
   Antigravity:    pvThreads,
@@ -684,6 +851,15 @@ const PREVIEW_FAMILY = {
   Fiber:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 4.5, 3.0),
   Prism:          (d, W, H, p) => pvRibbons(d, W, H, pvByLuma(p), 3.2, 1.8)
 };
+/* The rest of the SaaS family, registered from the same table that gives them
+   their sliders. These four also ship rendered posters and loops, so this is
+   the fallback rather than the picture — but the fallback still has to be the
+   right shape, and pvSaaSOptions() reads each one's real numbers. */
+if (typeof SAAS_VARIANTS !== 'undefined') {
+  Object.keys(SAAS_VARIANTS).forEach(function (id) {
+    PREVIEW_FAMILY[id] = pvSaaSCard(id);
+  });
+}
 
 function pvPainterFor(type) {
   return PREVIEW_FAMILY[type] || pvMesh;
@@ -729,7 +905,14 @@ let pvIndex = null;                   // Promise<{cards:Set, loops:Set}>
    there. */
 function pvRenderIndex() {
   if (pvIndex) return pvIndex;
-  pvIndex = fetch('css/previews/index.json')
+  /* Version-stamped, because After Effects caches panel assets hard and the
+     build's cache-buster only rewrites the query strings on <script> tags. A
+     fetch() is invisible to that, so an updated install could read the previous
+     release's index - and then either miss every new poster or request one that
+     no longer exists. lgPanelVersion() is 'dev' in an unstamped checkout, which
+     is stable across reloads and is what a developer wants. */
+  pvIndex = fetch('css/previews/index.json?v=' +
+                  encodeURIComponent(typeof lgPanelVersion === 'function' ? lgPanelVersion() : 'dev'))
     .then((res) => (res.ok ? res.json() : null))
     .then((data) => ({
       cards: new Set((data && data.cards) || []),

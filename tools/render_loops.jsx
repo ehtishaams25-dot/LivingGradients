@@ -84,6 +84,45 @@ if (LG_RL_MAIN.exists) {
     /* Re-render ids that already have frames or a finished .webm. */
     var FORCE = false;
 
+    /* NO MODAL AT THE END OF AN UNATTENDED RUN.
+
+       This script used to finish with alert() and then report.execute(). Both
+       are fine when a person ran it from the Scripts menu and is sitting there.
+       Driven in chunks they are fatal, and they failed in a way that looked
+       like nothing at all: the alert blocks After Effects, every subsequent
+       evalScript is refused with "Attempt was made to run a second script while
+       another script was already running", and the driver sees no new frames
+       and concludes the render died. It cost most of an afternoon to find,
+       because the only evidence was three stacked modals behind the editor
+       window.
+
+       report.execute() is worse than blocking - After Effects treats opening a
+       file as running a script and asks the user to confirm it, so an
+       unattended run leaves a security prompt on screen. */
+    var QUIET = false;
+
+    /* ...and both of those can be driven from outside instead.
+
+       The whole library is roughly forty-three gradients at 270 frames each,
+       which is hours, and one evalScript that runs for hours is one that can
+       only fail all at once. tools/qa/loops.json lets a shell loop hand this a
+       few ids at a time and keep the resumability the script already has. The
+       literals above stay as the default for a hand-run from the Scripts menu. */
+    (function () {
+        var cfgFile = new File(LG_RL_ROOT.fsName + '/tools/qa/loops.json');
+        if (!cfgFile.exists) return;
+        try {
+            cfgFile.encoding = 'UTF-8';
+            cfgFile.open('r');
+            var raw = cfgFile.read();
+            cfgFile.close();
+            var cfg = eval('(' + raw + ')');
+            if (cfg && cfg.only instanceof Array) ONLY = cfg.only;
+            if (cfg && typeof cfg.force === 'boolean') FORCE = cfg.force;
+            if (cfg && typeof cfg.quiet === 'boolean') QUIET = cfg.quiet;
+        } catch (e) { /* a broken config falls back to the literals above */ }
+    }());
+
     var BUILD_W = 1920, BUILD_H = 1080;
     var OUT_W = 640, OUT_H = 360;
     var FPS = 30;
@@ -122,10 +161,29 @@ if (LG_RL_MAIN.exists) {
        tools/render_cards.jsx has the same bug at its own `!png.exists` check
        and has never been run, so it has never had the chance to show it. */
     function wroteFile(path) {
-        for (var a = 0; a < 20; a++) {
+        /* A NON-ZERO LENGTH IS NOT A FINISHED FILE, and that half of the bug
+           survived the first fix. saveFrameToPng returns before the bytes are
+           all flushed, so the first size you can read can be a partial PNG -
+           ffmpeg reads f%05d.png in order and a truncated frame stops the
+           encode with "chunk too big" rather than reporting a missing frame.
+           Two consecutive reads at the same non-zero size is what finished
+           means; caught while rendering the V2.2 QA frames, where exactly this
+           produced one unreadable PNG in a run of otherwise good ones. */
+        var last = -1;
+        /* Sixty attempts at 25ms was a second and a half, and that was enough
+           while the check accepted the first non-zero size. Waiting for a
+           STABLE size needs longer: a heavy stack - Frosted Glass, Snakeskin,
+           Fluid Gradient - takes several seconds to flush a frame, and the
+           short budget failed those three at frame 16-25 with nothing wrong
+           except impatience. Twenty seconds, and it is only ever paid when
+           something is actually slow. */
+        for (var a = 0; a < 400; a++) {
             var probe = new File(path);
-            if (probe.exists && probe.length > 0) return true;
-            $.sleep(25);
+            if (probe.exists && probe.length > 0) {
+                if (probe.length === last) return true;
+                last = probe.length;
+            }
+            $.sleep(50);
         }
         return false;
     }
@@ -259,7 +317,50 @@ if (LG_RL_MAIN.exists) {
 
     // -- Render -------------------------------------------------------
 
+
+    /* ---- WHAT WAS HERE BEFORE THIS SCRIPT RAN ------------------------------
+
+       THIS REPLACES A SWEEP THAT COULD DELETE THE USER'S OWN WORK, and it did.
+
+       All three render tools in this folder shared one pattern: record
+       `beforeItems = app.project.numItems`, then afterwards walk
+       `for (pi = numItems; pi > beforeItems; pi--)` and treat everything above
+       that index as "mine, sweep it into my folder" - a folder which is then
+       deleted whole at the end of the run.
+
+       That test is not valid. `app.project.item(i)` enumerates in the Project
+       panel's own order, which is not insertion order, and every removal
+       shifts every index after it. Across forty-three gradients, each of which
+       adds several items and then has them removed, the count falls below the
+       indices of items that were in the project when the script started - and
+       the descending loop reaches them, moves them into the tool's folder, and
+       the folder is deleted with them inside it.
+
+       Observed: a project holding one comp plus a folder tree came out of a
+       full library render holding neither. Nothing in the script intends that
+       and nothing in it reports it.
+
+       Identity is the test that means what it says. Snapshot the items that
+       exist before anything is built, and treat exactly the ones that are not
+       in that list as this run's own. Comparing object references is O(n) per
+       lookup against a list of tens, which costs nothing next to a render. */
+    function lgSnapshotItems() {
+        var seen = [], i;
+        for (i = 1; i <= app.project.numItems; i++) seen.push(app.project.item(i));
+        return seen;
+    }
+
+    function lgWasHereBefore(seen, item) {
+        var i;
+        for (i = 0; i < seen.length; i++) if (seen[i] === item) return true;
+        return false;
+    }
+
     app.beginUndoGroup('Living Gradients - Render Loops');
+
+    /* Taken before the first folder is created, so the tool's own furniture is
+       not in it either. */
+    var PRE_EXISTING = lgSnapshotItems();
 
     var folder = app.project.items.addFolder('LG RENDER LOOPS');
     var card = app.project.items.addComp('LG LOOP OUT', OUT_W, OUT_H, 1, DUR, FPS);
@@ -296,7 +397,6 @@ if (LG_RL_MAIN.exists) {
         var g = queue[i];
         var status = 'OK', detail = '', frames = 0;
         var cell = null;
-        var beforeItems = app.project.numItems;
 
         var seqDir = new Folder(work.fsName + '/' + g.id);
         var lastFrame = new File(seqDir.fsName + '/f' + pad0(TOTAL_FRAMES - 1, 5) + '.png');
@@ -401,12 +501,17 @@ if (LG_RL_MAIN.exists) {
         note(pad('  ' + status, 9) + pad(g.label, 20) + pad(frames || '-', 8) + detail);
 
         /* Sweep up whatever the builder left in the project root - Halftone
-           alone makes four precomps - then drop the whole lot. */
-        for (var pi = app.project.numItems; pi > beforeItems; pi--) {
+           alone makes four precomps - then drop the whole lot.
+
+           Only items that were NOT in the project when this script started.
+           See lgWasHereBefore: the index test this used to use swept the
+           user's own comps into a folder that is deleted at the end. */
+        for (var pi = app.project.numItems; pi >= 1; pi--) {
             try {
                 var item = app.project.item(pi);
                 if (item !== folder && item !== card &&
-                    item.parentFolder === app.project.rootFolder) {
+                    item.parentFolder === app.project.rootFolder &&
+                    !lgWasHereBefore(PRE_EXISTING, item)) {
                     item.parentFolder = folder;
                 }
             } catch (e) { }
@@ -477,9 +582,12 @@ if (LG_RL_MAIN.exists) {
     report.write(log.join('\n') + '\n');
     report.close();
 
-    alert('Loops rendered.\n\n' + wrote + ' rendered, ' + skipped + ' skipped, ' +
-          failed + ' failed.\n\nFrames: ' + work.fsName +
-          '\n\nNow run:\ntools/encode_loops.ps1\n\nReport: tools/render_loops_report.txt');
-    report.execute();
+    if (!QUIET) {
+        alert('Loops rendered.\n\n' + wrote + ' rendered, ' + skipped + ' skipped, ' +
+              failed + ' failed.\n\nFrames: ' + work.fsName +
+              '\n\nNow run:\ntools/encode_loops.ps1' +
+              '\n\nReport: tools/render_loops_report.txt');
+        report.execute();
+    }
 
 })();

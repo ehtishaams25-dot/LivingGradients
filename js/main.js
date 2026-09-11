@@ -3,10 +3,108 @@
    ============================================ */
 
 // ── STATE ──
+/* THREE QUESTIONS THAT ARE NOT THE SAME QUESTION.
+
+   The panel used to answer all three with one set of variables, and that is
+   the whole of the bug where opening the library repainted the gradient
+   already sitting in the comp:
+
+     BROWSING   what am I looking at?      the selected card in the grid
+     DRAFT      what am I configuring?     selectedType, state.colors, controls
+     ACTIVE     what is actually applied?  one layer in After Effects
+
+   Clicking a card writes to the DRAFT. The draft only reaches After Effects
+   while the panel is BOUND to a layer — because the user applied this draft,
+   or because they selected a Living Gradients layer in the timeline. Looking
+   at a gradient binds nothing, so looking cannot change anything.
+
+   Everything below turns on that one distinction. See lgBind/lgUnbind and the
+   guards at the top of sendLiveUpdate() and triggerColorUpdate(). */
 let selectedType = 'living';
 const state = {
   colors: ['#FF6B35', '#FF3366', '#CC00FF', '#0033FF']
 };
+
+/* ── THE BINDING ─────────────────────────────────────────
+
+   null means "this draft is not applied to anything", which is the state the
+   panel opens in and returns to the moment you browse somewhere else.
+
+   `id` is a token the panel generates before it builds, stamped into the
+   layer's LIVING_GRADIENT_DATA comment. Live updates name it, so they reach
+   the one layer this draft made rather than every gradient in the comp —
+   which is what the host side used to do when nothing was selected.
+
+   `viaSelection` marks a binding adopted because the user clicked a gradient
+   layer in After Effects, rather than one the panel earned by building. The
+   difference matters when the selection is later cleared: a layer we built is
+   still ours to drive, a layer we merely borrowed is not. */
+let lgBinding = null;
+
+function lgIsBound() { return !!lgBinding; }
+
+function lgBind(id, viaSelection) {
+  lgBinding = { id: id || null, viaSelection: !!viaSelection };
+  paintLiveBadge();
+}
+
+function lgUnbind() {
+  if (!lgBinding) return;
+  lgBinding = null;
+  paintLiveBadge();
+}
+
+/* The token stamped into a layer's LIVING_GRADIENT_DATA comment. Minted
+   before the build, because the panel has to know what to look for later. */
+function lgNewBindingId() {
+  return 'lg-' + Date.now().toString(36) + '-' +
+         Math.floor(Math.random() * 1679616).toString(36);
+}
+
+/* shelf.js applies presets too, and an applied preset is as much "the panel
+   is driving this" as Apply to Composition is. These three are that one small
+   documented surface boot.js talks about, rather than shelf.js reaching into
+   main.js's variables. */
+window.lgNewBindingId = lgNewBindingId;
+window.lgBindApplied  = function (id) { lgBind(id, false); };
+window.lgDetach       = lgUnbind;
+
+/* ── LOADING IS NOT EDITING ──────────────────────────────────
+
+   Filling the inspector — from a card, a preset, or a layer read back off the
+   comp — moves the same controls a pair of hands would, and every one of those
+   movements fired the same "the user changed something" path. Held up here
+   for the duration of the load instead, at the one choke point every push
+   goes through, so no caller has to remember to be careful.
+
+   The tail is a timeout rather than a plain decrement because renderControls
+   and renderColorSlots schedule their own work: the pushes being suppressed
+   arrive on the next tick, not on this one. */
+let lgLoading = 0;
+
+function lgWhileLoading(fn) {
+  lgLoading++;
+  try { fn(); } finally {
+    setTimeout(function () { lgLoading = Math.max(0, lgLoading - 1); }, 80);
+  }
+}
+
+function lgIsLoading() { return lgLoading > 0; }
+
+/* Says which of the three states the user is in, in the inspector header,
+   because "is this thing live?" is not a question anybody should have to
+   answer by experiment. */
+function paintLiveBadge() {
+  const badge = document.getElementById('live-badge');
+  if (!badge) return;
+  const live = lgIsBound();
+  badge.dataset.state = live ? 'live' : 'draft';
+  badge.title = live
+    ? 'Changes here are going straight to the gradient in your composition.'
+    : 'Nothing in After Effects is being changed. Apply to Composition to build this.';
+  const text = badge.querySelector('.live-badge-text');
+  if (text) text.textContent = live ? 'Live' : 'Draft';
+}
 
 /* ── COLOUR SLOTS ────────────────────────────────────────────────────
    The number of swatches is a property of the gradient, not of the panel.
@@ -150,6 +248,7 @@ function renderLibrary() {
     const catHeader = document.createElement('div');
     catHeader.className = 'category-header';
     catHeader.textContent = cat;
+    catHeader.dataset.category = cat;
     gradientGrid.appendChild(catHeader);
 
     categories[cat].forEach(preset => {
@@ -157,13 +256,26 @@ function renderLibrary() {
       card.className = 'gradient-card' + (firstItem ? ' selected' : '');
       if (firstItem) { selectedType = preset.id; firstItem = false; }
       card.dataset.type = preset.id;
+      card.dataset.category = cat;
+      /* What a search matches against. The id is in there because people who
+         have used the panel for a while type "SaaS" and mean the id, and the
+         family is in there because "metal" should find Molten Gold even
+         though the word is nowhere in its name. */
+      card.dataset.search = (preset.label + ' ' + cat + ' ' + preset.id).toLowerCase();
+
+      /* A gradient the owner has looked at and called usable-but-unpolished
+         ships with the word on the card rather than quietly. `beta: true` in
+         the library is the whole switch. */
+      const betaTag = preset.beta
+        ? '<span class="card-beta" title="Works, but still being tuned">BETA</span>'
+        : '';
 
       card.innerHTML = `
         <div class="card-preview">
           <canvas class="card-canvas" width="168" height="120" data-preview-type="${preset.id}"></canvas>
+          ${betaTag}
         </div>
         <span class="card-label">${preset.label}</span>
-        <span class="batch-tick">✓</span>
       `;
 
       /* Each card previews its own palette rather than the one currently in
@@ -183,14 +295,17 @@ function renderLibrary() {
       attachCardRender(card, preset.id);
 
       card.addEventListener('click', function () {
-        // In batch mode a click adds to the set rather than switching the
-        // inspector, so the user can sweep the grid without losing the
-        // selection they have built up.
-        if (batchMode) {
-          this.classList.toggle('batch-selected');
-          updateBatchCount();
-          return;
-        }
+        /* THE P0 FIX, AND IT IS THIS LINE.
+
+           Picking a different gradient means the draft has stopped describing
+           whatever is in the comp, so the panel stops driving it. Gradient A
+           stays exactly as it was; the swatches and controls below are now a
+           draft of Gradient B, and they reach After Effects only when applied.
+
+           lgWhileLoading around the rest is the other half: filling in B's
+           palette and controls must not read as the user having edited A. */
+        if (preset.id !== selectedType) lgUnbind();
+
         document.querySelectorAll('.gradient-card').forEach(c => c.classList.remove('selected'));
         this.classList.add('selected');
         selectedType = preset.id;
@@ -206,30 +321,32 @@ function renderLibrary() {
            at the moment of choosing. Their palette is kept whenever the new
            gradient takes the same number of slots; when it does not, there is
            nothing sensible to carry over and the preset's own colours load. */
-        if (preset.defaultColors && preset.defaultColors.length) {
-          const keep = paletteIsCustom &&
-                       state.colors.length === preset.defaultColors.length;
-          if (!keep) {
-            state.colors = [...preset.defaultColors];
-            paletteIsCustom = false;
+        lgWhileLoading(function () {
+          if (preset.defaultColors && preset.defaultColors.length) {
+            const keep = paletteIsCustom &&
+                         state.colors.length === preset.defaultColors.length;
+            if (!keep) {
+              state.colors = [...preset.defaultColors];
+              paletteIsCustom = false;
+            }
+            renderColorSlots(selectedType);
+            if (typeof triggerColorUpdate === 'function') {
+              triggerColorUpdate();
+            }
           }
-          renderColorSlots(selectedType);
-          if (typeof triggerColorUpdate === 'function') {
-            triggerColorUpdate();
-          }
-        }
 
-        if (inspectorPanel) {
-          if (inspectorTitle) inspectorTitle.textContent = preset.label;
-          if (inspectorPreviewMini) {
-            inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+          if (inspectorPanel) {
+            if (inspectorTitle) inspectorTitle.textContent = preset.label;
+            if (inspectorPreviewMini) {
+              inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+            }
+            paintInspectorPreview();
+            if (typeof tabEdit !== 'undefined' && tabEdit) {
+               tabEdit.click();
+            }
           }
-          paintInspectorPreview();
-          if (typeof tabEdit !== 'undefined' && tabEdit) {
-             tabEdit.click();
-          }
-        }
-        renderControls(selectedType);
+          renderControls(selectedType);
+        });
       });
 
       gradientGrid.appendChild(card);
@@ -355,110 +472,173 @@ if (gradientGrid) {
   });
 }
 
-/* ── Batch selection ───────────────────────────────────────────────── */
+/* ── BROWSE: NARROWING FORTY DOWN TO ONE ──────────────────────────────
 
-let batchMode = false;
+   Two controls that compose rather than override: the text field narrows by
+   name, the chips narrow by family, and a result has to satisfy both. Neither
+   of them touches After Effects — this is looking, and looking is free. See
+   the binding block at the top of this file for why that sentence needed
+   saying at all.
 
-const batchToggle  = document.getElementById('batch-toggle');
-const batchActions = document.getElementById('batch-actions');
-const batchCountEl = document.getElementById('batch-count');
-const batchStatus  = document.getElementById('batch-status');
+   Everything is filtered in place rather than re-rendered. The cards carry
+   canvases and, once hovered, a video element apiece; tearing those down and
+   rebuilding them on every keystroke would make the search feel like the
+   slowest part of the panel. */
 
-function selectedBatchCards() {
-  return Array.from(document.querySelectorAll('.gradient-card.batch-selected'));
-}
+const browseSearch      = document.getElementById('browse-search');
+const browseSearchClear = document.getElementById('browse-search-clear');
+const browseFilters     = document.getElementById('browse-filters');
+const browseEmpty       = document.getElementById('browse-empty');
 
-function updateBatchCount() {
-  const n = selectedBatchCards().length;
-  if (batchCountEl) batchCountEl.textContent = n;
-  const btn = document.getElementById('batch-generate-btn');
-  if (btn) btn.disabled = n === 0;
-}
+/* '' is "every family". */
+let browseCategory = '';
 
-if (batchToggle) {
-  batchToggle.addEventListener('change', function () {
-    batchMode = this.checked;
-    document.body.classList.toggle('batch-mode', batchMode);
-    if (batchActions) batchActions.classList.toggle('visible', batchMode);
-    if (!batchMode) {
-      selectedBatchCards().forEach(c => c.classList.remove('batch-selected'));
-      if (batchStatus) { batchStatus.textContent = ''; batchStatus.className = 'batch-status'; }
-    }
-    updateBatchCount();
+function renderBrowseFilters() {
+  if (!browseFilters || typeof GRADIENT_LIBRARY === 'undefined') return;
+
+  /* Built from the library rather than from a list kept alongside it, so a
+     new family appears here the moment its first card does. */
+  const cats = [];
+  GRADIENT_LIBRARY.forEach(p => {
+    const c = p.category || 'Other';
+    if (cats.indexOf(c) === -1) cats.push(c);
   });
-}
 
-const batchClearBtn = document.getElementById('batch-clear');
-if (batchClearBtn) {
-  batchClearBtn.addEventListener('click', function () {
-    selectedBatchCards().forEach(c => c.classList.remove('batch-selected'));
-    updateBatchCount();
-  });
-}
-
-const batchGenerateBtn = document.getElementById('batch-generate-btn');
-if (batchGenerateBtn) {
-  batchGenerateBtn.addEventListener('click', function () {
-    const cards = selectedBatchCards();
-    if (!cards.length) return;
-
-    /* Each type carries its own colours and control defaults. Using the
-       library's per-type palette rather than the current pickers is what
-       makes a batch look like a set of finished presets instead of the same
-       four colours applied thirty ways. */
-    const items = cards.map(card => {
-      const preset = GRADIENT_LIBRARY.find(g => g.id === card.dataset.type);
-      const controls = {};
-      (GRADIENT_CONTROLS[card.dataset.type] || []).forEach(c => { controls[c.id] = c.default; });
-      return {
-        type:     card.dataset.type,
-        label:    preset ? preset.label : card.dataset.type,
-        colors:   (preset && preset.defaultColors && preset.defaultColors.length === 4)
-                    ? preset.defaultColors
-                    : state.colors,
-        controls
-      };
+  browseFilters.innerHTML = '';
+  [['', 'All']].concat(cats.map(c => [c, c])).forEach(([value, label]) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    /* `is-all` pins this one to the left of the strip. Reported: scroll right
+       to reach the last family and All goes off the end with it, so there is
+       no way back to the whole library short of closing the panel and
+       reopening it. It is the only chip that must always be reachable, so it
+       is the only one that does not scroll. */
+    chip.className = 'browse-chip' + (value === '' ? ' is-all' : '') +
+                     (value === browseCategory ? ' is-active' : '');
+    chip.textContent = label;
+    chip.dataset.category = value;
+    chip.setAttribute('role', 'tab');
+    chip.setAttribute('aria-selected', value === browseCategory ? 'true' : 'false');
+    chip.addEventListener('click', () => {
+      /* Clicking the family you are already in goes back to all of them,
+         which is what everybody tries and nothing else does anything. */
+      browseCategory = (browseCategory === value) ? '' : value;
+      renderBrowseFilters();
+      applyBrowseFilter();
     });
+    browseFilters.appendChild(chip);
+  });
 
-    const payload = {
-      items,
-      grain:    parseFloat(document.getElementById('grain-slider')?.value) || 0,
-      glow:     parseFloat(document.getElementById('glow-slider')?.value) || 0,
-      posterize: document.getElementById('posterize-toggle')?.checked || false,
-      posterizeFps: parseFloat(document.getElementById('posterize-fps')?.value) || 12,
-    };
-    /* No fluid on a batch: the trail follows one layer, and a dozen gradients
-       all matted to the same motion is not something anyone wants. */
+  /* The chips scroll sideways, so the one that is on can easily be off the
+     end of the strip — which leaves the grid filtered with nothing on screen
+     saying why. Bring it back into view. */
+  var active = browseFilters.querySelector('.browse-chip.is-active');
+  if (active && active.scrollIntoView) {
+    try { active.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) { }
+  }
 
-    batchGenerateBtn.disabled = true;
-    setStatus(batchStatus, `Building ${items.length} gradients…`, '');
+  lgBindFilterScroll();
+}
 
-    if (!lgHostReady()) {
-      console.log('BATCH PAYLOAD:', payload);
-      batchGenerateBtn.disabled = false;
-      setStatus(batchStatus, '✓ [Dev mode] Payload logged to console.', 'success');
+/* THE STRIP HAS TO LOOK SCROLLABLE, WHICH IT DID NOT.
+
+   `scrollbar-width: none` plus a zero-height webkit scrollbar left a row of
+   chips that simply stopped at the panel edge, mid-word, with nothing saying
+   there was more. The report was 'a very sharp cut here… I don't even know
+   where to click'. So: fade the right edge while there is more to the right,
+   drop the fade at the end so it does not lie, and let a plain wheel scroll
+   it — nobody has a horizontal wheel, and a trackpad gesture is not something
+   a docked panel can rely on. */
+function lgBindFilterScroll() {
+  if (!browseFilters || browseFilters.dataset.scrollBound) return;
+  browseFilters.dataset.scrollBound = '1';
+
+  const mark = () => {
+    const more = browseFilters.scrollWidth - browseFilters.clientWidth
+               - browseFilters.scrollLeft;
+    browseFilters.classList.toggle('has-more', more > 4);
+  };
+
+  browseFilters.addEventListener('scroll', mark, { passive: true });
+  browseFilters.addEventListener('wheel', function (e) {
+    if (e.deltaY === 0 || e.deltaX !== 0) return;   // a real sideways gesture
+    if (browseFilters.scrollWidth <= browseFilters.clientWidth) return;
+    e.preventDefault();
+    browseFilters.scrollLeft += e.deltaY;
+  }, { passive: false });
+
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(mark).observe(browseFilters);
+  }
+  mark();
+}
+
+function applyBrowseFilter() {
+  if (!gradientGrid) return;
+
+  const q = (browseSearch && browseSearch.value || '').trim().toLowerCase();
+  if (browseSearchClear) browseSearchClear.hidden = !q;
+
+  let shown = 0;
+  /* Walked in document order so each family heading can be hidden when
+     nothing under it survived — a heading with no cards reads as a loading
+     failure rather than as an empty category. */
+  let header = null, headerHasVisible = false;
+
+  Array.prototype.forEach.call(gradientGrid.children, node => {
+    if (node.classList.contains('category-header')) {
+      if (header) header.hidden = !headerHasVisible;
+      header = node;
+      headerHasVisible = false;
       return;
     }
+    if (!node.classList.contains('gradient-card')) return;
 
-    new CSInterface().evalScript(`generateBatch(${esArg(payload)})`, function (result) {
-      batchGenerateBtn.disabled = false;
-      if (!result || result === 'EvalScript error.' || result === 'undefined') {
-        setStatus(batchStatus, '✕ Batch failed. Check the JSX.', 'error');
-      } else if (result.indexOf('ERROR') !== -1) {
-        setStatus(batchStatus, '✕ ' + result.replace('ERROR:', '').trim(), 'error');
-      } else if (result.indexOf('warning') !== -1 || result.indexOf('failed:') !== -1) {
-        setStatus(batchStatus, '⚠ ' + result, 'warn');
-        console.warn('[Living Gradients] batch:', result);
-      } else {
-        setStatus(batchStatus, '✓ ' + result, 'success');
-      }
-    });
+    const hit = (!browseCategory || node.dataset.category === browseCategory) &&
+                (!q || (node.dataset.search || '').indexOf(q) !== -1);
+    node.hidden = !hit;
+    if (hit) { headerHasVisible = true; shown++; }
+  });
+  if (header) header.hidden = !headerHasVisible;
+
+  if (browseEmpty) browseEmpty.hidden = shown > 0;
+}
+
+if (browseSearch) {
+  browseSearch.addEventListener('input', applyBrowseFilter);
+  /* Escape clears rather than blurs. In a docked panel there is nowhere for
+     focus to usefully go, and a stale search left behind after you have moved
+     on is the thing that makes people think the library lost gradients. */
+  browseSearch.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && browseSearch.value) {
+      e.stopPropagation();
+      browseSearch.value = '';
+      applyBrowseFilter();
+    }
+  });
+}
+
+if (browseSearchClear) {
+  browseSearchClear.addEventListener('click', () => {
+    if (browseSearch) { browseSearch.value = ''; browseSearch.focus(); }
+    applyBrowseFilter();
+  });
+}
+
+const browseEmptyReset = document.getElementById('browse-empty-reset');
+if (browseEmptyReset) {
+  browseEmptyReset.addEventListener('click', () => {
+    if (browseSearch) browseSearch.value = '';
+    browseCategory = '';
+    renderBrowseFilters();
+    applyBrowseFilter();
   });
 }
 
 // Init library
 renderLibrary();
-updateBatchCount();
+renderBrowseFilters();
+applyBrowseFilter();
 
 // Init controls
 renderControls(selectedType);
@@ -473,6 +653,17 @@ renderControls(selectedType);
   }
   renderColorSlots(selectedType);
   paintInspectorPreview();
+
+  /* The header used to open on "No Layer Selected", which is true of After
+     Effects and says nothing about the gradient the panel is in fact already
+     showing. Name it, and say plainly that it is a draft. */
+  if (preset) {
+    if (inspectorTitle) inspectorTitle.textContent = preset.label;
+    if (inspectorPreviewMini) {
+      inspectorPreviewMini.className = 'inspector-preview-mini ' + preset.cssClass;
+    }
+  }
+  paintLiveBadge();
 })();
 
 const backToBrowseBtn = document.getElementById('back-to-browse-btn');
@@ -480,20 +671,14 @@ const backToBrowseBtn = document.getElementById('back-to-browse-btn');
 // ── TABS NAVIGATION ──
 const tabBrowse = document.getElementById('tab-browse');
 const tabEdit = document.getElementById('tab-edit');
-const tabFluid = document.getElementById('tab-fluid');
 const viewBrowse = document.getElementById('browser-view');
 const viewEdit = document.getElementById('inspector-panel');
-const viewFluid = document.getElementById('fluid-view');
 
 if (backToBrowseBtn) {
   backToBrowseBtn.addEventListener('click', () => {
     if (tabBrowse) tabBrowse.click();
   });
 }
-
-// Global reference for LiquidEther
-window.liquidEtherInst = null;
-let liquidPollInterval = null;
 
 if (tabBrowse && tabEdit) {
   function switchTab(activeTab, activeView) {
@@ -506,40 +691,6 @@ if (tabBrowse && tabEdit) {
     if (activeTab) activeTab.classList.add('active');
     if (activeView) activeView.classList.add('active');
 
-    // Manage Liquid Ether polling
-    if (activeView === viewFluid) {
-       if (!window.liquidEtherInst) {
-          const wrap = document.getElementById('sim-wrap');
-          if (wrap && typeof LiquidEther !== 'undefined') {
-             window.liquidEtherInst = new LiquidEther(wrap);
-             window.liquidEtherInst.start();
-          }
-       }
-       if (!liquidPollInterval && lgHostReady()) {
-          const cs = new CSInterface();
-          liquidPollInterval = setInterval(() => {
-             cs.evalScript('getLayerInfo()', (res) => {
-                if (!res || res === "undefined") return;
-                try {
-                   const data = JSON.parse(res);
-                   if (data.error) {
-                      window.liquidEtherInst.clearLayerInput();
-                   } else {
-                      window.liquidEtherInst.setLayerInput(data.nx, data.ny, data.width, data.height);
-                   }
-                } catch(e) {}
-             });
-          }, 1000 / 30); // ~30fps tracking
-       }
-    } else {
-       if (liquidPollInterval) {
-          clearInterval(liquidPollInterval);
-          liquidPollInterval = null;
-       }
-       if (window.liquidEtherInst) {
-          window.liquidEtherInst.clearLayerInput();
-       }
-    }
   }
 
   /* boot.js adds the Presets tab after this file has run, so it needs a way
@@ -548,9 +699,6 @@ if (tabBrowse && tabEdit) {
 
   tabBrowse.addEventListener('click', () => switchTab(tabBrowse, viewBrowse));
   tabEdit.addEventListener('click', () => switchTab(tabEdit, viewEdit));
-  if (tabFluid) {
-    tabFluid.addEventListener('click', () => switchTab(tabFluid, viewFluid));
-  }
 }
 
 // ── TWO-WAY SYNC POLLING ──
@@ -642,6 +790,11 @@ setInterval(() => {
       try {
         const stateObj = JSON.parse(result);
         if (stateObj.type) {
+          /* The user pointed at a gradient layer in the timeline, which is as
+             clear a statement of "edit this one" as applying is. Adopt it,
+             flagged as borrowed, so clearing the selection gives it back. */
+          lgBind(stateObj.lgId, true);
+
           const typeChanged = stateObj.type !== lastRenderedType;
           selectedType = stateObj.type;
           
@@ -697,9 +850,82 @@ setInterval(() => {
     } else if (result === '' && lastGradientState !== '') {
       lastGradientState = '';
       if (inspectorTitle) inspectorTitle.textContent = 'No Layer Selected';
+      /* Nothing selected. A layer we built is still ours to drive — clicking
+         elsewhere in the timeline is not "stop editing". A layer we only
+         borrowed from the selection goes back when the selection does. */
+      if (lgBinding && lgBinding.viaSelection) lgUnbind();
     }
   });
 }, 400);
+
+/* ── ADVANCED ────────────────────────────────────────────────────────
+
+   Posterize Time and the fluid trail, folded off the main surface of the
+   Edit tab. Both are real features and neither has been touched — they were
+   simply sitting at the same weight as Noise and Glow, and the two everyday
+   controls were losing to two that get used once a month.
+
+   The open state is remembered, because somebody who works with the trail on
+   should not re-open this every time the panel reloads. */
+(function initAdvanced() {
+  const group  = document.getElementById('advanced-group');
+  const toggle = document.getElementById('advanced-toggle');
+  if (!group || !toggle) return;
+
+  function setOpen(open, remember) {
+    group.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!remember) return;
+    /* Wrapped: settings live on disk and the disk is one of the four things
+       boot.js expects to be able to fail. A preference that cannot be saved
+       is not a reason to refuse to open a section. */
+    try { LGLibrary.setSetting('advancedOpen', open); } catch (e) { }
+  }
+
+  let open = false;
+  try { open = !!LGLibrary.settings().advancedOpen; } catch (e) { }
+  setOpen(open, false);
+
+  toggle.addEventListener('click', () => setOpen(!group.classList.contains('is-open'), true));
+})();
+
+/* ── THE COLOUR OVERFLOW ──────────────────────────────────────────────
+
+   Extract-from-image and import-a-palette, which are once-a-project actions,
+   were sitting beside Pick and Shuffle at identical size and weight. They
+   live in here now.
+
+   The menu items click the original buttons rather than reimplementing what
+   they do. Those two have real handlers further down this file — a file
+   picker, a modal — and a second copy of either would be wrong within a
+   week. This is the same trick boot.js uses to load a preset by clicking its
+   card, and for the same reason. */
+(function initColorOverflow() {
+  const more = document.getElementById('color-more-btn');
+  if (!more || typeof LGUI === 'undefined' || !LGUI.menu) return;
+
+  function fire(id) {
+    const btn = document.getElementById(id);
+    if (btn) btn.click();
+  }
+
+  more.addEventListener('click', function () {
+    LGUI.menu(more, [
+      {
+        label: 'Extract from image…',
+        icon: 'capture',
+        hint: 'Pull a palette out of a picture',
+        onClick: function () { fire('upload-image-btn'); }
+      },
+      {
+        label: 'Import palette…',
+        icon: 'upload',
+        hint: 'Paste hex codes or a Coolors link',
+        onClick: function () { fire('import-palette-btn'); }
+      }
+    ], { alignRight: true });
+  });
+})();
 
 // ── ACCORDION BEHAVIOR ──
 /* The wrapper is built once, at load, from the section's element children.
@@ -789,15 +1015,25 @@ function bindRangeAndNumber(rangeId, numId) {
   if (!num) return;
 
   const lo = parseFloat(range.min), hi = parseFloat(range.max);
-  range.addEventListener('input', () => {
-    num.value = range.value;
+
+  /* THESE TWO NEVER REACHED AFTER EFFECTS. The Fluid Trail block right below
+     this one pushes on every move and says in its own comment that without it
+     "the sliders only did something when the gradient was re-applied" — and
+     that is exactly what Noise Intensity and Glow have been doing, because
+     this function was written before the realtime path existed and never
+     picked it up. Both are in `collectLiveParams`, so the host has always been
+     ready to receive them; nothing was ever sending. */
+  const push = () => {
     if (typeof paintRange === 'function') paintRange(range);
-  });
+    if (typeof window.triggerRealtimeUpdate === 'function') window.triggerRealtimeUpdate();
+  };
+
+  range.addEventListener('input', () => { num.value = range.value; push(); });
   num.addEventListener('input', () => {
     const v = parseFloat(num.value);
     if (isNaN(v)) return;
     range.value = Math.min(hi, Math.max(lo, v));
-    if (typeof paintRange === 'function') paintRange(range);
+    push();
   });
   num.addEventListener('blur', () => {
     let v = parseFloat(num.value);
@@ -805,8 +1041,25 @@ function bindRangeAndNumber(rangeId, numId) {
     v = Math.min(hi, Math.max(lo, v));
     range.value = v;
     num.value = v;
-    if (typeof paintRange === 'function') paintRange(range);
+    push();
   });
+
+  lgScrubStatic(num, range, push);
+}
+
+/* Drag-to-scrub for the sliders that live in index.html rather than being
+   built from a schema. controls.js has the schema-driven version; this one
+   reads the range's own attributes because there is no ctrl object here. */
+function lgScrubStatic(num, range, push) {
+  if (typeof lgScrubNumber !== 'function') return;
+  lgScrubNumber(num, range, {
+    /* `type` matters: formatCtrlValue only rounds when it is told this is a
+       slider, and without it a scrub writes 37.000000000000004 into the box. */
+    type: 'slider',
+    min: parseFloat(range.min),
+    max: parseFloat(range.max),
+    step: parseFloat(range.step) || 1
+  }, push);
 }
 
 bindRangeAndNumber('grain-slider', 'num-grain');
@@ -875,6 +1128,8 @@ FLUID_PARAMS.forEach(id => {
     num.value = v;
     push();
   });
+
+  lgScrubStatic(num, range, push);
 });
 
 function fluidValue(id, fallback) {
@@ -1193,11 +1448,11 @@ if (colorRowEl) {
       palette: state.colors.slice(0),
       roles: roles || [],
 
-      /* Continuous. Everything downstream of here is already coalesced —
-         triggerColorUpdate repaints the previews and sends updateLiveColors,
-         and triggerRealtimeUpdate keeps at most one evalScript in flight — so
-         firing on every pointer move makes the comp track the drag instead of
-         queueing behind it. */
+      /* Continuous. Everything downstream of here is coalesced —
+         triggerColorUpdate repaints the previews and then goes through
+         triggerRealtimeUpdate, which keeps at most one evalScript in flight —
+         so firing on every pointer move makes the comp track the drag instead
+         of queueing behind it. */
       onChange: function (hex) { adoptPickedColour(i, hex, true); },
 
       onCommit: function (hex) {
@@ -1344,10 +1599,36 @@ function extractColorsFromImage(img) {
 }
 
 // ── SHUFFLE ──
+/* SHUFFLE REORDERS THE PALETTE. IT DOES NOT INVENT ONE.
+
+   It used to replace every slot with `Math.random() * 16777215` — a uniform
+   pick in RGB, which is the least useful random colour there is: it lands in
+   muddy mid-chroma almost every time and has no relationship to the other
+   three. So the button that looks like the quickest way to explore a gradient
+   threw away a palette that had been chosen and handed back four strangers.
+
+   What a shuffle is for is finding out that a palette reads better with the
+   dark one as the ink and the bright one as the paper. On a gradient with
+   named roles — Ink A, Paper, Backdrop — that is the whole experiment, and it
+   is now one click. Nothing is lost: the colours are the same colours.
+
+   Permutation is retried until it differs, so a click always does something
+   visible. Two identical colours in a palette would make that impossible, so
+   it gives up after a few tries rather than spinning. */
 document.getElementById('shuffle-btn').addEventListener('click', function () {
-  const shuffled = state.colors.map(() =>
-    '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase());
-  setColors(shuffled);
+  const original = state.colors.slice(0);
+  if (original.length < 2) return;
+
+  let next = original;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const pool = original.slice(0);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    if (pool.join() !== original.join()) { next = pool; break; }
+  }
+  setColors(next);
 });
 
 // ── MOOD PRESETS ──
@@ -1374,7 +1655,14 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   const btn = this;
   const statusEl = document.getElementById('generate-status');
 
+  /* The token that ties this draft to the layer about to be built. It is
+     stamped into that layer's LIVING_GRADIENT_DATA comment, and every live
+     update from here on names it — so the panel edits the layer it made and
+     not whatever else in the comp happens to be a gradient. */
+  const lgId = lgNewBindingId();
+
   const params = {
+    lgId,
     type: selectedType,
     colors: state.colors,
     controls: getControlValues(selectedType),
@@ -1404,6 +1692,11 @@ document.getElementById('generate-btn').addEventListener('click', function () {
           console.warn('[Living Gradients]', detail);
         } else {
           setStatus(statusEl, '✓ ' + (result || 'Gradient created!'), 'success');
+          /* Built it, so we drive it: the controls are live from here until
+             the user browses away. lastLiveSentAt keeps the sync poller quiet
+             while After Effects finishes settling. */
+          lastLiveSentAt = Date.now();
+          lgBind(lgId, false);
         }
       });
     } else {
@@ -1420,8 +1713,8 @@ document.getElementById('generate-btn').addEventListener('click', function () {
   }
 });
 
-/* Two status lines share this (the generate footer and the batch toolbar),
-   so remember each element's base class instead of hard-coding one. */
+/* Remembers the element's base class rather than hard-coding one, so a
+   status line can be styled wherever it sits. */
 function setStatus(el, msg, type) {
   if (!el) return;
   if (!el.dataset.baseClass) el.dataset.baseClass = el.className.split(' ')[0];
@@ -1462,6 +1755,11 @@ function collectLiveParams() {
 }
 
 function sendLiveUpdate() {
+  /* Nothing is bound, so there is nothing this could be an edit *to*. This is
+     the guard that makes browsing safe: the panel is free to rebuild its whole
+     inspector without a single byte reaching After Effects. */
+  if (!lgIsBound() || lgIsLoading()) return;
+
   if (!lgHostReady()) {
     console.log('LIVE PARAMS:', collectLiveParams());
     return;
@@ -1470,6 +1768,7 @@ function sendLiveUpdate() {
 
   liveInFlight = true;
   const payload = collectLiveParams();
+  payload.lgId = lgBinding.id;
   lastSentState = JSON.stringify(payload);
   lastLiveSentAt = Date.now();
   new CSInterface().evalScript(`updateGradientLive(${esArg(payload)})`, function () {
@@ -1507,13 +1806,35 @@ function paintInspectorPreview() {
 }
 
 function triggerColorUpdate() {
+  /* The panel's own previews, always. These are pictures, not edits. */
   paintPreviewVars();
   paintInspectorPreview();
 
-  if (lgHostReady()) {
-    const cs = new CSInterface();
-    cs.evalScript(`updateLiveColors(${esArg(state.colors)})`);
-  }
+  /* After Effects, only when there is something to update. Same guard as
+     sendLiveUpdate, and for the same reason — this is the path that used to
+     recolour the applied gradient the instant you clicked another card. */
+  if (!lgIsBound() || lgIsLoading()) return;
+
+  /* COLOURS GO DOWN THE SAME ROAD AS EVERY OTHER EDIT NOW, AND THIS IS THE
+     'the colours are not real time' BUG.
+
+     They used to call `updateLiveColors` instead, which walks the layer tree
+     matching names — and it knows eighteen of them. Every gradient outside
+     that list was sent a colour change that matched nothing and returned
+     success, so the swatch moved, the panel's own preview moved, and the comp
+     did not. It looked like lag. It was a silent no-op, and re-applying was
+     the only thing that ever fixed it because Apply rebuilds from scratch.
+
+     `updateGradientLive` carries `colors` in its payload and dispatches to the
+     per-type tuner, and `tools/live_audit.js` proves every one of the 54 has
+     one. So the general path is the *more* complete path here, not the more
+     expensive one — a tuner sets properties on effects that already exist, it
+     does not rebuild.
+
+     It also buys the coalescer. Dragging a colour picker fired an uncoalesced
+     evalScript per pointer move, which is exactly the flood the comment above
+     sendLiveUpdate was written about. */
+  window.triggerRealtimeUpdate();
 }
 
 // Initialize preview colors on load

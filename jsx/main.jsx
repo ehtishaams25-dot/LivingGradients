@@ -708,8 +708,33 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
         case 'CellularMosaic':
             buildCellularMosaic(comp, c, controls, w, h, dur);
             break;
+        /* THE TRAIL FAMILY. Eight cases rather than one case with a
+           parameter, deliberately: the live audit reads this switch and the
+           tuner table textually, and a family that arrives through a shared
+           branch is a family the audit cannot see. */
         case 'TrailGradient':
             buildTrailGradient(comp, c, controls, w, h, dur);
+            break;
+        case 'HorizonTrail':
+            buildHorizonTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'IrisTrail':
+            buildIrisTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'RippleTrail':
+            buildRippleTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'MoltenTrail':
+            buildMoltenTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'HazeTrail':
+            buildHazeTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'SignalTrail':
+            buildSignalTrail(comp, c, controls, w, h, dur);
+            break;
+        case 'LatticeTrail':
+            buildLatticeTrail(comp, c, controls, w, h, dur);
             break;
         case 'Wavy':
             buildWavy(comp, c, controls, w, h, dur);
@@ -736,10 +761,35 @@ function dispatchBuild(comp, type, c, controls, w, h, dur) {
             buildWebThreads(comp, c, controls, w, h, dur);
             break;
         case 'SaaS':
+        case 'SaaSMesh':
+        case 'SaaSSpotlight':
+        case 'SaaSCorner':
+        case 'SaaSTwilight':
+            /* Five presets, one builder — see SAAS_VARIANTS in js/presets.js.
+               They differ only in the control values the panel sends, so there
+               is nothing to branch on here, and the layers all come out with
+               the same names, which is what lets tuneSaaS below drive any of
+               them without knowing which it got. */
             buildSaaS(comp, c, controls, w, h, dur);
             break;
         case 'OklabSmooth':
             buildOklabSmooth(comp, c, controls, w, h, dur);
+            break;
+        /* VECTOR & FLAT. Four cases rather than one with a parameter, for the
+           same reason the trail family has eight: the live audit reads this
+           switch textually, and a family arriving through a shared branch is a
+           family it cannot see. */
+        case 'LightBar':
+            buildLightBar(comp, c, controls, w, h, dur);
+            break;
+        case 'ArcStack':
+            buildArcStack(comp, c, controls, w, h, dur);
+            break;
+        case 'GlowBorder':
+            buildGlowBorder(comp, c, controls, w, h, dur);
+            break;
+        case 'Papercut':
+            buildPapercut(comp, c, controls, w, h, dur);
             break;
         default:
             return 'ERROR: Unknown type: ' + type;
@@ -840,83 +890,6 @@ function applyColorQuality(enabled) {
         }
     } catch (e) {
         LG.warn('could not set the blending space: ' + e.message);
-    }
-}
-
-/* Batch generation — one composition per selected type.
-
-   The active comp is used only as a template for size, frame rate, pixel
-   aspect and duration; it is never written to. Each type gets its own comp
-   inside a "Living Gradients" folder, so a batch is easy to review and easy
-   to throw away.
-
-   A type that throws takes its own comp down with it and is reported by
-   name. One bad builder must not cost the user the other eleven. */
-function generateBatch(paramsStr) {
-    var folder = null;
-    try {
-        var p   = JSON.parse(paramsStr);
-        var src = app.project.activeItem;
-        if (!src || !(src instanceof CompItem)) return 'ERROR: No active composition to take settings from.';
-        if (!p.items || !p.items.length)        return 'ERROR: No gradients selected.';
-
-        LG.reset();
-        applyColorQuality(p.colorQuality === true);
-        app.beginUndoGroup('Living Gradients \u2014 Batch');
-
-        folder = app.project.items.addFolder('Living Gradients');
-
-        var made = [], failed = [], i, j;
-
-        for (i = 0; i < p.items.length; i++) {
-            var item = p.items[i];
-            var comp = null;
-
-            try {
-                comp = app.project.items.addComp(
-                    'LG \u2014 ' + (item.label || item.type),
-                    src.width, src.height, src.pixelAspect, src.duration, src.frameRate);
-                comp.parentFolder = folder;
-
-                var c = [];
-                for (j = 0; j < item.colors.length; j++) c.push(hexRgb(item.colors[j]));
-
-                var controls = item.controls || {};
-                var unknown = dispatchBuild(comp, item.type, c, controls,
-                                            src.width, src.height, src.duration);
-                if (unknown) throw new Error('unknown type');
-
-                // Grain and glow are batch-wide, so they come off the
-                // envelope rather than the per-item controls.
-                var polish = {
-                    type:     item.type,
-                    grain:    p.grain,
-                    glow:     p.glow,
-                    controls: controls
-                };
-                var layer = groupGeneratedLayers(comp, polish, comp.numLayers);
-                applyGlobalPolish(comp, polish, layer);
-
-                made.push(item.type);
-            } catch (itemErr) {
-                failed.push(item.type);
-                LG.warn(item.type + ': ' + itemErr.message);
-                if (comp) { try { comp.remove(); } catch (rmErr) { } }
-            }
-        }
-
-        // Nothing worked — do not leave an empty folder behind.
-        if (!made.length && folder) { try { folder.remove(); } catch (e) { } }
-
-        app.endUndoGroup();
-
-        var msg = 'Created ' + made.length + ' of ' + p.items.length + ' gradients';
-        if (failed.length) msg += ' (failed: ' + failed.join(', ') + ')';
-        return msg + LG.report();
-
-    } catch (e) {
-        try { app.endUndoGroup(); } catch (x) { }
-        return 'ERROR: ' + e.message + ' line ' + e.line + LG.report();
     }
 }
 
@@ -1244,7 +1217,7 @@ function tuneOklabSmooth(s, c, ctrl, w, h) {
     var radial = !!(ctrl.gradientType &&
                     String(ctrl.gradientType).toLowerCase() === 'radial');
     var angle  = (num(ctrl.angle, 0) === 90) ? 90 : 0;
-    lgOklabRamp(s, c, w || 1920, h || 1080, angle, radial);
+    lgOklabRamp(s, c, w || 1920, h || 1080, angle, radial, num(ctrl.speed, 12));
     lgBlur(s, num(ctrl.softness, 0));
 }
 
@@ -1441,15 +1414,40 @@ function tuneSaaS(comp, c, ctrl, w, h) {
 
         /* The drift. Slow enough that you cannot catch it moving if you look
            directly at it, which is the difference between a background and a
-           distraction. Different seeds per bloom, or they all drift in
-           lockstep and the field looks like it is sliding rather than
-           breathing. */
+           distraction. Out of phase per bloom, or they all drift in lockstep
+           and the field looks like it is sliding rather than breathing.
+
+           WHY THIS IS NOT wiggle() ANY MORE.
+
+           wiggle() is not periodic. Over an eight-second comp the position at
+           t=8 has no relationship to the position at t=0, so the gradient does
+           not loop -- and these are backgrounds, which is the one kind of clip
+           that gets looped. tools/qa_analyse.js measures it: the shipped SaaS
+           preset came back with a seam of 1.42 against a per-frame motion of
+           0.95, i.e. the jump at the loop point was larger than a whole
+           quarter of the animation.
+
+           A Lissajous figure on the comp's own duration closes exactly. Both
+           frequencies are WHOLE NUMBERS of cycles across `d`, so t=d lands on
+           t=0 to the pixel, and using two different whole numbers keeps the
+           path from being a circle. Same slider, same feel, no seam. */
         try {
             var pos = l.property('Transform').property('Position');
             pos.setValue([w / 2, h / 2]);
+
+            /* speed arrives as 0..0.6. One to five slow cycles across the
+               comp reads as "breathing" at every setting; below one cycle
+               there is nothing to see and the loop still has to close. */
+            var cycles = Math.round(b.speed * 8);
+            if (cycles < 1) cycles = 1;
+
             pos.expression = (b.drift > 0 && b.speed > 0)
-                ? 'seedRandom(' + (idx + 1) + ', true);' +
-                  'wiggle(' + b.speed.toFixed(3) + ', ' + b.drift.toFixed(1) + ');'
+                ? 'var d = thisComp.duration;' +
+                  'var A = ' + b.drift.toFixed(1) + ';' +
+                  'var kx = ' + cycles + ', ky = ' + (cycles + 1) + ';' +
+                  'var px = ' + (idx * 2.1).toFixed(3) + ', py = ' + (idx * 1.3).toFixed(3) + ';' +
+                  '[value[0] + A * Math.sin(2 * Math.PI * kx * time / d + px),' +
+                  ' value[1] + A * Math.cos(2 * Math.PI * ky * time / d + py)]'
                 : '';
         } catch (e) { }
     }
@@ -2230,17 +2228,48 @@ function lgScope(comp) {
     };
 }
 
-/* Nothing selected is the ordinary state after a click anywhere else in the
-   timeline, and the panel should still be driving the gradient it just made.
-   Every generated layer carries a LIVING_GRADIENT_DATA comment, so that is
-   the fallback rather than giving up. */
-function lgTaggedLayers(comp) {
-    var out = [], i, l;
+/* WHICH LAYER A LIVE UPDATE IS FOR.
+
+   This used to be lgTaggedLayers(), and it answered "which layers might the
+   panel mean?" with "all of them" — every layer in the comp carrying a
+   LIVING_GRADIENT_DATA comment. That is the host half of the bug where
+   browsing the library repainted a gradient the user was not editing: the
+   panel sent an update it should not have sent, and this handed it every
+   gradient in the composition to apply it to.
+
+   Two rules now, in order, and deliberately no third:
+
+     1. THE BOUND LAYER. The panel stamps a token into the layer it builds and
+        names that token on every update afterwards. Exactly one layer can
+        match, so an update reaches the gradient it was meant for even when
+        the user has since selected something else entirely.
+
+     2. THE SELECTION. Older layers carry no token, and a user clicking a
+        gradient layer in the timeline is a clear statement of which one they
+        mean. Tagged selected layers only — selecting a text layer must not
+        get it a Noise effect.
+
+   If neither matches, nothing happens. An update with no home is a bug in the
+   caller, and silently picking a victim is how the original one hid. */
+function lgLiveTargets(comp, lgId) {
+    var out = [], i, l, sel;
     if (!comp || !(comp instanceof CompItem)) return out;
-    for (i = 1; i <= comp.numLayers; i++) {
-        l = comp.layer(i);
+
+    if (lgId) {
+        for (i = 1; i <= comp.numLayers; i++) {
+            l = comp.layer(i);
+            try {
+                if (l.comment &&
+                    l.comment.indexOf('LIVING_GRADIENT_DATA:') === 0 &&
+                    l.comment.indexOf('"lgId":"' + lgId + '"') !== -1) return [l];
+            } catch (e) { }
+        }
+    }
+
+    sel = comp.selectedLayers;
+    for (i = 0; i < sel.length; i++) {
         try {
-            if (l.comment && l.comment.indexOf('LIVING_GRADIENT_DATA:') === 0) out.push(l);
+            if (sel[i].comment && sel[i].comment.indexOf('LIVING_GRADIENT_DATA:') === 0) out.push(sel[i]);
         } catch (e) { }
     }
     return out;
@@ -2263,13 +2292,44 @@ function updateGradientLive(paramsStr) {
         var ctrl = JSON.parse(paramsStr);
         var realComp = app.project.activeItem;
         if (!realComp || !(realComp instanceof CompItem)) return;
-        var selectedLayers = realComp.selectedLayers;
-        if (selectedLayers.length === 0) selectedLayers = lgTaggedLayers(realComp);
+        /* ctrl.lgId names the layer the panel is bound to. See lgLiveTargets:
+           without it this walked every selected layer, tagged or not. */
+        var selectedLayers = lgLiveTargets(realComp, ctrl.lgId);
         if (selectedLayers.length === 0) return;
 
         app.beginUndoGroup("Update Global Settings");
         for (var i = 0; i < selectedLayers.length; i++) {
             var layer = selectedLayers[i];
+
+            /* COLOURS, BEFORE THE STAMP IS OVERWRITTEN.
+
+               Every branch further down is a per-type tuner for that type's
+               *controls*. Several of them — Wavy and Fluid among them — never
+               touch colour at all, and they `return` when they are done, so
+               there is no place at the end of this function where a colour
+               pass would run for them. It has to happen here, while the old
+               palette is still readable off the layer.
+
+               Skipped entirely when the palette has not moved, so dragging a
+               slider does not pay for a walk of every effect on the layer. */
+            try {
+                if (ctrl.colors && layer.comment &&
+                    layer.comment.indexOf('LIVING_GRADIENT_DATA:') === 0) {
+                    var prev = JSON.parse(layer.comment.substring(21));
+                    if (prev.colors && prev.colors.join(',') !== ctrl.colors.join(',')) {
+                        var prevC = [], pci2;
+                        for (pci2 = 0; pci2 < prev.colors.length; pci2++) {
+                            prevC.push(hexRgb(prev.colors[pci2]));
+                        }
+                        var nextC = [], nci;
+                        for (nci = 0; nci < ctrl.colors.length; nci++) {
+                            nextC.push(hexRgb(ctrl.colors[nci]));
+                        }
+                        updateLayerColors(layer, nextC, 0, prevC);
+                    }
+                }
+            } catch (e) { }
+
             try {
                 layer.comment = 'LIVING_GRADIENT_DATA:' + paramsStr;
             } catch(e) {}
@@ -2379,7 +2439,24 @@ function updateGradientLive(paramsStr) {
            every pointer move and After Effects was faithfully doing nothing
            with it. That is the whole reason the joystick "wasn't real time" —
            it was never connected, not slow. */
-        if (ctrl.type === 'SaaS') {
+        /* THE FIVE ARE WRITTEN OUT, AND A HELPER WOULD BE TIDIER. DON'T.
+
+           tools/live_audit.js reads this function looking for `ctrl.type ===`
+           tests, to prove statically that every gradient in the library has a
+           live path. Routing the family through an lgIsSaaSType() helper hid
+           the branch from it, and the audit immediately reported all five as
+           having no live tuner — which is the exact silent-no-op bug it exists
+           to catch, so it was right to.
+
+           Keeping the list in the form the audit can read is what makes a
+           sixth variant impossible to add here by halves: put one in
+           SAAS_VARIANTS and the library, forget this line, and the build
+           fails. The duplication is the check. */
+        if (ctrl.type === 'SaaS' ||
+            ctrl.type === 'SaaSMesh' ||
+            ctrl.type === 'SaaSSpotlight' ||
+            ctrl.type === 'SaaSCorner' ||
+            ctrl.type === 'SaaSTwilight') {
             app.beginUndoGroup('Update SaaS');
             tuneSaaS(comp, lcols, lctrl, realComp.width, realComp.height);
             app.endUndoGroup();
@@ -2433,9 +2510,47 @@ function updateGradientLive(paramsStr) {
                 { name: 'Square 4', fn: tuneStackedSquare },
                 { name: 'Square 5', fn: tuneStackedSquare }
             ] },
+            /* THE TRAIL FAMILY. Every one of them is two jobs: the finished
+               bank in the comp, and the strokes inside its Base precomp.
+
+               The strokes match by name from here even though they are a
+               level down, because the loop below runs over lgScope(), which
+               flattens the whole layer tree five deep first. Worth knowing
+               before adding machinery to reach them — I added a `within`
+               descent for exactly that and then found lgScope had been doing
+               it all along. */
             TrailGradient:  { layers: [
                 { name: 'Trail Animation', fn: tuneTrailGradient },
-                { match: /^Trail [0-9]+$/, fn: tuneTrailStroke }
+                { match: /^Trail [0-9]+$/,   fn: tuneTrailStroke }
+            ] },
+            HorizonTrail:   { layers: [
+                { name: 'Horizon Animation', fn: tuneHorizonTrail },
+                { match: /^Horizon [0-9]+$/, fn: tuneHorizonStroke }
+            ] },
+            IrisTrail:      { layers: [
+                { name: 'Iris Animation', fn: tuneIrisTrail },
+                { match: /^Iris [0-9]+$/,    fn: tuneIrisStroke }
+            ] },
+            RippleTrail:    { layers: [
+                { name: 'Ripple Animation', fn: tuneRippleTrail },
+                { match: /^Ripple [0-9]+$/,  fn: tuneRippleStroke }
+            ] },
+            MoltenTrail:    { layers: [
+                { name: 'Molten Animation', fn: tuneMoltenTrail },
+                { match: /^Molten [0-9]+$/,  fn: tuneMoltenStroke }
+            ] },
+            HazeTrail:      { layers: [
+                { name: 'Haze Animation', fn: tuneHazeTrail },
+                { match: /^Haze [0-9]+$/,    fn: tuneHazeStroke }
+            ] },
+            SignalTrail:    { layers: [
+                { name: 'Signal Animation', fn: tuneSignalTrail },
+                { match: /^Signal [0-9]+$/,  fn: tuneSignalStroke }
+            ] },
+            LatticeTrail:   { layers: [
+                { name: 'Lattice Animation', fn: tuneLatticeTrail },
+                { match: /^Lattice V [0-9]+$/, fn: tuneLatticeStroke },
+                { match: /^Lattice H [0-9]+$/, fn: tuneLatticeCross }
             ] }
         };
 
@@ -2853,7 +2968,10 @@ function updateNestedBlobSources(src, c, depth) {
     }
 }
 
-function updateLiveColors(colorsStr) {
+/* lgId is optional and arrives only from the panel's own live path. The
+   preset shelf calls this with one argument to mean "recolour what is
+   selected", which is rule 2 of lgLiveTargets and still works. */
+function updateLiveColors(colorsStr, lgId) {
     try {
         var hexColors = JSON.parse(colorsStr);
         var comp = app.project.activeItem;
@@ -2864,19 +2982,30 @@ function updateLiveColors(colorsStr) {
 
         app.beginUndoGroup("Update Colors Live");
 
-        var selectedLayers = comp.selectedLayers;
-        if (selectedLayers.length === 0) selectedLayers = lgTaggedLayers(comp);
+        var selectedLayers = lgLiveTargets(comp, lgId);
         if (selectedLayers.length === 0) { app.endUndoGroup(); return; }
 
         for (var li = 0; li < selectedLayers.length; li++) {
+            /* THE PALETTE THAT IS ON THE LAYER RIGHT NOW, read before it is
+               overwritten. lgRemapPaletteColours needs it: it recolours by
+               matching the value it finds against the colour we last wrote,
+               which is the only way to know that a given Color property came
+               from the palette rather than being part of the recipe. */
+            var oldC = null;
             try {
                 if (selectedLayers[li].comment && selectedLayers[li].comment.indexOf('LIVING_GRADIENT_DATA:') === 0) {
                     var oldParams = JSON.parse(selectedLayers[li].comment.substring(21));
+                    if (oldParams.colors && oldParams.colors.length) {
+                        oldC = [];
+                        for (var oi = 0; oi < oldParams.colors.length; oi++) {
+                            oldC.push(hexRgb(oldParams.colors[oi]));
+                        }
+                    }
                     oldParams.colors = hexColors;
                     selectedLayers[li].comment = 'LIVING_GRADIENT_DATA:' + JSON.stringify(oldParams);
                 }
             } catch(e) {}
-            updateLayerColors(selectedLayers[li], c, 0);
+            updateLayerColors(selectedLayers[li], c, 0, oldC);
         }
 
         app.endUndoGroup();
@@ -2887,14 +3016,142 @@ function updateLiveColors(colorsStr) {
     }
 }
 
-function updateLayerColors(layer, c, depth) {
+/* RECOLOUR BY VALUE, NOT BY NAME.
+
+   The named branches below cover eighteen layers. The library has fifty-four
+   gradients, so for most of them a colour change reached After Effects,
+   matched nothing, and returned success — the swatch moved and the comp did
+   not. Re-applying was the only thing that ever fixed it, which is exactly
+   what was reported.
+
+   Enumerating the other thirty-six would work until somebody adds a
+   fifty-fifth. This does not need the list: every colour the panel has ever
+   put on a layer is recorded in that layer's own LIVING_GRADIENT_DATA stamp,
+   so a Color property whose current value IS one of those colours came from
+   the palette, and one that is not did not. Remap the first kind, leave the
+   second alone.
+
+   WHY IT CANNOT DAMAGE A RECIPE. A tone stop, a matte fill, a light colour
+   that the builder chose rather than the user — none of them match a palette
+   entry, so none of them are touched. The one genuine ambiguity is a palette
+   with the same colour in two slots (Ribbon Pour ships #12131A twice): there
+   is no way to tell which slot an occurrence came from, so a duplicated
+   colour is skipped entirely and left to the named branches.
+
+   Keyframed and expression-driven colours are skipped too. Nothing in the
+   library animates a palette colour, and setValue on a keyframed property
+   silently does nothing anyway. */
+function lgRemapPaletteColours(layer, oldC, newC) {
+    if (!oldC || !oldC.length || !newC || !newC.length) return;
+
+    /* A solid painted a palette colour carries it on the footage item rather
+       than in an effect, so the walk below would never see it. Sunburst
+       Backdrop and Halftone Background are handled by name above; this is for
+       the ones nobody has written down. */
+    try {
+        if (layer.source && layer.source.mainSource &&
+            layer.source.mainSource instanceof SolidSource) {
+            var sv = layer.source.mainSource.color;
+            var shit = lgPaletteSlotOf(sv, oldC);
+            if (shit >= 0 && shit < newC.length) {
+                layer.source.mainSource.color = newC[shit];
+            }
+        }
+    } catch (e) { }
+
+    var effects = null;
+    try { effects = layer.property('ADBE Effect Parade'); } catch (e) { return; }
+    if (!effects) return;
+
+    var i, j, ef, p, v, hit;
+    for (i = 1; i <= effects.numProperties; i++) {
+        ef = null;
+        try { ef = effects.property(i); } catch (e) { continue; }
+        if (!ef) continue;
+
+        for (j = 1; j <= ef.numProperties; j++) {
+            p = null;
+            try { p = ef.property(j); } catch (e) { continue; }
+            if (!p) continue;
+            try {
+                if (p.propertyValueType !== PropertyValueType.COLOR) continue;
+                if (p.numKeys > 0) continue;
+                if (p.expressionEnabled) continue;
+                v = p.value;
+            } catch (e) { continue; }
+
+            hit = lgPaletteSlotOf(v, oldC);
+            if (hit < 0 || hit >= newC.length) continue;
+            try { p.setValue(newC[hit]); } catch (e) { }
+        }
+    }
+
+    /* Shape layers keep their colour in Contents, not in Effects, so the walk
+       above never sees it — a SilkFlare blob is a shape with a plain fill.
+       Those have a named branch today; this is so the next shape-based
+       gradient does not need one. Reading and setting existing properties
+       only: adding a property to a shape group is what crashes AE 26. */
+    try {
+        var contents = layer.property('ADBE Root Vectors Group');
+        if (contents) lgRemapVectorColours(contents, oldC, newC, 0);
+    } catch (e) { }
+}
+
+/* Recurse a shape layer's Contents looking for fill and stroke colours that
+   came from the palette. */
+function lgRemapVectorColours(group, oldC, newC, depth) {
+    if (depth > 6 || !group) return;
+    var i, p, v, hit;
+    for (i = 1; i <= group.numProperties; i++) {
+        p = null;
+        try { p = group.property(i); } catch (e) { continue; }
+        if (!p) continue;
+        try {
+            if (p.propertyValueType === PropertyValueType.COLOR) {
+                if (p.numKeys > 0 || p.expressionEnabled) continue;
+                v = p.value;
+                hit = lgPaletteSlotOf(v, oldC);
+                if (hit >= 0 && hit < newC.length) p.setValue(newC[hit]);
+                continue;
+            }
+        } catch (e) { continue; }
+        try { if (p.numProperties > 0) lgRemapVectorColours(p, oldC, newC, depth + 1); } catch (e) { }
+    }
+}
+
+/* Which palette slot a colour currently sitting on a property came from, or
+   -1 for "not one of ours". Returns -1 for a colour that appears in more than
+   one slot, because then the answer is genuinely unknown. */
+function lgPaletteSlotOf(v, oldC) {
+    if (!v || v.length < 3) return -1;
+    var k, found = -1;
+    for (k = 0; k < oldC.length; k++) {
+        if (lgSameColour(v, oldC[k])) {
+            if (found >= 0) return -1;      // duplicated in the palette
+            found = k;
+        }
+    }
+    return found;
+}
+
+/* After Effects stores colour as 0-1 floats and our hex conversion divides by
+   255, so a round trip is not bit-exact. Half a step of 8-bit is the widest
+   tolerance that still cannot confuse two distinct hex values. */
+function lgSameColour(a, b) {
+    var t = 0.5 / 255;
+    return Math.abs(a[0] - b[0]) < t &&
+           Math.abs(a[1] - b[1]) < t &&
+           Math.abs(a[2] - b[2]) < t;
+}
+
+function updateLayerColors(layer, c, depth, oldC) {
     if (depth > 5 || !layer) return;
     var lname = layer.name;
 
     if (lname.indexOf('Trail Base') !== -1) {
         if (layer.source && layer.source instanceof CompItem) {
             for (var pci = 1; pci <= layer.source.numLayers; pci++) {
-                updateLayerColors(layer.source.layer(pci), c, depth + 1);
+                updateLayerColors(layer.source.layer(pci), c, depth + 1, oldC);
             }
         }
         return;
@@ -3016,13 +3273,22 @@ function updateLayerColors(layer, c, depth) {
         try { layer.source.mainSource.color = lgRole(c, 2, lgByLuma(c)[0]); } catch (x) { }
     }
 
+    /* THE CATCH-ALL, AND IT RUNS LAST ON PURPOSE.
+
+       Everything above sets the new palette explicitly where somebody has
+       written the layer down. This picks up every gradient nobody has — and
+       it runs after, not before, so a property a named branch has already
+       moved to its new value no longer matches the old palette and is left
+       exactly as that branch set it. */
+    lgRemapPaletteColours(layer, oldC, c);
+
     /* And every build ends up precomposed, so the layers that actually carry
        the colour are a level or two under whatever the user has selected. */
     if (depth < 4) {
         try {
             if (layer.source && layer.source instanceof CompItem) {
                 for (var ni = 1; ni <= layer.source.numLayers; ni++) {
-                    updateLayerColors(layer.source.layer(ni), c, depth + 1);
+                    updateLayerColors(layer.source.layer(ni), c, depth + 1, oldC);
                 }
             }
         } catch (x) { }
@@ -3906,7 +4172,12 @@ function buildReededGlass(comp, c, ctrl, w, h, dur) {
 function tuneReededColour(colour, c, ctrl) {
     if (!colour) return;
     lgFractalSet(lgFx(colour, ['ADBE Fractal Noise']), {
-        fractalType: 2,
+        /* Was 2, which renders black -- so the colour field behind the flutes
+           was not soft, it was absent. Reeded Glass on its own navy-to-cyan
+           palette came out a flat pale grey sheet: what you were seeing was
+           the flute lighting alone with no colour under it. Type 1 restores
+           it. See the measurement table in lgFractalSet. */
+        fractalType: 1,
         contrast:    70,
         brightness:  6,
         overflow:    2,                       // Soft Clamp — no banding here
@@ -3972,9 +4243,14 @@ var ANIME_CELLS_DEFAULTS = {
     pattern:    'Static Plates',
     cells:      120,
     dispersion: 100,
-    speed:      0,
+    /* Both of these were 0, and 0 here meant the gradient did not move at all
+       - measured at 0.00 mean luma change across eight seconds. A cel
+       background that holds perfectly still reads as a screenshot. Slow
+       enough that the cells morph rather than crawl; the drift carries them
+       sideways underneath that. */
+    speed:      12,
     contrast:   400,
-    drift:      0,
+    drift:      18,
     warp:       0,
     softness:   0,
     sheen:      0,
@@ -4691,6 +4967,45 @@ function tuneMetalSurface(s, c, ctrl, kind, bumpIndex) {
         envAmt   = num(o.envAmount, 0);
         var extra = num(o.warp, 0);
         if (extra) { twistAmt += extra * 0.25; envAmt += extra * 0.8; }
+
+        /* ONE CAP SURVIVES, AND IT IS NOT THE OVERHANG BUDGET.
+
+           Everything above is right about Pin All: an out-of-bounds fetch
+           returns the nearest real pixel, so nothing tears at the LAYER EDGE.
+           What Pin All cannot prevent is a tear in the MIDDLE of the field,
+           and a Bulge mode makes exactly that. Bulge Smoother pushes pixels
+           radially outward from every noise cell; past a point the centre of a
+           cell empties faster than its neighbours can flow in, and what is
+           left is not an out-of-bounds fetch, it is a region no source pixel
+           maps to at all. Pinning has nothing to say about it.
+
+           Measured on Molten Copper at 1080x1920, the aspect where it shows,
+           holding everything else at the tuned values (twistSize 351):
+
+             amount 180   no enclosed transparency
+             amount 260   no enclosed transparency
+             amount 340   no enclosed transparency
+             amount 380   no enclosed transparency
+             amount 400   28 px, a speckle appearing
+             amount 433   10,709 px - one clean ellipse straight through it
+
+           433 is the value read off the hand-tuned comp, and that comp is
+           1920x1080 where it does not tear: at 1920x1080, 1080x1080 and
+           3840x2160 the same 433 measures zero. So the tuned number was never
+           wrong, it was measured at one aspect and is an extrapolation at any
+           other - which is this project's own rule pointing the other way for
+           once.
+
+           Amount <= Size is the constraint the mechanism implies and the sweep
+           agrees with: a cell cannot be evacuated by a push shorter than the
+           cell. For the molten stack that caps 433 to 351, and a side-by-side
+           at 1920x1080 shows slightly broader, calmer folds and the same
+           poured metal. A hole in every portrait comp is not worth the
+           difference. */
+        var twistSizeNow = num(o.twistSize, 100);
+        if (twistAmt > twistSizeNow) twistAmt = twistSizeNow;
+        var envSizeNow = num(o.envSize, 100);
+        if (envAmt > envSizeNow) envAmt = envSizeNow;
     } else {
         twistAmt = flow ? 70 + num(o.warp, 0) * 0.25 : 0;
         envAmt   = flow ? 260 + num(o.warp, 0) * 0.8 : num(o.warp, 0) * 0.6;
@@ -5386,9 +5701,24 @@ function tuneMetallic(s, c, ctrl, w, h) {
           colours. */
     var g = lgFxNamed(s, ['ADBE Glo2'], 'Metal Sheen');
     if (g) {
-        LG.set(g, 'Glow Threshold', 2, Math.max(0, 100 - sheen * 0.8));
-        LG.set(g, 'Glow Radius',    3, 20 + sheen * 1.1);
-        LG.set(g, 'Glow Intensity', 4, sheen / 55);
+        /* SHEEN IS A HIGHLIGHT, NOT AN EXPOSURE.
+
+           The mapping used to be threshold 100 - sheen*0.8, radius 20 +
+           sheen*1.1, intensity sheen/55. At the default of 45 that puts the
+           threshold at 64% - so more than half the fold is above it and glows
+           - with the intensity near unity on top. Measured at 1920x1080, 63.8%
+           of the frame came out with every channel over 250: Satin Waves
+           rendered as a sheet of white paper with two black lines drawn on it,
+           and the sheen slider was a brightness control that destroyed the
+           look somewhere around 20.
+
+           Only the crests should catch light. Holding the threshold high and
+           letting sheen drive the size and strength of the hit instead gives
+           3.6% blown at the default and keeps the whole 0-100 range usable,
+           which is the rule this library already has about sliders. */
+        LG.set(g, 'Glow Threshold', 2, Math.max(80, 100 - sheen * 0.12));
+        LG.set(g, 'Glow Radius',    3, 6 + sheen * 0.25);
+        LG.set(g, 'Glow Intensity', 4, sheen / 400);
         LG.set(g, 'Glow Colors',    7, fin.irid ? 2 : 1);   // 2 = A & B Colors
         if (fin.irid) {
             var pal = lgRamp5(c);
@@ -5731,13 +6061,40 @@ function lgFractalSet(fn, o) {   /* @effect fn = ADBE Fractal Noise */
        Centre the field and all three behave: Clip stops clipping, Soft Clamp
        keeps its mid-range, and Wrap Back's boundaries become smooth contours
        that travel across the frame instead of regions that blink. */
+    /* FRACTAL TYPE 2 RENDERS PURE BLACK ON THIS HOST, AND SO DO 6 AND 10.
+
+       Measured on AE 26.0x67, en_IN, 2026-09-05: a solid with nothing but
+       Fractal Noise on it, Scale 70, everything else stock, swept across
+       Fractal Type 1-10 and read back off the rendered frame.
+
+         type  1  mean 126  min  29  max 237
+         type  2  mean   0  min   0  max   0   <- dead
+         type  3  mean  82  min   1  max 205
+         type  4  mean 141  min   4  max 246
+         type  5  mean 196  min  43  max 249
+         type  6  mean   0  min   0  max   0   <- dead
+         type  7  mean 126  min  28  max 232
+         type  8  mean 126  min  27  max 229
+         type  9  mean 126  min  29  max 237
+         type 10  mean   0  min   0  max   0   <- dead
+
+       Every fourth entry from 2 is dead, which is the signature of a
+       dropdown whose separators are being counted as options. The comment
+       that used to sit on the line below said "2 = Turbulent Smooth". It is
+       not; nothing is at 2. This is the failure mode in the house rules
+       exactly -- a wrong option number is accepted by the host, stored, read
+       back unchanged, and passes every audit, because the audit checks that
+       the index resolves and not that the picture has anything in it.
+
+       Default is 1 (Basic) because 1 is real, is symmetric about mid-grey by
+       construction, and is what six of the seven callers already ask for. */
     var contrast = num(o.contrast, 120);
-    var fractalType = o.fractalType || 2;
+    var fractalType = o.fractalType || 1;
     var bias = (fractalType === 1) ? 0 : -(contrast - 100) * 0.22;
     var brightness = num(o.brightness, 0) + bias;
     var scale = num(o.scale, 150);
 
-    LG.set(fn, 'Fractal Type', 1, fractalType);          // 2 = Turbulent Smooth
+    LG.set(fn, 'Fractal Type', 1, fractalType);          // 2, 6 and 10 render black
     LG.set(fn, 'Noise Type',   2, o.noiseType !== undefined ? o.noiseType : 4);                    // 4 = Spline
     LG.set(fn, 'Contrast',     4, contrast);
     LG.set(fn, 'Brightness',   5, brightness);
@@ -5867,7 +6224,7 @@ function lgGlow(layer, amount, radiusScale) {
    shape, and Toner maps its five stops onto colours that scripting *can* set.
    The interpolation still happens in Oklab, so a red-to-cyan fade still avoids
    the brown middle that a straight sRGB line goes through. */
-function lgOklabRamp(layer, c, w, h, angleDeg, radial) {
+function lgOklabRamp(layer, c, w, h, angleDeg, radial, drift) {
     if (!layer) return null;
 
     var rad = (angleDeg || 0) * Math.PI / 180;
@@ -5876,14 +6233,51 @@ function lgOklabRamp(layer, c, w, h, angleDeg, radial) {
         ? Math.max(w, h) * 0.55
         : (Math.abs(Math.cos(rad)) * w + Math.abs(Math.sin(rad)) * h) * 0.5;
 
+    /* NOTHING IN THIS LIBRARY MAY HOLD STILL, and this was the one that did.
+
+       Oklab Smooth was a ramp and two colour stops with no animation of any
+       kind: rendered at five points across eight seconds it measured 0.00
+       mean luma change, which is a photograph. The library's own rule says a
+       static surface reads as a still image rather than as a background, and
+       Snakeskin is the single documented exception.
+
+       The fix is not to add noise to it. What makes this look good is that it
+       is clean, so what moves is the ramp itself - the axis swings slowly
+       through a few degrees and the reach breathes, which slides every colour
+       boundary across the frame without introducing a single new element. At
+       the default speed one cycle is about twenty seconds, slow enough to read
+       as light changing in a room rather than as an animation. */
+    var sp = num(drift, 12);
+    var w1 = (sp > 0) ? (sp / 190) : 0;          /* radians per second        */
+    var swing = 0.22;                            /* about 12 degrees of axis  */
+    var breathe = 0.06;                          /* about 6% of the reach     */
+
     var ramp = lgFx(layer, ['ADBE Ramp']);
     if (ramp) {
         if (radial) {
             LG.set(ramp, 'Start of Ramp', 1, [cx, cy]);
             LG.set(ramp, 'End of Ramp',   3, [cx + reach, cy]);
+            if (w1 > 0) {
+                /* The centre wanders instead of the axis turning - rotating a
+                   radial ramp about its own centre is a no-op. */
+                LG.expr(ramp, 'Start of Ramp', 1,
+                    '[' + cx + ' + Math.sin(time * ' + (w1 * 0.7) + ') * ' + (reach * 0.10) +
+                    ', ' + cy + ' + Math.cos(time * ' + (w1 * 0.5) + ') * ' + (reach * 0.08) + ']');
+                LG.expr(ramp, 'End of Ramp', 3,
+                    '[' + cx + ' + ' + reach + ' * (1 + Math.sin(time * ' + w1 + ') * ' + breathe + ')' +
+                    ', ' + cy + ']');
+            }
         } else {
             LG.set(ramp, 'Start of Ramp', 1, [cx - Math.cos(rad) * reach, cy - Math.sin(rad) * reach]);
             LG.set(ramp, 'End of Ramp',   3, [cx + Math.cos(rad) * reach, cy + Math.sin(rad) * reach]);
+            if (w1 > 0) {
+                var axis = 'var a = ' + rad + ' + Math.sin(time * ' + w1 + ') * ' + swing + ';' +
+                           'var r = ' + reach + ' * (1 + Math.sin(time * ' + (w1 * 0.63) + ') * ' + breathe + ');';
+                LG.expr(ramp, 'Start of Ramp', 1,
+                    axis + '[' + cx + ' - Math.cos(a) * r, ' + cy + ' - Math.sin(a) * r]');
+                LG.expr(ramp, 'End of Ramp', 3,
+                    axis + '[' + cx + ' + Math.cos(a) * r, ' + cy + ' + Math.sin(a) * r]');
+            }
         }
         LG.set(ramp, 'Start Color', 2, [0, 0, 0]);
         LG.set(ramp, 'End Color',   4, [1, 1, 1]);
@@ -6217,7 +6611,10 @@ function buildSonduckLiquid(comp, c, ctrl, w, h, dur) {
         tuneRibbonDrift(star, null, ctrl);
     }
 
-    comp.layers.addSolid([0.1, 0, 0.2], "Background", w, h, 1, dur);
+    /* Measured as a two-colour gradient — the Tint below maps black and
+       white to slots 1 and 2 — with a hard-coded ground under it. Slot 3
+       is the ground now; see the note in buildWaves. */
+    comp.layers.addSolid(lgRole(c, 2, [0.1, 0, 0.2]), "Background", w, h, 1, dur);
     var shapesLayer = comp.layers.add(shapesComp);
     shapesLayer.name = "Sonduck Shapes";
 
@@ -6472,170 +6869,883 @@ function lgWiggleGradient(g4, c, shift) {
         LG.expr(g4, 'Point ' + (i + 1), pidx[i], 'wiggle(0.5, 500)');
     }
 }
-function buildTrailGradient(comp, c, ctrl, w, h, dur) {
-    /* Vertical strokes whose gradient scrolls at slightly different speeds,
-       so the bank of them reads as a travelling wave.
+/* ══════════════════════════════════════════════════════════════════════
+   THE TRAIL FAMILY — eight gradients, one mechanism
+   ══════════════════════════════════════════════════════════════════════
 
-       Rebuilt on stock effects only. The previous version preferred Plugin
-       Everything's Thick Stroke and fell back to a Motion Tile path that was
-       broken twice over: it applied CC RepeTile instead of Motion Tile, and
-       set "Start Point"/"End Point" on Gradient Ramp, which owns neither. */
+   Every one of them is the same three moves:
 
-    var strokeWidth = ctrl.width !== undefined ? parseFloat(ctrl.width) : 60;
-    if (strokeWidth < 4) strokeWidth = 4;
-    var numStrokes  = Math.ceil(w / strokeWidth) + 4;
+     1. A BANK of strokes in a precomp. Each stroke is a white solid
+        carrying a Gradient Ramp, tiled by Motion Tile with Mirror Edges,
+        so it reads as a stack of soft bands running along the stroke.
+     2. Each stroke's Tile Center SCROLLS, at a speed derived from its own
+        index, so the bank shears and the whole thing reads as travelling.
+     3. The finished greyscale bank goes up into the comp, and CC Toner
+        maps its luminance onto the palette.
 
-    var precomp = app.project.items.addComp("Trail Base", w, h, 1, dur, comp.frameRate);
+   What separates the eight is what happens between 2 and 3: which way the
+   bank runs, whether it is wrapped into a circle, and what is done to it on
+   the way out. The bank itself is lgTrailBank() and there is one of it.
 
-    for (var i = 0; i < numStrokes; i++) {
-        var xPos = (i - Math.floor(numStrokes / 2)) * strokeWidth + (w / 2);
+   ── WHY EVERY BANK IS BUILT BIGGER THAN THE COMP ──────────────────────
 
-        var s = precomp.layers.addSolid([1, 1, 1], "Trail " + i, strokeWidth, h, 1, dur);
+   The Warp at the end of a trail pinches the layer INSIDE ITS OWN EDGES.
+   Fish, Bulge, Squeeze, Inflate and Fisheye all pull an edge inward, and a
+   comp-sized bank has nothing behind that pinch — so the frame shows black
+   scoops where the image used to be. That was never one warp style
+   misbehaving. It was every inward style, on every trail, since the first
+   build, and it is the whole reason most of the Warp Style menu looked
+   broken.
 
-        var ramp = addFx(s, ["ADBE Ramp"]);
-        if (ramp) {
-            // Gradient Ramp's points are "Start of Ramp" / "End of Ramp".
-            safeSet(ramp, "Start of Ramp", 1, [strokeWidth / 2, 0]);
-            safeSet(ramp, "Start Color",   2, [0, 0, 0, 1]);
-            safeSet(ramp, "End of Ramp",   3, [strokeWidth / 2, h / 2]);
-            safeSet(ramp, "End Color",     4, [1, 1, 1, 1]);
-        }
+   So a bank is built bigger than the frame and dropped in at natural size,
+   centred. The pinch still happens; it happens off-screen.
 
-        var tile = addFx(s, ["ADBE Tile"]);
-        if (tile) {
-            LG.set(tile, "Output Height", 5, 400);
-            LG.set(tile, "Mirror Edges",  6, true);
-        }
-        tuneTrailStroke(s, null, ctrl, w);
+   The two directions are not the same price. Along a stroke the overhang is
+   free — a taller solid is the same layer. Across the bank it is not: it is
+   more solids. Which direction the Warp pinches depends on Warp Axis, which
+   is a live control, so both need overhang; they just do not need the same
+   amount of it. */
+var TRAIL_OVER_ACROSS = 2.2;   // across the bank — costs one solid per stroke
+var TRAIL_OVER_ALONG  = 2.6;   // along each stroke — free
 
-        try { s.property("Transform").property("Position").setValue([xPos, h / 2]); }
-        catch (e) { LG.warn("TrailGradient: cannot position stroke " + i); }
-    }
+/* THE MOST BEND THE BANK CAN COVER, MEASURED.
 
-    var finalLayer = comp.layers.add(precomp);
-    finalLayer.name = "Trail Animation";
+   tools/trail_check.ps1 counts near-black pixels in a band round the rim of a
+   real render, so "does this warp cut" is answered in pixels rather than by
+   eye. Sweeping Vapor Trail against it:
 
-    /* Map the greyscale trail onto the picked colours.
+     bend      Fish      Bulge     Flag      Rise
+     30          -         -         -       24.9%  edge black
+     50        0.0%      0.0%      0.0%        -
+     60        5.8%      0.0%      5.9%      55.5%
+     75       23.9%        -         -         -
+     100      33.2%     89.6%        -         -
 
-       This used to write the five CC Toner stops by hand with Tones set to 3
-       and a comment calling it Pentatone. 3 is Tritone -- lgToneColors has
-       said so for a while -- and Tritone reads Shadows, Midtones and
-       Highlights and ignores the other two. Both of the stops that were being
-       skipped were Colour 2 and Colour 4, which is why moving either of them
-       did nothing at all to this gradient. Going through lgToneColors ramps
-       the whole palette into the stops that are actually read, the same way
-       every other gradient in this file does. */
-    var toner = lgFx(finalLayer, ["CC Toner"]);
-    if (!toner) {
-        // No Cycore on this host — tint the extremes instead of leaving it grey.
-        var tint = addFx(finalLayer, ["ADBE Tint"]);
-        if (tint) {
-            safeSet(tint, "Map Black To", 1, c[3] || c[0]);
-            safeSet(tint, "Map White To", 2, c[0]);
-        }
-    }
+   50 is the last value where every style still covers the frame, and it is
+   the slider's limit for that reason rather than a taste about how much bend
+   is nice. Past it the gradient does not look bent, it looks broken, which is
+   what the whole Warp Style menu looked like before any of this.
 
-    addFx(finalLayer, ["ADBE WRPMESH"]);
-    tuneTrailGradient(finalLayer, c, ctrl);
-}
+   The number holds because the banks are 2.2x the frame across. They were
+   1.6x, and at 1.6 both Horizon and Lattice still cut at 50 — Lattice by 15%
+   of its edge, because a bank crossed with another bank needs the overhang in
+   both directions at once and had the least of it. */
+var TRAIL_MAX_BEND = 50;
 
-/* One stroke. The bank reads as a travelling wave because each stroke scrolls
-   at its own speed, and that speed is derived from the layer's own name so a
-   live update reproduces exactly what the build made.
+/* A thin stroke on a big comp asks for a lot of solids once the bank is
+   oversized. Past this the strokes are widened instead, because a bank that
+   stops short of the frame is the black scoop all of this exists to remove. */
+var TRAIL_MAX_STROKES = 240;
 
-   Phase Pattern is the shape of that speed across the bank, and it is the one
-   knob that changes this gradient most: same strokes, same colours, entirely
-   different motion. Spread is how hard the pattern is pushed -- at 0 every
-   stroke moves together and the bank is a flat scrolling sheet. */
-function tuneTrailStroke(s, cols, ctrl, w) {
-    if (!s) return;
-    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
-    if (isNaN(i)) i = 0;
+/* Tile Center is written in the layer's own pixels, and with Output left at
+   100 (see lgTrailTile) the tiled canvas is the layer, displayed 1:1. So a
+   pixel of Tile Center is a pixel on screen and the Cycle Speed slider means
+   what it says. This is a constant rather than a bare 1 because it is a fact
+   about the tiling that would have to change with it. */
+var TRAIL_SCROLL_NORM = 1;
 
-    var base   = num(ctrl.cycleSpeed, 600);
-    var spread = num(ctrl.spread, 100) / 100;
-    /* The stroke count is not stored anywhere, but it is not a free variable
-       either: the builder derives it from the comp width and the trail width,
-       and both of those are still here. Recomputing it is how Mirror and Sine
-       find the middle of a bank they were not told the size of. */
-    var width  = Math.max(4, num(ctrl.width, 60));
-    var count  = Math.ceil(num(w, 1920) / width) + 4;
-    var speed;
-
-    switch (ctrl.phase) {
-        case 'Sine':
-            /* Two full turns across the bank, so the whole thing breathes in
-               and out instead of shearing one way. */
-            speed = base * (1 + 0.6 * spread * Math.sin((i / count) * Math.PI * 4));
-            break;
-        case 'Mirror':
-            // Symmetric about the middle: a chevron opening from the centre.
-            speed = base - Math.abs(i - count / 2) * 40 * spread;
-            break;
-        case 'Random':
-            /* Seeded off the index, never Math.random. A live update has to
-               land on the same number the build did or every drag reshuffles
-               the whole bank into a different look. */
-            speed = base * (0.35 + 1.30 * lgTrailHash(i) * spread);
-            break;
-        case 'Counterflow':
-            // Alternate strokes run the other way. Reads as a braid.
-            speed = (i % 2 === 0 ? 1 : -1) * (base - (i * 20 * spread));
-            break;
-        default:   // Linear, the original, and still the right default
-            speed = base - (i * 20 * spread);
-            break;
-    }
-
-    var tile = findFx(s, ["ADBE Tile"]);
-    if (!tile) return;
-    LG.expr(tile, "Tile Center", 1,
-            "[value[0], value[1] + (time * " + speed + ")]");
-}
-
-/* A stable pseudo-random in [0,1) from a stroke index -- the same hash the
-   preview painters use, for the same reason: it has to be the same number
-   every time it is asked. */
+/* A stable pseudo-random in [0,1) from a stroke index — the same hash the
+   preview painters use, for the same reason: a live update has to land on
+   the same number the build did, or every drag reshuffles the bank into a
+   different look. Never Math.random. */
 function lgTrailHash(i) {
     var n = (i * 1619 + 31337) & 0x7fffffff;
     n = (n >> 13) ^ n;
     return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 0x7fffffff;
 }
 
-/* AE's Warp styles, in menu order. Flat is not one of them -- it is Squeeze
-   with the bend taken to zero, which is the only way to switch the distortion
-   off without removing an effect the live path expects to find. */
+/* THE THICKNESSES OF ONE BANK, laid end to end across `span`, with a little
+   slack at each end so the bank never runs out before the frame does.
+
+   Uniform unless `vary`, in which case each thickness is a hash of its own
+   index — Signal Trail's uneven barcode. Deterministic either way, because
+   the live tuners have to recompute this exact array to work out which
+   stroke they are looking at and how many there are in total. */
+function lgTrailWidths(width, span, vary) {
+    var out = [], laid = 0, i = 0, t;
+    width = Math.max(4, num(width, 60));
+    if (Math.floor(span / width) + 4 > TRAIL_MAX_STROKES) {
+        width = span / (TRAIL_MAX_STROKES - 4);
+        LG.note('trail strokes widened to ' + Math.round(width) +
+                'px so the bank stays buildable');
+    }
+    while (laid < span + width * 3) {
+        t = vary ? Math.max(4, width * (0.35 + 1.3 * lgTrailHash(i))) : width;
+        out.push(t);
+        laid += t;
+        i++;
+        if (i >= TRAIL_MAX_STROKES) break;
+    }
+    return out;
+}
+
+/* HOW FAST ONE STROKE SCROLLS.
+
+   Phase Pattern is the shape of that speed across the bank, and it is the
+   one knob that changes a trail most: same strokes, same colours, entirely
+   different motion. Spread is how hard the pattern is pushed — at 0 every
+   stroke moves together and the bank is a flat scrolling sheet. */
+function lgTrailSpeed(i, count, ctrl) {
+    var base = num(ctrl.cycleSpeed, 600) * TRAIL_SCROLL_NORM;
+    var k    = num(ctrl.spread, 100) / 100;
+
+    /* THE SPEEDS ARE A RATIO OF THE BASE, NOT THE BASE MINUS A STEP.
+
+       Every pattern here used to be written as `base - i * something`. On a
+       bank of any size that arithmetic runs out of base: at the original
+       numbers the speed crossed zero around stroke 30 of 36 and went
+       negative after it, so the far end of every trail was stationary and
+       then reversed. That is not a spread of speeds, it is two different
+       gradients in one frame, and it is most of why the family read as
+       knitting rather than as travel.
+
+       As a ratio there is no such cliff. Phase Spread widens the band of
+       speeds around the base and the slowest stroke is still going forward
+       at the slider's maximum, on a bank of any width. `u` is where the
+       stroke sits across the bank, 0 to 1, so the shape of the pattern is
+       the same whether the bank has twelve strokes or two hundred. */
+    var u = (count > 1) ? (i / (count - 1)) : 0.5;
+    var speed;
+
+    switch (ctrl.phase) {
+        case 'Sine':
+            // Two full turns across the bank: it breathes rather than shears.
+            speed = base * (1 + 0.55 * k * Math.sin(u * Math.PI * 4));
+            break;
+        case 'Mirror':
+            // Symmetric about the middle: a chevron opening from the centre.
+            speed = base * (1 - 0.70 * k * Math.abs(u - 0.5) * 2);
+            break;
+        case 'Random':
+            /* Seeded off the index, never Math.random. A live update has to
+               land on the same number the build did or every drag reshuffles
+               the whole bank into a different look. */
+            speed = base * (1 + 0.60 * k * (lgTrailHash(i) - 0.5) * 2);
+            break;
+        case 'Counterflow':
+            // Alternate strokes run the other way. Reads as a braid.
+            speed = base * (i % 2 === 0 ? 1 : -1) * (1 - 0.30 * k * (u - 0.5) * 2);
+            break;
+        default:   // Linear, the original, and still the right default
+            speed = base * (1 - 0.55 * k * (u - 0.5) * 2);
+            break;
+    }
+    return speed;
+}
+
+/* One stroke's Motion Tile: how many bands it carries and how fast they run.
+   Shared by every builder and every live tuner in the family, so a slider
+   cannot mean one thing on build and another on a drag. */
+function lgTrailTile(s, i, count, ctrl, o) {
+    var tile = findFx(s, ['ADBE Tile']);
+    if (!tile) return;
+
+    /* BAND COUNT IS TILE SIZE, NOT OUTPUT SIZE, AND THAT IS NOT A STYLE
+       CHOICE — IT IS THE ONLY ONE OF THE TWO THAT RENDERS.
+
+       Both do the same thing to the picture: Output Height 400 fits four
+       tiles down the layer, and so does Tile Height 25. They cost wildly
+       different amounts. Output builds a canvas of layer x Output% and then
+       fits it back in, and After Effects will not build a canvas past about
+       30,000px in a dimension. It does not raise anything when you ask for
+       one — the effect renders nothing, saveFrameToPng writes no file and
+       reports no error, and the build log is clean.
+
+       The banks here are already 2.6x the frame, so Output carried that
+       multiplier straight into the canvas:
+
+         Horizon   4992 wide  x 10.4  =  51,917   dead
+         Signal    2808 tall  x 13.0  =  36,504   dead
+         Vapor     2808 tall  x 10.4  =  29,203   alive by 800px
+
+       Vapor was one click of Band Count from the same silence. Tile Height
+       divides instead of multiplying, so the canvas stays the size of the
+       layer whatever the band count is, and there is no cliff to be near. */
+    var per   = 100 / (Math.max(1, num(ctrl.bands, 4)) * (o.bandScale || 1));
+    var speed = lgTrailSpeed(i, count, ctrl) * (o.reverse ? -1 : 1);
+
+    /* THE STANDING OFFSET, AND IT IS NOT COSMETIC.
+
+       Motion Tile renders NOTHING when Tile Center sits exactly on the value
+       it defaults to — the centre of the layer — at some tile sizes. Two
+       bands hits it; four does not. It is not a timing problem and not an
+       expression problem: clearing the expression altogether and rendering
+       the plain effect gives the same empty frame, and nudging the centre by
+       a hundred and thirty-five pixels fills it again.
+
+       The scroll expression adds `time * speed`, which is exactly zero at
+       time zero, so the trail landed on that degenerate value on its FIRST
+       FRAME and rendered black there — a black flash at the head of every
+       loop, on a gradient that was perfect from frame two onwards.
+
+       So the expression carries a standing offset that time is added to, a
+       third of a tile — not a half, which is the other alignment where the
+       mirrored tiling folds onto itself.
+
+       Constant, not varied per stroke. Varying it was the first fix and it
+       broke the thing it was protecting: a third of a tile of jitter across
+       neighbouring strokes tears the Linear shear into visible steps. It is
+       also unnecessary. The strokes already run at different speeds, so they
+       cross any given alignment at different times; the only moment they
+       ever shared one was time zero, when every offset was zero, and one
+       constant removes exactly that. */
+    var span   = num(o.span, 1080);
+    var tilePx = span * per / 100;
+    var phase  = tilePx / 3;
+
+    LG.set(tile, 'Output Width',  4, 100);
+    LG.set(tile, 'Output Height', 5, 100);
+
+    if (o.axis === 'H') {
+        LG.set(tile, 'Tile Width',  2, per);
+        LG.set(tile, 'Tile Height', 3, 100);
+        LG.expr(tile, 'Tile Center', 1,
+                '[value[0] + ' + phase + ' + (time * ' + speed + '), value[1]]');
+    } else {
+        LG.set(tile, 'Tile Width',  2, 100);
+        LG.set(tile, 'Tile Height', 3, per);
+        LG.expr(tile, 'Tile Center', 1,
+                '[value[0], value[1] + ' + phase + ' + (time * ' + speed + ')]');
+    }
+    LG.set(tile, 'Mirror Edges', 6, true);
+}
+
+/* BUILD ONE BANK.
+
+   `o` is the shape of the bank, not its styling:
+
+     name       what the precomp is called, and with an index each stroke
+     size       [width, height] of the precomp
+     axis       'V' — strokes stand up, bands scroll vertically
+                'H' — strokes lie down, bands scroll horizontally
+     width      stroke thickness
+     vary       uneven thicknesses, hashed off the index
+     bandScale  Motion Tile output per band, over the base 100
+
+   Returns the CompItem. */
+function lgTrailBank(o, ctrl, dur, fps) {
+    var bw = Math.ceil(o.size[0]), bh = Math.ceil(o.size[1]);
+    var horiz = (o.axis === 'H');
+    var span  = horiz ? bh : bw;
+    var precomp = app.project.items.addComp(o.name + ' Base', bw, bh, 1, dur, fps);
+    var widths = lgTrailWidths(o.width, span, o.vary);
+    var total = 0, i;
+    for (i = 0; i < widths.length; i++) total += widths[i];
+
+    var at = (span - total) / 2;      // centre the run of strokes on the bank
+    for (i = 0; i < widths.length; i++) {
+        var t = widths[i];
+        var s = precomp.layers.addSolid([1, 1, 1], o.name + ' ' + i,
+                                        Math.max(1, Math.round(horiz ? bw : t)),
+                                        Math.max(1, Math.round(horiz ? t : bh)),
+                                        1, dur);
+
+        /* THE RAMP SPANS THE WHOLE SOLID, NOT HALF OF IT.
+
+           It used to end at the middle — [t/2, bh/2] — which left the far
+           half of every stroke sitting at the ramp's end colour, flat. Motion
+           Tile then mirrored that, so the two flat halves met and became one
+           flat region twice as wide as either. Half of every band was a slab
+           of one colour, and at any stroke width worth using that is most of
+           the frame: it is the reason this family read as blocks rather than
+           as strands, in every one of its eight variants at once.
+
+           End to end, mirrored, the tiling is a clean triangle wave. Every
+           pixel is somewhere on the ramp and there is no plateau to see. */
+        var ramp = addFx(s, ['ADBE Ramp']);
+        if (ramp) {
+            safeSet(ramp, 'Start of Ramp', 1, horiz ? [0, t / 2]  : [t / 2, 0]);
+            safeSet(ramp, 'Start Color',   2, [0, 0, 0, 1]);
+            safeSet(ramp, 'End of Ramp',   3, horiz ? [bw, t / 2] : [t / 2, bh]);
+            safeSet(ramp, 'End Color',     4, [1, 1, 1, 1]);
+        }
+
+        addFx(s, ['ADBE Tile']);
+        o.span = horiz ? bw : bh;
+        lgTrailTile(s, i, widths.length, ctrl, o);
+
+        try {
+            s.property('Transform').property('Position').setValue(
+                horiz ? [bw / 2, at + t / 2] : [at + t / 2, bh / 2]);
+        } catch (e) { LG.warn(o.name + ': cannot position stroke ' + i); }
+        at += t;
+    }
+    return precomp;
+}
+
+/* THE WARP AT THE END OF A TRAIL.
+
+   AE's Warp styles, in menu order. Flat is not one of them — it is Squeeze
+   with the bend taken to zero, which is the only way to switch the
+   distortion off without removing an effect the live path expects to find. */
+/* RISE IS IN THE TABLE AND NOT IN THE MENU.
+
+   It is a one-directional shear rather than a pinch, so it slides the bank
+   bodily off one side of the frame instead of drawing it inward. At bend 30 —
+   the mildest setting anything here ships with — a quarter of the frame edge
+   rendered black, and no bank size this side of reason covers it. There is no
+   value of Rise that works, so it is not offered.
+
+   It stays in the table because a preset saved before it was withdrawn still
+   names it, and a name the table does not know falls through to Squeeze,
+   which would silently change a saved gradient into a different one. */
 var TRAIL_WARPS = {
     'Flat':    0,  'Arc':     1,  'Arch':    4,  'Bulge':   5,
     'Flag':    8,  'Wave':    9,  'Fish':   10,  'Rise':   11,
     'Fisheye': 12, 'Inflate': 13, 'Squeeze': 14, 'Twist':  15
 };
 
-/* The finished bank. Trail *width* stays a rebuild -- it decides how many
-   strokes there are and how wide each solid is, and a solid cannot be resized
-   after the fact. Everything else on this layer is free to drag. */
-function tuneTrailGradient(s, c, ctrl) {
-    if (!s) return;
+function lgTrailWarp(s, ctrl, fallback) {
+    var warp = findFx(s, ['ADBE WRPMESH']);
+    if (!warp) return;
+    var style = TRAIL_WARPS[ctrl.warpStyle];
+    if (style === undefined) style = (fallback === undefined ? 14 : fallback);
+    LG.set(warp, 'Warp Style', 1, style || 14);
+    /* Warp Axis flips which way the bend runs. On a bank of strokes the two
+       axes are not variations on each other — one bends the strokes and the
+       other bends the bank. */
+    LG.set(warp, 'Warp Axis',  2, ctrl.warpAxis === 'Vertical' ? 2 : 1);
 
-    var warp = findFx(s, ["ADBE WRPMESH"]);
-    if (warp) {
-        var style = TRAIL_WARPS[ctrl.warpStyle];
-        if (style === undefined) style = 14;          // Squeeze, the original
-        LG.set(warp, "Warp Style", 1, style || 14);
-        /* Warp Axis flips which way the bend runs. On a bank of vertical
-           strokes the two axes are not variations on each other -- one arcs
-           the strokes and the other arcs the bank. */
-        LG.set(warp, "Warp Axis",  2, ctrl.warpAxis === 'Vertical' ? 2 : 1);
-        LG.set(warp, "Bend",       3, style === 0 ? 0 : num(ctrl.bend, 30));
+    /* Clamped rather than trusted. The slider cannot ask for more than
+       TRAIL_MAX_BEND any more, but a preset saved before it could still can,
+       and honouring that number would reproduce exactly the black scoops the
+       preset was saved with. */
+    var bend = num(ctrl.bend, 30);
+    if (bend >  TRAIL_MAX_BEND) bend =  TRAIL_MAX_BEND;
+    if (bend < -TRAIL_MAX_BEND) bend = -TRAIL_MAX_BEND;
+    LG.set(warp, 'Bend',       3, style === 0 ? 0 : bend);
+}
+
+/* Palette order or luminance order. Ordered keeps Colour 1 at the shadow end
+   whatever it is, which is what you want when the palette was chosen as a
+   sequence; sorted puts the darkest colour in the dark, which is what you
+   want when it was chosen as a set. `hard` steps the stops instead of
+   ramping them, for the trails that want edges rather than vapour. */
+function lgTrailTone(s, c, ctrl, hard) {
+    var toner = findFx(s, ['CC Toner']);
+    if (!toner) return;
+    lgToneColors(toner, c, ctrl.colorOrder !== 'By Luminance', hard);
+}
+
+/* The greyscale bank a trail could not tint, on a host with no Cycore. Tint
+   the extremes rather than leave the thing grey. */
+function lgTrailFallbackTint(s, c) {
+    var tint = addFx(s, ['ADBE Tint']);
+    if (!tint) return;
+    safeSet(tint, 'Map Black To', 1, c[3] || c[0]);
+    safeSet(tint, 'Map White To', 2, c[0]);
+}
+
+/* How many strokes a bank of this width has, recomputed rather than stored.
+   The builder derives the count from the span and the stroke width, and both
+   of those are still here at live-update time — this is how the tuners find
+   the middle of a bank they were not told the size of. */
+function lgTrailCount(ctrl, span, dflt, vary) {
+    return lgTrailWidths(num(ctrl.width, dflt), span, vary).length;
+}
+
+
+/* ── 1. VAPOR TRAIL ────────────────────────────────────────────────────
+   The original. Vertical strokes whose bands scroll at slightly different
+   speeds, so the bank reads as a travelling wave, then bent by a Warp. */
+function buildTrailGradient(comp, c, ctrl, w, h, dur) {
+    var precomp = lgTrailBank({
+        name: 'Trail', axis: 'V',
+        size: [w * TRAIL_OVER_ACROSS, h * TRAIL_OVER_ALONG],
+        width: num(ctrl.width, 60),
+        bandScale: TRAIL_OVER_ALONG
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Trail Animation';
+
+    /* Map the greyscale trail onto the picked colours. This used to write
+       the five CC Toner stops by hand and skip two of them, which is why
+       moving Colour 2 or Colour 4 did nothing at all to this gradient.
+       lgToneColors ramps the whole palette into the stops that are read,
+       the same way every other gradient in this file does. */
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneTrailGradient(s, c, ctrl, w, h);
+}
+
+function tuneTrailGradient(s, c, ctrl, w, h) {
+    if (!s) return;
+    lgTrailWarp(s, ctrl, 14);        // Squeeze, the original
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneTrailStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailCount(ctrl, num(w, 1920) * TRAIL_OVER_ACROSS, 60),
+                ctrl, { axis: 'V', bandScale: TRAIL_OVER_ALONG,
+                       span: num(h, 1080) * TRAIL_OVER_ALONG });
+}
+
+
+/* ── 2. HORIZON TRAIL ──────────────────────────────────────────────────
+   The bank on its side. Bars stacked up the frame, bands running and
+   scrolling sideways, so it reads as layered haze over a horizon rather
+   than as something falling. Everything else is Vapor Trail. */
+function buildHorizonTrail(comp, c, ctrl, w, h, dur) {
+    var precomp = lgTrailBank({
+        name: 'Horizon', axis: 'H',
+        size: [w * TRAIL_OVER_ALONG, h * TRAIL_OVER_ACROSS],
+        width: num(ctrl.width, 60),
+        bandScale: TRAIL_OVER_ALONG
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Horizon Animation';
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneHorizonTrail(s, c, ctrl, w, h);
+}
+
+function tuneHorizonTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    lgTrailWarp(s, ctrl, 9);         // Wave — a horizon wants a swell, not a pinch
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneHorizonStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailCount(ctrl, num(h, 1080) * TRAIL_OVER_ACROSS, 60),
+                ctrl, { axis: 'H', bandScale: TRAIL_OVER_ALONG,
+                       span: num(w, 1920) * TRAIL_OVER_ALONG });
+}
+
+
+/* ── 3. IRIS TRAIL ─────────────────────────────────────────────────────
+   The bank wrapped into a circle. Rect-to-Polar reads the rectangle's x as
+   angle and its y as radius, so the columns become wedges and the bands
+   inside them become rings travelling outward. Phase Spread is what keeps
+   it a fan rather than a bullseye: it is the difference in speed between
+   neighbouring wedges that makes the spokes visible at all.
+
+   No Warp on this one — the polar wrap is the distortion. The layer is
+   square and as wide as the frame's diagonal, because Rect-to-Polar wraps
+   the layer into the disc inscribed in it: a frame-sized layer would give a
+   circle floating on black with the corners empty. This is the same lesson
+   Prismatic Burst paid for. */
+function buildIrisTrail(comp, c, ctrl, w, h, dur) {
+    var d = Math.ceil(Math.sqrt(w * w + h * h));
+    var precomp = lgTrailBank({
+        name: 'Iris', axis: 'V',
+        size: [d, d],
+        width: num(ctrl.width, 60),
+        bandScale: 1,
+        reverse: true                 // outward from the centre reads better than in
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Iris Animation';
+    try { s.property('Transform').property('Position').setValue([w / 2, h / 2]); }
+    catch (e) { LG.warn('Iris Trail: cannot centre the disc'); }
+
+    var polar = addFx(s, ['ADBE Polar Coordinates']);
+    if (polar) {
+        safeSet(polar, 'Interpolation', 1, true);
+        safeSet(polar, 'Type of Conversion', 2, 1);      // 1 = Rect to Polar
+    }
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    tuneIrisTrail(s, c, ctrl, w, h);
+}
+
+function tuneIrisTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    /* The whole disc turns. A disc is round, so there is no edge for the
+       rotation to bring into frame — this is the one distortion in the
+       family that cannot cut. */
+    lgRotate(s, num(ctrl.spin, 6), 0);
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneIrisStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    var d = Math.ceil(Math.sqrt(num(w, 1920) * num(w, 1920) + num(h, 1080) * num(h, 1080)));
+    lgTrailTile(s, i, lgTrailCount(ctrl, d, 60), ctrl,
+                { axis: 'V', bandScale: 1, reverse: true, span: d });
+}
+
+
+/* ── 4. RIPPLE TRAIL ───────────────────────────────────────────────────
+   The same wrap as Iris, aimed at the opposite half of the effect. Wide
+   strokes and no phase spread leave the wedges invisible and the RINGS
+   doing all the work — concentric bands travelling out from the centre.
+   A Turbulent Displace in rectangular space, before the wrap, is what stops
+   that being a bullseye: it bends the rows, and a bent row is a ring that
+   wobbles like water.
+
+   Pinned on all sides. The displacement runs on a fully opaque bank, so it
+   cannot tear a hole — but an unpinned edge would drag transparency in from
+   outside the rectangle, and in polar space the bottom edge of that
+   rectangle is the outer rim of the disc, which is exactly where the frame
+   corners are. */
+function buildRippleTrail(comp, c, ctrl, w, h, dur) {
+    var d = Math.ceil(Math.sqrt(w * w + h * h));
+    var precomp = lgTrailBank({
+        name: 'Ripple', axis: 'V',
+        size: [d, d],
+        width: num(ctrl.width, 200),
+        bandScale: 1,
+        reverse: true
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Ripple Animation';
+    try { s.property('Transform').property('Position').setValue([w / 2, h / 2]); }
+    catch (e) { LG.warn('Ripple Trail: cannot centre the disc'); }
+
+    addFx(s, ['ADBE Turbulent Displace']);
+    var polar = addFx(s, ['ADBE Polar Coordinates']);
+    if (polar) {
+        safeSet(polar, 'Interpolation', 1, true);
+        safeSet(polar, 'Type of Conversion', 2, 1);      // 1 = Rect to Polar
+    }
+    /* A small blur AFTER the wrap, and it is not a softening pass.
+
+       Rect-to-Polar maps the whole top edge of the rectangle onto the single
+       point at the centre of the disc. Every band boundary and every mirror
+       seam along that edge therefore lands on the same few pixels, and they
+       fan out from it as a hard little star that exists nowhere else in the
+       picture. Four pixels of blur removes it and does nothing visible to
+       rings that are two hundred pixels apart. */
+    addFx(s, ['ADBE Box Blur2']);
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    tuneRippleTrail(s, c, ctrl, w, h);
+}
+
+function tuneRippleTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    var turb = findFx(s, ['ADBE Turbulent Displace']);
+    if (turb) {
+        LG.set(turb, 'Displacement', 1, 1);                     // 1 = Turbulent
+        LG.set(turb, 'Amount',       2, num(ctrl.wobble, 60));
+        LG.set(turb, 'Size',         3, Math.max(2, num(ctrl.wobbleScale, 90)));
+        LG.set(turb, 'Complexity',   5, 2);
+        LG.set(turb, 'Pinning',     12, 11);                    // 11 = Pin All
+        LG.expr(turb, 'Evolution',   6, 'time * ' + num(ctrl.wobbleSpeed, 40));
+    }
+    var soften = findFx(s, ['ADBE Box Blur2']);
+    if (soften) {
+        LG.set(soften, 'Blur Radius',        1, 4);
+        LG.set(soften, 'Iterations',         2, 2);
+        LG.set(soften, 'Repeat Edge Pixels', 4, true);
+    }
+    lgRotate(s, num(ctrl.spin, 0), 0);
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneRippleStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    var d = Math.ceil(Math.sqrt(num(w, 1920) * num(w, 1920) + num(h, 1080) * num(h, 1080)));
+    lgTrailTile(s, i, lgTrailWidths(num(ctrl.width, 200), d).length, ctrl,
+                { axis: 'V', bandScale: 1, reverse: true, span: d });
+}
+
+
+/* ── 5. MOLTEN TRAIL ───────────────────────────────────────────────────
+   The straight bank pushed through a turbulence whose SIZE is far larger
+   than a stroke is wide. That ratio is the whole look: a noise finer than
+   the strokes would fray them into fibres, and one much coarser slides
+   whole columns past each other and marbles them together.
+
+   The displacement is budgeted against the overhang the oversized bank
+   already has, through the same lgDisplaceBudget every displaced layer in
+   this file uses, so it cannot reach past the image and tear a hole. */
+function buildMoltenTrail(comp, c, ctrl, w, h, dur) {
+    var precomp = lgTrailBank({
+        name: 'Molten', axis: 'V',
+        size: [w * TRAIL_OVER_ACROSS, h * TRAIL_OVER_ALONG],
+        width: num(ctrl.width, 90),
+        bandScale: TRAIL_OVER_ALONG
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Molten Animation';
+    addFx(s, ['ADBE Turbulent Displace']);
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneMoltenTrail(s, c, ctrl, w, h);
+}
+
+function tuneMoltenTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    var turb = findFx(s, ['ADBE Turbulent Displace']);
+    if (turb) {
+        /* Budgeted against the overhang the bank carries across itself, which
+           is the smaller of its two margins and the one the melt spends.
+
+           A third of it is reserved rather than none. lgDisplaceBudget's
+           reach model was fitted on the metals, where the displacement is the
+           last thing on the layer; here a Warp runs after it and spends the
+           same margin, and Melt Scale buys reach the Amount-only model does
+           not count. Rendered at the slider's top with no reserve, the frame
+           edge came back 9.7% black — so the model is optimistic here by
+           about that much, and the reserve is the margin for it. */
+        var overhang = num(w, 1920) * (TRAIL_OVER_ACROSS - 1) / 2;
+        var amount = Math.min(num(ctrl.melt, 120),
+                              lgDisplaceBudget(overhang, overhang / 3));
+        LG.set(turb, 'Displacement', 1, 1);                     // 1 = Turbulent
+        LG.set(turb, 'Amount',       2, amount);
+        LG.set(turb, 'Size',         3, Math.max(20, num(ctrl.meltScale, 220)));
+        LG.set(turb, 'Complexity',   5, 2);
+        LG.set(turb, 'Pinning',     12, 11);                    // 11 = Pin All
+        LG.expr(turb, 'Evolution',   6, 'time * ' + num(ctrl.meltSpeed, 30));
+    }
+    lgTrailWarp(s, ctrl, 0);         // Flat by default — the melt is the distortion
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneMoltenStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailWidths(num(ctrl.width, 90),
+                                    num(w, 1920) * TRAIL_OVER_ACROSS).length,
+                ctrl, { axis: 'V', bandScale: TRAIL_OVER_ALONG,
+                       span: num(h, 1080) * TRAIL_OVER_ALONG });
+}
+
+
+/* ── 6. HAZE TRAIL ─────────────────────────────────────────────────────
+   The same bank with the edges taken off it. Wide strokes, few bands, a
+   blur wider than a stroke and a bloom on top: the columns stop being
+   columns and become a field of soft light with a direction. This is the
+   backdrop end of the family — the one to put behind type. */
+function buildHazeTrail(comp, c, ctrl, w, h, dur) {
+    var precomp = lgTrailBank({
+        name: 'Haze', axis: 'V',
+        size: [w * TRAIL_OVER_ACROSS, h * TRAIL_OVER_ALONG],
+        width: num(ctrl.width, 140),
+        bandScale: TRAIL_OVER_ALONG
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Haze Animation';
+    addFx(s, ['ADBE Box Blur2']);
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE Glo2']);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneHazeTrail(s, c, ctrl, w, h);
+}
+
+function tuneHazeTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    var blur = findFx(s, ['ADBE Box Blur2']);
+    if (blur) {
+        LG.set(blur, 'Blur Radius',       1, num(ctrl.softness, 60));
+        LG.set(blur, 'Iterations',        2, 3);
+        LG.set(blur, 'Repeat Edge Pixels', 4, true);
+    }
+    /* The blur comes BEFORE the toner and the bloom AFTER it, so the bloom
+       picks up the palette's own bright end rather than a grey one. */
+    var glow = findFx(s, ['ADBE Glo2']);
+    if (glow) {
+        /* THE THRESHOLD RUNS THE OTHER WAY FROM WHAT IT LOOKS LIKE.
+
+           Glow Threshold is the brightness a pixel must EXCEED to bloom, so
+           a low threshold blooms everything. The first version derived it as
+           100 - bloom, which at any useful bloom setting put it low enough
+           that the whole frame qualified — and a blurred bank has no dark
+           left in it to anchor against, so it went to white. Rendered mean
+           luminance 236 out of 255, which is a white rectangle with a hint
+           of lavender.
+
+           It is anchored high now and moves very little, so Bloom controls
+           how hard the highlights glow and never how much of the frame is a
+           highlight. */
+        var bloom = num(ctrl.bloom, 20);
+        LG.set(glow, 'Glow Threshold', 2, Math.max(75, 92 - bloom * 0.17));
+        LG.set(glow, 'Glow Radius',    3, 30 + bloom * 1.2);
+        LG.set(glow, 'Glow Intensity', 4, bloom / 280);
+        LG.set(glow, 'Glow Colors',    7, 1);                   // 1 = Original Colors
+        try { glow.enabled = bloom > 0; } catch (e) { }
+    }
+    lgTrailWarp(s, ctrl, 0);         // Flat by default — haze does not want a pinch
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneHazeStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailWidths(num(ctrl.width, 140),
+                                    num(w, 1920) * TRAIL_OVER_ACROSS).length,
+                ctrl, { axis: 'V', bandScale: TRAIL_OVER_ALONG,
+                       span: num(h, 1080) * TRAIL_OVER_ALONG });
+}
+
+
+/* ── 7. SIGNAL TRAIL ───────────────────────────────────────────────────
+   The family with its edges hardened. Two changes and no others: the
+   stroke thicknesses are uneven, hashed off the index, and the soft ramp
+   inside each one is crushed into flat bands by a Levels before the toner
+   ever sees it. Reads editorial — a colour barcode rather than vapour.
+
+   Levels here is normalised. ADBE Easy Levels2 takes 0..1, not 0..255, and
+   an 8-bit number written into it renders a solid white frame. */
+function buildSignalTrail(comp, c, ctrl, w, h, dur) {
+    var precomp = lgTrailBank({
+        name: 'Signal', axis: 'V',
+        size: [w * TRAIL_OVER_ACROSS, h * TRAIL_OVER_ALONG],
+        width: num(ctrl.width, 70),
+        vary: true,
+        bandScale: TRAIL_OVER_ALONG
+    }, ctrl, dur, comp.frameRate);
+
+    var s = comp.layers.add(precomp);
+    s.name = 'Signal Animation';
+    addFx(s, ['ADBE Easy Levels2']);
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneSignalTrail(s, c, ctrl, w, h);
+}
+
+function tuneSignalTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    var lv = findFx(s, ['ADBE Easy Levels2']);
+    if (lv) {
+        /* Edge is how narrow the window between black and white is. At 100
+           the ramp crosses it in almost no distance, which is a hard edge;
+           at 0 it is the full range and the bands stay soft. */
+        var edge = num(ctrl.edge, 80) / 100;
+        var halfWindow = 0.5 * (1 - edge) + 0.01;
+        LG.set(lv, 'Input Black', 3, Math.max(0, 0.5 - halfWindow));
+        LG.set(lv, 'Input White', 4, Math.min(1, 0.5 + halfWindow));
+    }
+    lgTrailWarp(s, ctrl, 0);         // Flat by default — a barcode wants to be straight
+
+    /* NOT the stepped stops, and that is a correction.
+
+       Stepping the CC Toner stops on top of an already-crushed Levels ramp
+       does not make the bands flatter — CC Toner interpolates between its
+       stops whatever they are, so all it did was spend two of the five on
+       the same colour and squeeze the rest into the thin transition the
+       Levels had left. The render was flat blocks separated by rainbow
+       fringes: a barcode with a prism through it.
+
+       The Levels window is what makes this gradient's edges. Let the palette
+       ramp normally between them. */
+    lgTrailTone(s, c, ctrl, false);
+}
+
+function tuneSignalStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailWidths(num(ctrl.width, 70),
+                                    num(w, 1920) * TRAIL_OVER_ACROSS, true).length,
+                ctrl, { axis: 'V', bandScale: TRAIL_OVER_ALONG,
+                       span: num(h, 1080) * TRAIL_OVER_ALONG });
+}
+
+
+/* ── 8. LATTICE TRAIL ──────────────────────────────────────────────────
+   Two banks in one precomp, crossed — the vertical one underneath, the
+   horizontal one over it in a blend mode. A plaid that shifts in both
+   directions at once.
+
+   Both banks stay GREYSCALE and the crossing happens before the colour
+   does. Tinting the two separately and blending the results gives mud;
+   blending the luminance and then mapping it through one CC Toner keeps
+   every crossing on the palette. */
+function buildLatticeTrail(comp, c, ctrl, w, h, dur) {
+    var bw = Math.ceil(w * TRAIL_OVER_ACROSS), bh = Math.ceil(h * TRAIL_OVER_ACROSS);
+    var precomp = lgTrailBank({
+        name: 'Lattice V', axis: 'V',
+        size: [bw, bh],
+        width: num(ctrl.width, 80),
+        bandScale: TRAIL_OVER_ACROSS
+    }, ctrl, dur, comp.frameRate);
+
+    /* The crossing bank is built into the SAME precomp rather than a second
+       one, so the two are composited before anything sees them. */
+    var widths = lgTrailWidths(num(ctrl.width, 80), bh);
+    var total = 0, i;
+    for (i = 0; i < widths.length; i++) total += widths[i];
+    var at = (bh - total) / 2;
+    for (i = 0; i < widths.length; i++) {
+        var t = widths[i];
+        var s2 = precomp.layers.addSolid([1, 1, 1], 'Lattice H ' + i,
+                                         bw, Math.max(1, Math.round(t)), 1, dur);
+        var ramp = addFx(s2, ['ADBE Ramp']);
+        if (ramp) {
+            safeSet(ramp, 'Start of Ramp', 1, [0, t / 2]);
+            safeSet(ramp, 'Start Color',   2, [0, 0, 0, 1]);
+            safeSet(ramp, 'End of Ramp',   3, [bw / 2, t / 2]);
+            safeSet(ramp, 'End Color',     4, [1, 1, 1, 1]);
+        }
+        addFx(s2, ['ADBE Tile']);
+        lgTrailTile(s2, i, widths.length, ctrl, lgLatticeCrossOpts(bw, bh));
+        try {
+            s2.property('Transform').property('Position').setValue([bw / 2, at + t / 2]);
+        } catch (e) { LG.warn('Lattice Trail: cannot position cross stroke ' + i); }
+        tuneLatticeCross(s2, c, ctrl, w, h);
+        at += t;
     }
 
-    /* Palette order or luminance order. Ordered keeps Colour 1 at the shadow
-       end whatever it is, which is what you want when the palette was chosen
-       as a sequence; sorted puts the darkest colour in the dark, which is what
-       you want when it was chosen as a set. */
-    var toner = findFx(s, ["CC Toner"]);
-    if (toner) lgToneColors(toner, c, ctrl.colorOrder !== 'By Luminance');
+    var s = comp.layers.add(precomp);
+    s.name = 'Lattice Animation';
+    if (!lgFx(s, ['CC Toner'])) lgTrailFallbackTint(s, c);
+    addFx(s, ['ADBE WRPMESH']);
+    tuneLatticeTrail(s, c, ctrl, w, h);
 }
+
+function tuneLatticeTrail(s, c, ctrl, w, h) {
+    if (!s) return;
+    lgTrailWarp(s, ctrl, 0);         // Flat by default — a weave wants to lie flat
+    lgTrailTone(s, c, ctrl, false);
+}
+
+/* THE CROSSING BANK NEEDS MORE BANDS THAN THE ONE IT CROSSES.
+
+   Band count is a percentage of the layer, and the bank is wider than it is
+   tall — so the same number gave vertical bands 720px apart and horizontal
+   bands 2048px apart, which is barely one across the frame. The weave did
+   not read because only one of the two directions was a weave; the other was
+   a slow gradient. Scaling the crossing bank by the aspect ratio makes a
+   square mesh out of a rectangular frame. */
+function lgLatticeCrossOpts(bw, bh) {
+    return { axis: 'H', bandScale: TRAIL_OVER_ACROSS * (bw / Math.max(1, bh)), span: bw };
+}
+
+/* One crossing stroke: its blend mode is the weave. Multiply darkens where
+   the two banks agree and reads as cloth; Screen brightens and reads as
+   light through a grille; Difference is the graphic one. */
+function tuneLatticeCross(s, c, ctrl, w, h) {
+    if (!s) return;
+    var mode = ctrl.weave || 'Multiply';
+    try {
+        s.blendingMode = mode === 'Screen'     ? BlendingMode.SCREEN
+                       : mode === 'Difference' ? BlendingMode.DIFFERENCE
+                       : BlendingMode.MULTIPLY;
+    } catch (e) { LG.warn('Lattice Trail: cannot set the weave blend'); }
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailCount(ctrl, num(h, 1080) * TRAIL_OVER_ACROSS, 80),
+                ctrl, lgLatticeCrossOpts(num(w, 1920) * TRAIL_OVER_ACROSS,
+                                         num(h, 1080) * TRAIL_OVER_ACROSS));
+}
+
+function tuneLatticeStroke(s, c, ctrl, w, h) {
+    if (!s) return;
+    var i = parseInt(String(s.name).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(i)) i = 0;
+    lgTrailTile(s, i, lgTrailCount(ctrl, num(w, 1920) * TRAIL_OVER_ACROSS, 80),
+                ctrl, { axis: 'V', bandScale: TRAIL_OVER_ACROSS,
+                       span: num(h, 1080) * TRAIL_OVER_ACROSS });
+}
+
 
 // --- WEB STUDIO CLONES ---
 
@@ -6767,7 +7877,13 @@ function tuneAntigravity(s, c, ctrl) {
 }
 
 function buildWaves(comp, c, ctrl, w, h, dur) {
-    comp.layers.addSolid([0.07, 0.05, 0.09], "Background", w, h, 1, dur);
+    /* MEASURED: this gradient answered to exactly one swatch and had three
+       that did nothing, which is the "this one only uses one colour" note.
+       The ground was a literal, so the panel offered a background colour
+       it had no way to set. Slot 2 is that colour now — the same
+       lgRole(c, i, fallback) shape Sunburst Backdrop already used, so an
+       older two-colour preset still lands on its old ground. */
+    comp.layers.addSolid(lgRole(c, 1, [0.07, 0.05, 0.09]), "Background", w, h, 1, dur);
     
     var linesLayer = comp.layers.addShape();
     linesLayer.name = "Wave Lines";
@@ -6838,7 +7954,7 @@ function buildWebThreads(comp, c, ctrl, w, h, dur) {
     /* Thread count is the only setting that is structure rather than a value:
        each thread is its own shape group. Everything else the expressions read
        off Expression Controls, and tuneWebThreads writes those. */
-    var threadCount = ctrl.threadCount !== undefined ? parseInt(ctrl.threadCount) : 10;
+    var threadCount = ctrl.threadCount !== undefined ? parseInt(ctrl.threadCount) : 18;
 
     var bg = comp.layers.addSolid([0.05, 0.05, 0.05], "Background", w, h, 1, dur);
     bg.startTime = 0;
@@ -6931,9 +8047,12 @@ function buildWebThreads(comp, c, ctrl, w, h, dur) {
 function tuneWebThreads(s, c, ctrl) {
     if (!s) return;
     lgCtrlSet(s, 'Speed',          num(ctrl.speed, 0.4));
-    lgCtrlSet(s, 'Frequency',      num(ctrl.frequency, 14));
-    lgCtrlSet(s, 'Spread',         num(ctrl.spread, 0.06));
-    lgCtrlSet(s, 'Taper',          num(ctrl.taper, 3));
+    /* These three fallbacks must agree with js/controls.js. At the old values
+       (14 / 0.06 / 3) the taper collapsed every thread into a 266px band and
+       the gradient rendered as a bright line across an empty frame. */
+    lgCtrlSet(s, 'Frequency',      num(ctrl.frequency, 11));
+    lgCtrlSet(s, 'Spread',         num(ctrl.spread, 0.09));
+    lgCtrlSet(s, 'Taper',          num(ctrl.taper, 1.4));
     lgCtrlSet(s, 'Pinch Position', num(ctrl.position, 0.59));
     lgCtrlSet(s, 'Thickness',      num(ctrl.thickness, 1.1));
     lgCtrlSet(s, 'Color 1', c[0] || [0.13, 0.03, 0.53]);
@@ -6952,78 +8071,421 @@ function tuneWebThreadsGlow(s, ctrl) {
     try { glow.enabled = glowAmt > 0; } catch (e) { }
 }
 
-/**
- * Liquid Ether — ExtendScript Bridge
- * Returns the selected layer's position normalised to -1..1 range,
- * plus layer dimensions so the fluid emitter can match the bounding box.
- */
-function getLayerInfo() {
+
+// ============================================
+// VECTOR & FLAT — the first family built from silhouettes
+// ============================================
+
+/* Everything else in this file is a FIELD: a function evaluated at every
+   pixel, whether that function is Fractal Noise, a ramp, a bloom or Cell
+   Pattern. Nothing in the library has an EDGE — a countable form with an
+   inside, an outside and a boundary. VECTOR_GRADIENT_RESEARCH.md is the
+   long version; these four builders are the short one.
+
+   THE RULE THAT SHAPES ALL FOUR
+
+     ADBE Vector Grad Colors is propertyValueType NO_VALUE. A shape layer's
+     Gradient Fill and Gradient Stroke cannot be read or written from script,
+     in any version, with no workaround.
+
+   So the obvious construction — draw a shape, fill it with the user's
+   palette — does not exist. Colour goes on a SOLID; the shape carries only
+   the silhouette and MATTES it. buildSunburst has worked this way since it
+   stopped being Venetian Blinds, and buildOklabSmooth carries the scar from
+   doing it the other way round: it shipped as a plain white-to-black ramp,
+   for months, because every stop it wrote to a Gradient Fill was silently
+   rejected inside an empty catch.
+
+   Flat Fill is the exception and is perfectly settable — only the GRADIENT
+   variants are closed. buildPapercut leans on that.
+
+   PROPERTY NAMES, NOT INDICES
+
+   Every LG.set below passes null where an index would go. That is
+   deliberate, not laziness. Shape operator indices have never been dumped
+   from this project — tools/effect_probe.jsx only sees layer effects — so
+   any number written here would be a guess, and LG.find tries the index
+   LAST but still tries it. A guessed index that happens to resolve sets the
+   wrong parameter and reports success, which is the exact failure
+   GRADIENT_QA_V23.md is a record of. Passing null means a missed name fails
+   loudly instead.
+
+   tools/shape_probe.jsx dumps them. Run it, then the indices can be filled
+   in from measurements rather than from memory. */
+
+/* Blur the MATTE, not the colour.
+
+   Shape layers have no per-shape feather. Blurring the matte softens the
+   alpha, so the colour underneath falls off exactly as a feathered shape
+   would; blurring the colour layer instead smears the ramp and leaves the
+   silhouette hard, which is the wrong half of the problem. */
+function lgVectorMatte(colour, matte, softness) {
+    if (!colour || !matte) return false;
+    if (softness > 0) lgBlur(matte, softness);
+    return setTrackMatteSafely(colour, matte, 'ALPHA');
+}
+
+/* A shape layer holding one group, returned as its Contents. Every builder
+   below starts with this and it is four lines each time otherwise. */
+function lgVectorGroup(comp, name) {
+    var layer = comp.layers.addShape();
+    layer.name = name;
+    var group = layer.property('Contents').addProperty('ADBE Vector Group');
+    return { layer: layer, contents: group.property('Contents') };
+}
+
+/* Add a shape operator by matchName, warning by its display name if it does
+   not apply. Operators are not effects, so LG.add cannot be used for them —
+   it goes through layer.Effects. */
+function lgShapeOp(contents, matchName, label, context) {
+    var op = null;
+    try { op = contents.addProperty(matchName); } catch (e) { op = null; }
+    if (!op) LG.warn(context + ': ' + label + ' did not apply (' + matchName + ')');
+    return op;
+}
+
+
+// ── LIGHT BAR ──
+/* A soft angled beam crossing a calm field — the highlight that travels over
+   glass or brushed metal in a product shot. The library could not do it:
+   Sunburst is rays from a point and Metallic is a folded ramp, and neither
+   has a direction and a speed.
+
+   Two beams by default, at different widths and different rates, so they
+   never line up. Same reason SAAS_GRADIENT_RESEARCH.md §1 gives for opposing
+   drift between noise octaves: one moving element reads as a slide, two that
+   disagree read as light. */
+function buildLightBar(comp, c, ctrl, w, h, dur) {
+    var angle      = num(ctrl.angle, 24);
+    var barWidth   = num(ctrl.width, 16);
+    var softness   = num(ctrl.softness, 55);
+    var speed      = num(ctrl.speed, 22);
+    var brightness = num(ctrl.brightness, 70);
+    var trail      = num(ctrl.trail, 55);
+
+    var ground = comp.layers.addSolid([0, 0, 0], 'Light Ground', w, h, 1, dur);
+    lgOklabRamp(ground,
+                [lgRole(c, 0, [0.02, 0.03, 0.06]), lgRole(c, 1, [0.10, 0.13, 0.22])],
+                w, h, angle + 90, false, 6);
+
+    /* The trail goes down first so the sharp beam lands on top of it. */
+    if (trail > 0) {
+        lgLightBeam(comp, c, w, h, dur, angle, barWidth * 2.1, softness * 1.5,
+                    speed * 0.62, brightness * trail / 100 * 0.55, 'Trail');
+    }
+    lgLightBeam(comp, c, w, h, dur, angle, barWidth, softness, speed, brightness, 'Beam');
+}
+
+/* One beam: a blurred rect matting a static ramp, blended Add, sweeping.
+
+   THE RAMP DOES NOT MOVE AND THAT IS THE POINT. The matte crosses a colour
+   field that is standing still, so the beam changes hue as it travels rather
+   than carrying one colour across the frame.
+
+   The sweep is `time` modulo a period, which jumps at the seam. That is safe
+   only because the travel span carries the bar fully clear of the frame at
+   both ends, blur included — shorten the span and the jump becomes visible.
+   tools/loop_seam_check.js is what would catch it. */
+function lgLightBeam(comp, c, w, h, dur, angleDeg, widthPct, softness, speed, brightness, label) {
+    var rad  = angleDeg * Math.PI / 180;
+    var diag = Math.sqrt(w * w + h * h);
+    var bw   = Math.max(4, Math.min(w, h) * widthPct / 100);
+    /* Softness is a fraction OF THE BAR, not of the comp. Scaled off the comp
+       it reaches 200px on a 173px bar at the default and the beam dissolves
+       entirely — the same class of mistake as Crumpled Foil's unscaled relief
+       in V22_KNOWN_LIMITATIONS.md, caught here before it was rendered. */
+    var blur = Math.max(0, bw * softness / 100 * 0.55);
+    var span = Math.abs(Math.cos(rad)) * w + Math.abs(Math.sin(rad)) * h + bw + blur * 6;
+
+    var colour = comp.layers.addSolid([1, 1, 1], label + ' Colour', w, h, 1, dur);
+    lgOklabRamp(colour,
+                [lgRole(c, 2, [0.45, 0.55, 1.0]), lgRole(c, 3, [1, 1, 1])],
+                w, h, angleDeg, false, 0);
+    try { colour.blendingMode = BlendingMode.ADD; } catch (e) { }
     try {
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
-            return JSON.stringify({ error: "No active composition" });
+        colour.property('Transform').property('Opacity')
+              .setValue(Math.max(0, Math.min(100, brightness)));
+    } catch (e) { }
+
+    var bar = lgVectorGroup(comp, label + ' Matte');
+    var rect = bar.contents.addProperty('ADBE Vector Shape - Rect');
+    LG.set(rect, 'Size', null, [bw, diag * 2.4]);
+    var fill = bar.contents.addProperty('ADBE Vector Graphic - Fill');
+    LG.set(fill, 'Color', null, [1, 1, 1]);
+
+    var xf = bar.layer.property('Transform');
+    try { xf.property('Rotation').setValue(angleDeg); } catch (e) { }
+
+    /* Rotation 0 leaves the bar's long axis on Y and its travel on X, so the
+       travel direction is (cos, sin) of the same angle the layer turns by. */
+    var period = (speed > 0) ? Math.max(1.5, 200 / speed) : 0;
+    if (period > 0) {
+        ex(xf.property('Position'),
+           'var T = ' + period.toFixed(3) + ';' +
+           'var s = ((time % T) / T - 0.5) * ' + span.toFixed(1) + ';' +
+           '[' + (w / 2).toFixed(1) + ' + Math.cos(' + rad.toFixed(5) + ') * s, ' +
+                 (h / 2).toFixed(1) + ' + Math.sin(' + rad.toFixed(5) + ') * s]');
+    } else {
+        try { xf.property('Position').setValue([w / 2, h / 2]); } catch (e) { }
+    }
+
+    lgVectorMatte(colour, bar.layer, blur);
+}
+
+
+// ── ARC STACK ──
+/* Concentric stroked arcs from a corner. One ramp, many rings, and the colour
+   arrives by WHERE EACH RING SITS in that ramp rather than by colouring the
+   rings individually — which is what makes this cheap enough to be one shape
+   layer and one solid.
+
+   Sunburst is filled wedges radiating from a centre. This is unfilled strokes
+   with gaps between them, and the gaps are half the look. */
+function buildArcStack(comp, c, ctrl, w, h, dur) {
+    var rings     = Math.max(2, Math.round(num(ctrl.rings, 7)));
+    var gap       = num(ctrl.gap, 17);
+    var thickness = num(ctrl.thickness, 4.5);
+    var arc       = num(ctrl.arc, 58);
+    var startSize = num(ctrl.startSize, 24);
+    var centerX   = num(ctrl.centerX, 12);
+    var centerY   = num(ctrl.centerY, 88);
+    var speed     = num(ctrl.speed, 8);
+    var softness  = num(ctrl.softness, 0);
+    var fade      = num(ctrl.fade, 45);
+
+    var shortSide = Math.min(w, h);
+    var cx = w * centerX / 100;
+    var cy = h * centerY / 100;
+
+    comp.layers.addSolid(lgRole(c, 0, [0.05, 0.05, 0.09]), 'Arc Backdrop', w, h, 1, dur);
+
+    /* lgOklabRamp would be the obvious call and cannot be used: its radial
+       mode centres on the comp, and these rings are centred wherever the user
+       put them. Same construction, own centre. */
+    var colour = comp.layers.addSolid([1, 1, 1], 'Arc Colour', w, h, 1, dur);
+    var reach = shortSide * startSize / 200 * Math.pow(1 + gap / 100, rings);
+    var ramp = lgFx(colour, ['ADBE Ramp']);
+    if (ramp) {
+        LG.set(ramp, 'Start of Ramp', 1, [cx, cy]);
+        LG.set(ramp, 'End of Ramp',   3, [cx + reach, cy]);
+        LG.set(ramp, 'Start Color',   2, [0, 0, 0]);
+        LG.set(ramp, 'End Color',     4, [1, 1, 1]);
+        LG.set(ramp, 'Ramp Shape',    5, 2);        /* 2 = Radial */
+    }
+    lgFx(colour, ['CC Toner']);
+    lgOklabToneStops(colour, c.slice(1));
+
+    var arcs = lgVectorGroup(comp, 'Arc Rings');
+    var d = shortSide * startSize / 100;
+    var ell = arcs.contents.addProperty('ADBE Vector Shape - Ellipse');
+    LG.set(ell, 'Size', null, [d, d]);
+
+    var stroke = arcs.contents.addProperty('ADBE Vector Graphic - Stroke');
+    LG.set(stroke, 'Color', null, [1, 1, 1]);
+    LG.set(stroke, 'Stroke Width', null, Math.max(1, shortSide * thickness / 100));
+
+    /* Order in Contents is load-bearing. A shape operator acts on everything
+       ABOVE it, so: path, stroke, trim the stroked path, then repeat all of
+       it. Repeater last is the same arrangement buildSunburst uses. */
+    var trim = lgShapeOp(arcs.contents, 'ADBE Vector Filter - Trim', 'Trim Paths', 'Arc Stack');
+    if (trim) {
+        LG.set(trim, 'End', null, Math.max(2, Math.min(100, arc)));
+        if (speed !== 0) LG.expr(trim, 'Offset', null, 'time * ' + speed);
+    }
+
+    var rep = lgShapeOp(arcs.contents, 'ADBE Vector Filter - Repeater', 'Repeater', 'Arc Stack');
+    if (rep) {
+        LG.set(rep, 'Copies', null, rings);
+        var rt = null;
+        try { rt = rep.property('Transform'); } catch (e) { rt = null; }
+        if (rt) {
+            /* Scale is multiplicative per copy, so the rings expand
+               geometrically rather than at an even spacing — and the stroke
+               scales with them, which is why the outer arcs read heavier.
+               Both are wanted; neither is an accident. */
+            try { rt.property('Anchor Point').setValue([0, 0]); } catch (e) { }
+            try { rt.property('Position').setValue([0, 0]); } catch (e) { }
+            try { rt.property('Scale').setValue([100 + gap, 100 + gap]); } catch (e) { }
+            try { rt.property('Start Opacity').setValue(100); } catch (e) { }
+            try { rt.property('End Opacity').setValue(Math.max(0, 100 - fade)); } catch (e) { }
         }
+    }
 
-        var sel = comp.selectedLayers;
-        if (!sel || sel.length === 0) {
-            return JSON.stringify({ error: "No layer selected" });
-        }
+    try { arcs.layer.property('Transform').property('Position').setValue([cx, cy]); } catch (e) { }
 
-        var layer = sel[0];
-        var time  = comp.time;
-        var pos;
+    lgVectorMatte(colour, arcs.layer, softness * 0.4);
+}
 
-        // Try unified position property first
-        try {
-            var tg  = layer.property("ADBE Transform Group");
-            var pp  = tg.property("ADBE Position");
-            pos = pp.valueAtTime(time, false);
-        } catch (e1) {
-            // Separated-dimension fallback
-            try {
-                var tg2 = layer.property("ADBE Transform Group");
-                var px  = tg2.property("ADBE Position_0").valueAtTime(time, false);
-                var py  = tg2.property("ADBE Position_1").valueAtTime(time, false);
-                pos = [px, py];
-            } catch (e2) {
-                return JSON.stringify({ error: "Cannot read position: " + e2.toString() });
+
+// ── GLOW BORDER ──
+/* Colour travelling around the perimeter of a rounded rectangle, reading as
+   light rather than as a coloured outline. Scoped in
+   SAAS_GRADIENT_RESEARCH.md §3, parked in V22_KNOWN_LIMITATIONS.md, and the
+   only thing that was ever missing is the geometry cluster below.
+
+   ONE RAMP, DRAWN TWICE. The blurred twin underneath is the entire trick: it
+   is what makes the bright stops spill outward and read as emission. A single
+   crisp ring is just a stroke. */
+function buildGlowBorder(comp, c, ctrl, w, h, dur) {
+    var inset       = num(ctrl.inset, 7);
+    var radius      = num(ctrl.radius, 4.5);
+    var thickness   = num(ctrl.thickness, 0.9);
+    var speed       = num(ctrl.speed, 40);
+    var glow        = num(ctrl.glow, 55);
+    var glowOpacity = num(ctrl.glowOpacity, 62);
+
+    var shortSide = Math.min(w, h);
+    var pad  = shortSide * inset / 100;
+    var size = [Math.max(8, w - pad * 2), Math.max(8, h - pad * 2)];
+    var rnd  = shortSide * radius / 100;
+    var thk  = Math.max(1, shortSide * thickness / 100);
+
+    comp.layers.addSolid(lgRole(c, 0, [0.03, 0.03, 0.05]), 'Border Ground', w, h, 1, dur);
+
+    /* Both rings run `time * speed` off the same number, so they turn in
+       phase. They have to: a glow that lags its own edge reads as a printing
+       error, not as light. */
+    /* The glow radius is a multiple of the STROKE, not of the comp. The CSS
+       pattern this comes from blurs a ~2px ring by ~40px — about twenty times
+       its own width — and that ratio is what makes it read as emission. Off
+       the comp's short side the same slider would put a 166px blur on a 10px
+       stroke and leave a coloured fog with no edge in it. */
+    if (glow > 0) {
+        lgBorderRing(comp, c, w, h, dur, size, rnd, thk * 1.4, speed,
+                     thk * (1 + glow / 100 * 6), glowOpacity, true, 'Border Glow');
+    }
+    lgBorderRing(comp, c, w, h, dur, size, rnd, thk, speed, 0, 100, false, 'Border');
+}
+
+function lgBorderRing(comp, c, w, h, dur, size, rnd, thickness, speed, blur, opacity, screen, label) {
+    var colour = comp.layers.addSolid([1, 1, 1], label + ' Colour', w, h, 1, dur);
+    lgGradientPoints(addFx(colour, ['ADBE 4ColorGradient']),
+                     [lgRole(c, 1, [0.36, 0.30, 1.00]),
+                      lgRole(c, 2, [1.00, 0.36, 0.72]),
+                      lgRole(c, 3, [0.28, 0.86, 0.86]),
+                      lgRole(c, 1, [0.36, 0.30, 1.00])],
+                     w, h, 0);
+
+    var xf = colour.property('Transform');
+    /* A frame-sized solid turning about its own centre sweeps its empty
+       corners across the ring four times a revolution. At 210% nothing
+       transparent can reach it. */
+    try { xf.property('Scale').setValue([210, 210]); } catch (e) { }
+    if (speed !== 0) ex(xf.property('Rotation'), 'time * ' + speed);
+    try { xf.property('Opacity').setValue(Math.max(0, Math.min(100, opacity))); } catch (e) { }
+    if (screen) { try { colour.blendingMode = BlendingMode.SCREEN; } catch (e) { } }
+
+    var ring = lgVectorGroup(comp, label + ' Matte');
+    var rect = ring.contents.addProperty('ADBE Vector Shape - Rect');
+    LG.set(rect, 'Size', null, size);
+    LG.set(rect, 'Roundness', null, rnd);
+
+    /* Stroke and no fill. The fill is what would make this a card rather than
+       a border, and there is already a family that fills fields. */
+    var stroke = ring.contents.addProperty('ADBE Vector Graphic - Stroke');
+    LG.set(stroke, 'Color', null, [1, 1, 1]);
+    LG.set(stroke, 'Stroke Width', null, thickness);
+
+    try { ring.layer.property('Transform').property('Position').setValue([w / 2, h / 2]); } catch (e) { }
+
+    lgVectorMatte(colour, ring.layer, blur);
+}
+
+
+// ── PAPERCUT STACK ──
+/* Stacked bands with soft wavy tops, each flat-coloured a step along the
+   palette, each casting a short shadow onto the one below. Cut paper, or a
+   stylised terrain. The only one of the four that is strong in light mode.
+
+   NO MATTE HERE, AND NO SOLID. Flat Fill is an ordinary colour property and
+   sets fine — it is only the GRADIENT variants that scripting cannot touch —
+   so every band carries its own colour directly and the whole gradient is
+   `bands` shape layers and a backdrop. Trying to matte this would not work
+   anyway: one silhouette cannot cast a shadow onto itself, and the shadows
+   between the bands are what makes it read as paper. */
+function buildPapercut(comp, c, ctrl, w, h, dur) {
+    var bands   = Math.max(2, Math.min(12, Math.round(num(ctrl.bands, 5))));
+    var wave    = num(ctrl.wave, 26);
+    var detail  = num(ctrl.detail, 1.6);
+    var horizon = num(ctrl.horizon, 32);
+    var shadow  = num(ctrl.shadow, 55);
+    var drift   = num(ctrl.drift, 16);
+
+    var sky = lgRole(c, 0, [0.98, 0.96, 0.92]);
+    comp.layers.addSolid(sky, 'Papercut Sky', w, h, 1, dur);
+
+    var top  = h * horizon / 100;
+    var step = (h - top) / bands;
+
+    /* Back to front, so each new band is added above the last and its shadow
+       falls on the one behind it. */
+    for (var i = 0; i < bands; i++) {
+        var t = (bands > 1) ? i / (bands - 1) : 0;
+        var col = lgPapercutColor(c, t);
+        var band = lgVectorGroup(comp, 'Band ' + (i + 1));
+
+        /* Wider and taller than the frame on purpose: only the top edge is
+           ever seen, so the other three are pushed out of shot rather than
+           being tidied up. */
+        var rect = band.contents.addProperty('ADBE Vector Shape - Rect');
+        LG.set(rect, 'Size', null, [w * 1.6, h * 2]);
+        var fill = band.contents.addProperty('ADBE Vector Graphic - Fill');
+        LG.set(fill, 'Color', null, col);
+
+        /* WIGGLE PATHS IS 'ADBE Vector Filter - Roughen'. Wiggle TRANSFORM is
+           'ADBE Vector Filter - Wiggler'. They are easy to swap, both apply
+           cleanly, and the wrong one moves the whole band instead of shaping
+           its edge — a silent wrong build, which is the failure this project
+           keeps meeting. tools/shape_probe.jsx settles it. */
+        if (wave > 0) {
+            var wig = lgShapeOp(band.contents, 'ADBE Vector Filter - Roughen',
+                                'Wiggle Paths', 'Papercut');
+            if (wig) {
+                LG.set(wig, 'Size', null, step * wave / 100);
+                LG.set(wig, 'Detail', null, Math.max(0.5, detail));
+                /* Zero wiggles per second. The crest is a SHAPE, not an
+                   animation: Wiggle Paths animates from a random seed and
+                   never returns to where it started, so anything non-zero
+                   here is a loop that cannot close. The motion comes from
+                   the band drifting instead, which is a sine and does. */
+                LG.set(wig, 'Wiggles/Second', null, 0);
+                LG.set(wig, 'Random Seed', null, i * 7 + 3);
             }
         }
 
-        // Calculate bounding box width/height taking scale into account
-        var w = 100, h = 100;
-        try {
-            var rect = layer.sourceRectAtTime(time, false);
-            var scale = [100, 100];
-            try {
-                scale = layer.property("ADBE Transform Group").property("ADBE Scale").valueAtTime(time, false);
-            } catch(es) {}
-            w = rect.width * (Math.abs(scale[0]) / 100.0);
-            h = rect.height * (Math.abs(scale[1]) / 100.0);
-            if(w <= 0) w = 100;
-            if(h <= 0) h = 100;
-        } catch (er) {
-            // If text or shape has no size (or failure), default to 100
+        var xf = band.layer.property('Transform');
+        var y = top + step * i + h;   /* +h because the rect is 2h tall and drawn from its centre */
+        if (drift > 0) {
+            ex(xf.property('Position'),
+               '[' + (w / 2).toFixed(1) + ', ' + y.toFixed(1) +
+               ' + Math.sin(time * ' + (0.24 + i * 0.07).toFixed(3) + ') * ' +
+               (drift * 0.35).toFixed(2) + ']');
+        } else {
+            try { xf.property('Position').setValue([w / 2, y]); } catch (e) { }
         }
 
-        // Normalise: AE origin is top-left; map to -1..1 NDC (flip Y)
-        var nx =  (pos[0] / comp.width)  * 2.0 - 1.0;
-        var ny = -((pos[1] / comp.height) * 2.0 - 1.0);
-
-        return JSON.stringify({
-            x:          pos[0],
-            y:          pos[1],
-            nx:         nx,
-            ny:         ny,
-            width:      w,
-            height:     h,
-            compWidth:  comp.width,
-            compHeight: comp.height,
-            layerName:  layer.name,
-            time:       time
-        });
-
-    } catch (e) {
-        return JSON.stringify({ error: e.toString() });
+        if (shadow > 0) {
+            var ds = addFx(band.layer, ['ADBE Drop Shadow']);
+            if (ds) {
+                LG.set(ds, 'Opacity',  2, Math.round(255 * shadow / 100 * 0.5));
+                LG.set(ds, 'Distance', 4, 0);
+                LG.set(ds, 'Softness', 5, step * shadow / 100 * 0.9);
+            }
+        }
     }
+}
+
+/* Band colours, interpolated in Oklab across whatever the palette holds.
+
+   Two colours give a clean far-to-near fade; four give a sky-to-foreground
+   run through both middles. interpolateOklab is the same function the tone
+   stops use, so a papercut and a smooth ramp built from one palette agree
+   with each other. */
+function lgPapercutColor(c, t) {
+    var pool = (c && c.length > 1) ? c.slice(1) : [[0.85, 0.55, 0.35], [0.25, 0.12, 0.30]];
+    if (pool.length === 1) return pool[0];
+    var segs = pool.length - 1;
+    var seg = t * segs;
+    var idx = Math.min(Math.floor(seg), segs - 1);
+    return interpolateOklab(pool[idx], pool[idx + 1], seg - idx);
 }

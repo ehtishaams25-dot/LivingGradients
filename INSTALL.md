@@ -5,7 +5,7 @@ Extensions > Living Gradients**.
 
 ## 1. ZXP Installer — the easy one
 
-Drag `LivingGradients-2.1.0.zxp` onto the free
+Drag `LivingGradients-2.2.0.zxp` onto the free
 [aescripts ZXP Installer](https://aescripts.com/learn/zxp-installer/).
 
 That is it. The panel is signed, so nothing else has to be configured.
@@ -16,13 +16,13 @@ Adobe's command-line installer, if you would rather not add another app. Downloa
 it from Adobe, then:
 
 ```bash
-ExManCmd.exe /install "LivingGradients-2.1.0.zxp"
+ExManCmd.exe /install "LivingGradients-2.2.0.zxp"
 ```
 
 macOS:
 
 ```bash
-./ExManCmd --install "LivingGradients-2.1.0.zxp"
+./ExManCmd --install "LivingGradients-2.2.0.zxp"
 ```
 
 ## 3. By hand — and what it costs you
@@ -31,8 +31,8 @@ A `.zxp` is a signed ZIP. You can unzip it into the extensions folder yourself:
 
 | Platform | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\Adobe\CEP\extensions\com.digivero.livinggradients` |
-| macOS | `~/Library/Application Support/Adobe/CEP/extensions/com.digivero.livinggradients` |
+| Windows | `%APPDATA%\Adobe\CEP\extensions\com.ehtishaam.livinggradients` |
+| macOS | `~/Library/Application Support/Adobe/CEP/extensions/com.ehtishaam.livinggradients` |
 
 The catch: a folder copied in by hand has no signature for CEP to check, so CEP
 refuses to load it unless **PlayerDebugMode** is on. That is a registry value
@@ -69,6 +69,6 @@ panel will tell you so on a card at the top rather than leaving you to guess.
 Remove the extension folder listed above, or use ZXP Installer's remove button.
 
 Your presets are **not** in that folder and are not removed with it. They live
-in `%APPDATA%\Digivero\LivingGradients\v2` (Windows) or
-`~/Library/Application Support/Digivero/LivingGradients/v2` (macOS). Delete that
+in `%APPDATA%\Ehtishaam\LivingGradients\v2` (Windows) or
+`~/Library/Application Support/Ehtishaam/LivingGradients/v2` (macOS). Delete that
 folder too if you genuinely want them gone.

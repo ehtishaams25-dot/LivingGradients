@@ -200,7 +200,48 @@ if (LG_CS_MAIN.exists) {
         if (!EXCLUDE[library[qi].id]) queue.push(library[qi]);
     }
 
-    app.beginUndoGroup('Living Gradients — Contact Sheet');
+
+    /* ---- WHAT WAS HERE BEFORE THIS SCRIPT RAN ------------------------------
+
+       THIS REPLACES A SWEEP THAT COULD DELETE THE USER'S OWN WORK, and it did.
+
+       All three render tools in this folder shared one pattern: record
+       `beforeItems = app.project.numItems`, then afterwards walk
+       `for (pi = numItems; pi > beforeItems; pi--)` and treat everything above
+       that index as "mine, sweep it into my folder" - a folder which is then
+       deleted whole at the end of the run.
+
+       That test is not valid. `app.project.item(i)` enumerates in the Project
+       panel's own order, which is not insertion order, and every removal
+       shifts every index after it. Across forty-three gradients, each of which
+       adds several items and then has them removed, the count falls below the
+       indices of items that were in the project when the script started - and
+       the descending loop reaches them, moves them into the tool's folder, and
+       the folder is deleted with them inside it.
+
+       Observed: a project holding one comp plus a folder tree came out of a
+       full library render holding neither. Nothing in the script intends that
+       and nothing in it reports it.
+
+       Identity is the test that means what it says. Snapshot the items that
+       exist before anything is built, and treat exactly the ones that are not
+       in that list as this run's own. Comparing object references is O(n) per
+       lookup against a list of tens, which costs nothing next to a render. */
+    function lgSnapshotItems() {
+        var seen = [], i;
+        for (i = 1; i <= app.project.numItems; i++) seen.push(app.project.item(i));
+        return seen;
+    }
+
+    function lgWasHereBefore(seen, item) {
+        var i;
+        for (i = 0; i < seen.length; i++) if (seen[i] === item) return true;
+        return false;
+    }
+
+    app.beginUndoGroup('Living Gradients - Contact Sheet');
+
+    var PRE_EXISTING = lgSnapshotItems();
 
     var rows   = Math.ceil(queue.length / COLS);
     var sheetW = COLS * CELL_W;
@@ -261,7 +302,6 @@ if (LG_CS_MAIN.exists) {
         cell.parentFolder = folder;
         cell.bgColor = [0, 0, 0];
 
-        var beforeItems = app.project.numItems;
         var status = 'OK';
         var detail = '';
         var madeLayers = 0;
@@ -327,10 +367,11 @@ if (LG_CS_MAIN.exists) {
         /* Anything a builder left in the project root — Halftone alone makes
            four precomps — gets swept into the folder, or the project is
            unusable by the thirty-first gradient. */
-        for (var pi = app.project.numItems; pi > beforeItems; pi--) {
+        for (var pi = app.project.numItems; pi >= 1; pi--) {
             try {
                 var item = app.project.item(pi);
-                if (item !== folder && item.parentFolder === app.project.rootFolder) {
+                if (item !== folder && item.parentFolder === app.project.rootFolder &&
+                    !lgWasHereBefore(PRE_EXISTING, item)) {
                     item.parentFolder = folder;
                 }
             } catch (e) { }

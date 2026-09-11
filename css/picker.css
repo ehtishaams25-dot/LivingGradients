@@ -176,7 +176,7 @@
 .lgp-f-hex { flex: 1.9 1 0; }
 
 .lgp-f > span {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: 8.5px;
   letter-spacing: 0.09em;
   color: var(--text-faint);
@@ -192,7 +192,7 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--text-main);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: 10.5px;
   text-align: center;
 }
@@ -226,7 +226,7 @@
 .lgp-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .lgp-hsl {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: 9.5px;
   color: var(--text-faint);
   letter-spacing: 0.03em;
@@ -243,7 +243,7 @@
 }
 
 .lgp-eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: 8.5px;
   letter-spacing: 0.12em;
   color: var(--text-faint);

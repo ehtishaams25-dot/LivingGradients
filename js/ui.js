@@ -38,6 +38,27 @@ function lgHostReady() {
 }
 if (typeof window !== 'undefined') window.lgHostReady = lgHostReady;
 
+/* THE VERSION OF RECORD, AND THE ONE PLACE THAT READS IT.
+
+   It used to live in js/service.js as `var PANEL_VERSION`, which tools/build.ps1
+   stamped from the manifest. service.js went when the undeployed backend did,
+   and two readers were left behind: the About box, which then showed the raw
+   placeholder, and exportPresets(), which fell through to a hardcoded '2.0.0'
+   and stamped that into every bundle a customer exported.
+
+   So the placeholder moved onto <html> where the markup can carry it, and this
+   is the only thing that reads it. build.ps1 fails the build if the attribute
+   is missing, because a version that silently reverts to a default is exactly
+   the failure that produced the 2.0.0 stamps. */
+function lgPanelVersion() {
+  var el = (typeof document !== 'undefined') ? document.documentElement : null;
+  var v = el ? el.getAttribute('data-panel-version') : null;
+  /* Unstamped source (a browser checkout, or a dev install straight from the
+     repo) reads as the placeholder. Say so rather than inventing a number. */
+  return (v && v.indexOf('__') !== 0) ? v : 'dev';
+}
+if (typeof window !== 'undefined') window.lgPanelVersion = lgPanelVersion;
+
 var LGUI = (function () {
   'use strict';
 

@@ -80,17 +80,38 @@ function Step($message) { Write-Host "`n== $message" -ForegroundColor Cyan }
 
 Step 'Version'
 
-# -Raw: without it Get-Content hands back an array of lines and the cast to
-# XmlDocument reports a confusing type error instead of the real parse problem.
-[xml] $manifestXml = Get-Content $Manifest -Raw
+# Read as UTF-8 explicitly rather than through Get-Content's default encoding,
+# and keep the raw text: the [xml] cast is for READING the version out. Writing
+# goes back through the text, never through $manifestXml.Save().
+$manifestText = [System.IO.File]::ReadAllText($Manifest, (New-Object System.Text.UTF8Encoding $false))
+[xml] $manifestXml = $manifestText
 
 if ($Version) {
     if ($Version -notmatch '^\d+\.\d+\.\d+$') {
         throw "Version must look like 2.1.0, got '$Version'."
     }
-    $manifestXml.ExtensionManifest.ExtensionBundleVersion = $Version
-    $manifestXml.ExtensionManifest.ExtensionList.Extension.Version = $Version
-    $manifestXml.Save($Manifest)
+
+    # WHY NOT $manifestXml.Save().
+    #
+    # It round-trips the file through .NET's XML writer, which reformats every
+    # element onto one line, adds a BOM, and -- because the document had been
+    # read through PowerShell's default encoding -- writes each em dash in the
+    # comments back out as the three cp1252 characters it was mistaken for. One
+    # run of `-Version 2.3.0` was enough to leave the manifest reading
+    # "Living Gradients aEUR" CEP extension manifest".
+    #
+    # This is the same failure the index.html stamping further down already
+    # documents. It took longer to notice here only because the damage lands in
+    # comments, where nothing breaks and nobody looks.
+    #
+    # Two attributes, two regexes, and every other byte in the file untouched.
+    $manifestText = [regex]::Replace($manifestText,
+        '(ExtensionBundleVersion=")[^"]*(")', "`${1}$Version`${2}")
+    $manifestText = [regex]::Replace($manifestText,
+        '(<Extension Id="[^"]*"\s+Version=")[^"]*(")', "`${1}$Version`${2}")
+
+    [System.IO.File]::WriteAllText($Manifest, $manifestText, (New-Object System.Text.UTF8Encoding $false))
+    [xml] $manifestXml = $manifestText
     Say "Manifest bumped to $Version" 'Green'
 }
 
@@ -131,7 +152,13 @@ foreach ($item in $Include) {
 
 # Things that must never ship, removed after the copy so a nested one cannot
 # hide from the allowlist.
-$Purge = @('*.bak', '*.jsxbin', 'test_*.js', '*.map', '.DS_Store', 'Thumbs.db')
+# candidates.js is the gradient workshop — index.html does not load it and
+# only the render tools read it, so shipping it puts development notes and
+# unreleased gradient definitions in a customer's extensions folder for no
+# benefit. It is caught here rather than by narrowing the allowlist, because
+# the allowlist is per-folder and js/ is otherwise entirely shippable.
+$Purge = @('*.bak', '*.jsxbin', 'test_*.js', '*.map', '.DS_Store', 'Thumbs.db',
+           'candidates.js')
 foreach ($pattern in $Purge) {
     Get-ChildItem $StageDir -Recurse -Filter $pattern -Force -ErrorAction SilentlyContinue |
         ForEach-Object { Remove-Item $_.FullName -Force; Say "  - $($_.Name)" 'DarkGray' }
@@ -202,6 +229,17 @@ if (Test-Path $previews) {
         }
         if ($dropped) { Say "  - $dropped file(s) not in index.json ($droppedKB KB)" 'DarkGray' }
 
+        # Dropping every file out of css/previews/incoming leaves the folder
+        # itself, and Adobe's own guidance is to ship no empty directories.
+        Get-ChildItem $previews -Recurse -Directory |
+            Sort-Object { $_.FullName.Length } -Descending |
+            ForEach-Object {
+                if (-not (Get-ChildItem $_.FullName -Force)) {
+                    Remove-Item $_.FullName -Force
+                    Say "  - css/previews/$($_.Name)/ (empty)" 'DarkGray'
+                }
+            }
+
         $remaining = @(Get-ChildItem $previews -Recurse -File)
         $keptKB = [math]::Round(($remaining | Measure-Object Length -Sum).Sum / 1KB)
         $posters = @($remaining | Where-Object { $_.Extension -eq '.png' }).Count
@@ -227,35 +265,32 @@ Step 'Stamping version'
 # perfectly fine: the corruption happened during the build, not in the source.
 # Read and write with the same explicit encoding or the round-trip is lossy.
 
-$servicePath = Join-Path $StageDir 'js\service.js'
-if (Test-Path $servicePath) {
-    $service = Get-Content $servicePath -Raw -Encoding utf8
-    $versionPattern = "var PANEL_VERSION = '[^']*';"
+# The version the panel reports lives on the <html> element, and js/ui.js
+# lgPanelVersion() is the only thing that reads it. It used to be a
+# PANEL_VERSION declaration inside js/service.js; that file went with the
+# undeployed backend, and the two readers it left behind showed the raw
+# placeholder in About and stamped a hardcoded 2.0.0 into every exported bundle.
+#
+# THIS IS A HARD FAILURE, not a warning. A version that quietly falls back to a
+# default is the exact failure being fixed here, and About is the only place a
+# customer can read it, so a build that cannot stamp it is a build that ships
+# the wrong number.
 
-    # Test whether the pattern MATCHED, not whether the text changed.
-    #
-    # Comparing before and after conflates "the declaration is not there" with
-    # "it is already the right version" — so the moment the source happened to
-    # agree with the manifest, the build started warning that PANEL_VERSION was
-    # missing. A check that cries wolf on the correct state is worse than no
-    # check, because the next real failure reads as the same false alarm.
-    if ($service -notmatch $versionPattern) {
-        Say '  WARNING: PANEL_VERSION not found in service.js - the update check will compare the wrong number.' 'Yellow'
-    } else {
-        $stamped = $service -replace $versionPattern, "var PANEL_VERSION = '$BundleVersion';"
-        if ($stamped -ne $service) {
-            Set-Content $servicePath $stamped -Encoding utf8 -NoNewline
-            Say "  js/service.js -> $BundleVersion" 'Green'
-        } else {
-            Say "  js/service.js already at $BundleVersion" 'Green'
-        }
+$indexPath = Join-Path $StageDir 'index.html'
+$index = Get-Content $indexPath -Raw -Encoding utf8
+if ($index -notmatch 'data-panel-version="__PANEL_VERSION__"') {
+    if ($index -match 'data-panel-version="([^"]*)"') {
+        throw "index.html carries data-panel-version=$($Matches[1]) instead of the __PANEL_VERSION__ placeholder. Restore the placeholder in the source; only the staged copy is ever stamped."
     }
+    throw 'index.html has no data-panel-version attribute on the html element. js/ui.js lgPanelVersion() reads it and About shows it; without it the panel cannot report its version.'
 }
+$index = $index -replace 'data-panel-version="__PANEL_VERSION__"', "data-panel-version=`"$BundleVersion`""
+Set-Content $indexPath $index -Encoding utf8 -NoNewline
+Say "  index.html data-panel-version -> $BundleVersion" 'Green'
 
 # Cache busters. After Effects caches panel assets aggressively, and a user who
 # updates without seeing the change is a support ticket. Every build gets a
 # fresh query string.
-$indexPath = Join-Path $StageDir 'index.html'
 $stampToken = $BundleVersion.Replace('.', '') + (Get-Date -Format 'MMddHHmm')
 $index = Get-Content $indexPath -Raw -Encoding utf8
 $index = $index -replace '\?v=\d+"', "?v=$stampToken`""
@@ -312,7 +347,14 @@ if ($node) {
     foreach ($audit in @(
         @{ Name = 'effect indices'; Script = 'tools\index_audit.js' },
         @{ Name = 'live tuners';    Script = 'tools\live_audit.js' },
-        @{ Name = 'panel globals';  Script = 'tools\panel_audit.js' }
+        @{ Name = 'panel globals';  Script = 'tools\panel_audit.js' },
+        # The fourth, added in 2.2.0. The other three all passed in green
+        # through Pinning being written as option 1 when Pin All is option 11,
+        # and through CC Toner mode 3 being read as Tritone when it is Pentone.
+        # A wrong dropdown VALUE hides in exactly the place a wrong index
+        # cannot: the property resolves, the write succeeds, and the effect
+        # does something else.
+        @{ Name = 'dropdown values'; Script = 'tools\dropdown_audit.js' }
     )) {
         $auditPath = Join-Path $Root $audit.Script
         if (-not (Test-Path $auditPath)) {
@@ -351,21 +393,36 @@ if (Test-Path $licensePath) {
     }
 }
 
-# Anything still pointing at a placeholder API host would ship a bell and a
-# feedback button that silently do nothing.
-# Matched against the API_PLACEHOLDER declaration and the line that assigns it,
-# not against a hardcoded hostname. The check used to look for the literal URL on
-# the `var API =` line; naming the placeholder moved the URL one line up and the
-# warning silently stopped firing, which is the worst outcome for a check whose
-# entire job is to notice something is still unconfigured.
-$svc = Get-Content (Join-Path $StageDir 'js\service.js') -Raw -Encoding utf8
-if ($svc -match "var API = API_PLACEHOLDER\s*;") {
-    Say '  WARNING: js/service.js still points at the placeholder API host. Updates, messages and feedback are switched off until server/worker.js is deployed and API is set.' 'Yellow'
-} elseif ($svc -notmatch "var API_PLACEHOLDER\s*=") {
-    Say '  WARNING: API_PLACEHOLDER is gone from service.js - this check can no longer tell whether the backend is configured.' 'Yellow'
-} else {
-    Say '  backend host is configured' 'Green'
+# NO PANEL CODE MAY REACH A HOST THAT IS NOT REAL.
+#
+# js/service.js used to hold an API_PLACEHOLDER and this checked whether it had
+# been replaced. The file is gone: the Cloudflare Worker in server/ was never
+# deployed, so the bell and the feedback form could only ever fail silently, and
+# a support channel that swallows messages is worse than no channel.
+#
+# What replaces it is stricter. The panel is allowed to talk to exactly two
+# hosts - Gumroad's licence API, and Gumroad's product page via the OS browser -
+# and this fails the build on any other absolute URL in a request position. It
+# catches a re-added placeholder, a leftover localhost endpoint and a debug
+# webhook with the same rule.
+# www.w3.org is the SVG namespace literal, never a request. Everything else
+# on this list is Gumroad.
+$allowedHosts = @('api.gumroad.com', 'ehtishaam.gumroad.com', 'www.w3.org')
+$offenders = @()
+Get-ChildItem (Join-Path $StageDir 'js') -Filter *.js -File | ForEach-Object {
+    $body = Get-Content $_.FullName -Raw -Encoding utf8
+    foreach ($m in [regex]::Matches($body, 'https?://([A-Za-z0-9\.\-]+)')) {
+        $host_ = $m.Groups[1].Value
+        if ($allowedHosts -notcontains $host_) {
+            $offenders += "$($_.Name) -> $host_"
+        }
+    }
 }
+if ($offenders.Count) {
+    throw ("Panel JavaScript points at hosts outside the allowlist: " + ($offenders -join '; ') +
+           ". Every one of these ships enabled. Remove it, or add the host to `$allowedHosts with a reason.")
+}
+Say '  no panel code reaches a host outside the Gumroad allowlist' 'Green'
 
 # The CDN dependency. Not fatal, but a panel that needs the internet to finish
 # loading is a panel that fails on a locked-down edit suite.
@@ -407,14 +464,24 @@ if ($NewCert) {
         $generated = $true
     }
 
-    & $tool -selfSignedCert IN Maharashtra Digivero 'Digivero' $CertPassword $CertPath
+    # Both the organisation and the common name are quoted. They contain
+    # spaces, and ZXPSignCmd takes positional arguments: unquoted, "Mohammed
+    # Ehtishaam Shaikh" arrives as three of them and the certificate comes out
+    # with the wrong fields, or not at all.
+    & $tool -selfSignedCert IN Maharashtra 'Mohammed Ehtishaam Shaikh' 'Mohammed Ehtishaam Shaikh' $CertPassword $CertPath
     if ($LASTEXITCODE -ne 0) { throw 'Certificate creation failed.' }
 
     Say "Certificate written to $CertPath" 'Green'
 
     if ($generated) {
         $pwFile = Join-Path $PSScriptRoot 'certificate-password.txt'
-        Set-Content $pwFile $CertPassword -Encoding utf8 -NoNewline
+        # ASCII, not utf8. PowerShell 5.1's -Encoding utf8 writes a BOM, so the
+        # file begins EF BB BF and anything that does not strip it - `cat`, a
+        # shell script, a CI step - reads three junk characters in front of the
+        # password and ZXPSignCmd answers "Failed to parse certificate", which
+        # points at the certificate rather than at the password. The password is
+        # generated from an ASCII alphabet, so nothing is lost.
+        Set-Content $pwFile $CertPassword -Encoding ascii -NoNewline
         Say ''
         Say 'CERTIFICATE PASSWORD (shown once):' 'Yellow'
         Say "    $CertPassword" 'White'

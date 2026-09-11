@@ -9,20 +9,37 @@ Pick a look, set its palette, dial it in, and it builds itself in your comp.
 Then keep it: any gradient the panel makes can be captured back as a preset,
 with the whole recipe intact.
 
-- **Version:** 2.1.0
+- **Version:** 2.2.0
 - **Requires:** After Effects CC 2018 (15.0) or newer, on Windows or macOS
 - **Panel:** Window > Extensions > Living Gradients
 
 ## Install
 
 1. Quit After Effects.
-2. Install `LivingGradients-2.1.0.zxp` with any ZXP installer — the
+2. Install `LivingGradients-2.2.0.zxp` with any ZXP installer — the
    [aescripts ZXP Installer](https://aescripts.com/learn/zxp-installer/) is the
    usual one, and Adobe's own `ExManCmd` works too.
 3. Start After Effects and open **Window > Extensions > Living Gradients**.
 
 The panel is signed, so it installs without turning on developer mode. See
 [INSTALL.md](INSTALL.md) if you would rather not use an installer.
+
+## Looking, editing, applying
+
+The three tabs are three different jobs, and the panel keeps them apart.
+
+**Browse** is looking. Search by name or tap a family; hovering plays the
+gradient, clicking opens it in Edit. **Nothing you do in Browse changes your
+composition** — if you have a gradient applied and you go looking at another
+one, the applied one is left exactly as it is.
+
+**Edit** is configuring. The header says which of two states you are in:
+**Draft** means nothing in After Effects is being touched, and a live dot means
+the panel is driving a gradient in your comp and every slider is landing on it
+as you move it. You get there by applying, or by selecting a Living Gradients
+layer in the timeline. Browsing to a different gradient hands it back.
+
+**Presets** is keeping. Everything below.
 
 ## Presets
 
@@ -45,8 +62,10 @@ built the gradient. That makes it exact rather than approximate — it is the sa
 instruction played back — but it also means capture only works on gradients this
 panel made. A gradient built by hand has nothing to read.
 
-**Capture every gradient in this comp** (right-click the Capture button) turns a
-whole project into a folder of presets in one pass.
+**Capture every gradient in this comp** — the arrow beside the Capture button —
+turns a whole project into a folder of presets in one pass. That arrow also
+holds saving the panel's current settings, saving a palette on its own, adding a
+folder, and pulling a preset back out of the library.
 
 A **palette** is a preset with only the colours in it. Applying one recolours a
 gradient you have already built without rebuilding it, so nothing you tweaked by
@@ -77,8 +96,8 @@ Outside the extension, so updating or reinstalling never costs you one:
 
 | Platform | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\Digivero\LivingGradients\v2` |
-| macOS | `~/Library/Application Support/Digivero/LivingGradients/v2` |
+| Windows | `%APPDATA%\Ehtishaam\LivingGradients\v2` |
+| macOS | `~/Library/Application Support/Ehtishaam/LivingGradients/v2` |
 
 Inside it, `library.json` is the index, `presets/` holds each preset as its own
 file, `thumbs/` holds their pictures, and `backups/` holds rolling copies of the
@@ -107,16 +126,18 @@ Everything else works without it.
 ## Updating
 
 Install the new `.zxp` over the old one. Your presets are untouched — they live
-in the folder above, not in the extension. The panel checks for new versions on
-its own and tells you through the bell in the footer; that check sends only the
-panel's version number and can be turned off in Settings.
+in the folder above, not in the extension.
+
+**Menu > Check for updates** opens the product page, which carries the current
+version and what changed in it. The panel makes no network request of its own:
+the only host it ever contacts is Gumroad, and only when you activate a licence.
 
 ## If something goes wrong
 
-**Menu > Help** in the footer covers the common cases. **Menu > Send feedback**
-sends a message with your After Effects version, panel version, language and
-platform attached — that context is usually the difference between a report that
-can be fixed and one that cannot.
+**Menu > Help** in the footer covers the common cases. **Menu > About** reports
+the panel version, your After Effects version and where your presets are kept —
+that context is usually the difference between a report that can be fixed and one
+that cannot, so quote it when you get in touch.
 
 If the panel opens blank, close and reopen it. That is almost always a stale
 browser cache inside After Effects rather than lost work, and your presets are
@@ -131,14 +152,13 @@ css/shelf.css       control/motion tokens, the shelf, the chrome
 js/store.js         the data folder — atomic writes, rolling backups
 js/library.js       presets, collections, folders, search, import/export
 js/ui.js            toasts, modals, menus, banners
-js/service.js       version check, messages, feedback
 js/shelf.js         the Presets tab
-js/footer.js        the bell and the menu
+js/footer.js        the footer menu
 js/boot.js          start-up order
 js/main.js          the gradient half of the panel
 jsx/main.jsx        the builders
 jsx/presets.jsx     capture, thumbnail render, apply
-server/worker.js    the three endpoints service.js talks to
+server/worker.js    a Cloudflare Worker, written and not yet deployed
 tools/build.ps1     stage, stamp, sign, package
 ```
 

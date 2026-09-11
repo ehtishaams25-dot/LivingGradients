@@ -93,9 +93,9 @@ var LGLibrary = (function () {
       accent: null,          /* null = the brand gold from styles.css */
       confirmDelete: true,
       captureThumbFromComp: true,
-      checkForUpdates: true,
-      lastSeenVersion: null,
-      lastUpdateCheck: 0
+      /* Whether the Edit tab's Advanced fold opens with the panel. Somebody
+         who works with the fluid trail on should not re-open it every time. */
+      advancedOpen: false
     };
   }
 
@@ -578,7 +578,7 @@ var LGLibrary = (function () {
       name: (meta && meta.name) || 'Living Gradients presets',
       exported: nowIso(),
       by: (meta && meta.by) || '',
-      panel: (typeof LG_PANEL_VERSION !== 'undefined') ? LG_PANEL_VERSION : '2.0.0',
+      panel: (typeof lgPanelVersion === 'function') ? lgPanelVersion() : 'dev',
       presets: [],
       folders: (meta && meta.folders) || [],
       items: (meta && meta.items) || []
